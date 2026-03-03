@@ -1,0 +1,946 @@
+"""
+Synchronous AI processing pipeline for direct invocation (no Celery/Redis required).
+Used by the batch ingestion endpoint and for testing.
+"""
+import os
+from sqlalchemy.orm import Session
+import models
+from ai_engine import extract_claims_from_llm, cluster_claims
+
+
+def process_review_sync(review_id: int, db: Session) -> dict:
+    """
+    Process a single review synchronously:
+    1. Extract claims via LLM
+    2. Save claims to DB
+    3. Return results
+    """
+    review = db.query(models.Review).filter(models.Review.id == review_id).first()
+    if not review:
+        return {"status": "error", "message": "Review not found"}
+
+    provider = os.getenv("LLM_PROVIDER", "openai")
+    print(f"DEBUG: Starting LLM extraction for review {review_id} using {provider}")
+    
+    try:
+        extraction_result = extract_claims_from_llm(review.original_text, provider)
+        claims_data = extraction_result.get("claims", [])
+    except Exception as e:
+        return {"status": "error", "message": f"LLM extraction failed: {str(e)}"}
+
+    if not claims_data:
+        return {"status": "success", "review_id": review_id, "claims_extracted": 0}
+
+    saved_claims = []
+    for claim_dict in claims_data:
+        # Robust key mapping for different LLM output styles
+        claim_text = claim_dict.get("claim_text") or claim_dict.get("core_claim", "")
+        evidence_text = claim_dict.get("evidence_text") or claim_dict.get("supporting_evidence", "")
+        context_text = claim_dict.get("context_text") or claim_dict.get("context", "")
+        
+        if not claim_text:
+            continue
+            
+        new_claim = models.Claim(
+            review_id=review.id,
+            claim_text=claim_text,
+            evidence_text=evidence_text,
+            context_text=context_text,
+            sentiment_polarity=claim_dict.get("sentiment_polarity", "neutral"),
+            severity=float(claim_dict.get("severity", 0.0)),
+        )
+        db.add(new_claim)
+        db.flush()
+        saved_claims.append(new_claim)
+        
+    print(f"DEBUG: Created {len(saved_claims)} claims for review {review_id}")
+
+    db.commit()
+    return {
+        "status": "success",
+        "review_id": review_id,
+        "claims_extracted": len(saved_claims),
+    }
+
+def _generate_theme_names(cluster_texts_map: dict[int, list[str]]) -> dict[int, str]:
+    """Use LLM to generate concise 2-3 word theme labels from clusters of claims."""
+    import json
+    if not cluster_texts_map:
+        return {}
+
+    provider = os.getenv("LLM_PROVIDER", "openai")
+    clusters_summary = ""
+    for cid, texts in cluster_texts_map.items():
+        sample = texts[:5]  # Max 5 per cluster to keep prompt short
+        clusters_summary += f"Cluster {cid}: {'; '.join(sample)}\n"
+
+    prompt = f"""Given these clusters of consumer review claims, generate a short 2-3 word thematic label for each cluster.
+Return a JSON object mapping cluster ID to the label. Keep labels concise like "Battery Life", "Customer Service", "Build Quality", "Sound Quality".
+
+{clusters_summary}
+
+Return ONLY valid JSON like: {{"0": "Battery Life", "1": "Sound Quality"}}"""
+
+    try:
+        if provider == "openai":
+            import openai
+            client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You generate concise thematic labels for clusters of consumer claims. Output JSON only."},
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                timeout=15.0,
+            )
+            result = json.loads(response.choices[0].message.content)
+            return {int(k): v for k, v in result.items()}
+        elif provider == "gemini":
+            import google.generativeai as genai
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(prompt + "\nOutput raw JSON.")
+            result = json.loads(response.text.strip("```json").strip("```"))
+            return {int(k): v for k, v in result.items()}
+    except Exception as e:
+        print(f"DEBUG: Theme naming LLM call failed, using fallback: {e}")
+        return {}
+
+def _generate_summary_and_advices(product_name: str, theme_names: dict, cluster_texts_map: dict, focus: str = None) -> dict:
+    """Use LLM to generate a summary and advice for the product based on all extracted themes and claims. Optionally apply a custom user focus."""
+    import json
+    if not cluster_texts_map:
+        return {"summary": "", "advices": "[]"}
+
+    provider = os.getenv("LLM_PROVIDER", "openai")
+    
+    # Provide a concise summary of the data for the prompt
+    data_summary = ""
+    for cid, texts in cluster_texts_map.items():
+        theme = theme_names.get(cid, f"Theme {cid}")
+        sample = texts[:5]
+        data_summary += f"{theme}: {'; '.join(sample)}\n"
+
+    focus_prompt = f"\n\nUSER HAS REQUESTED A SPECIFIC FOCUS FOR THIS SUMMARY AND ADVICE: '{focus}'. Please tailor your executive summary and advices to specifically address this focus based on the data provided." if focus else ""
+
+    prompt = f"""Given these summarized consumer review claims about '{product_name}', generate a short executive summary (1-2 sentences) of the overall sentiment and pros/cons. Also generate exactly 1 or 2 specific pieces of advice for a potential buyer.{focus_prompt}
+
+{data_summary}
+
+Return ONLY valid JSON with keys "summary" (string) and "advices" (list of strings) like: {{"summary": "...", "advices": ["..."]}}"""
+
+    try:
+        if provider == "openai":
+            import openai
+            client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You summarize consumer reviews. Output JSON only."},
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                timeout=15.0,
+            )
+            result = json.loads(response.choices[0].message.content)
+            return {"summary": result.get("summary", ""), "advices": result.get("advices", [])}
+    except Exception as e:
+        print(f"DEBUG: Summary/advice LLM call failed: {e}")
+        return {"summary": "", "advices": "[]"}
+
+
+def deduplicate_claims_ai(claims_list: list, theme_name: str) -> list[dict]:
+    """
+    Uses LLM to group semantically similar claims within a theme.
+    Returns a list of dicts: {representative_text, sentiment, severity, mention_count, original_ids}
+    Claims with different sentiments are always treated as distinct.
+    """
+    import json as _json
+
+    if len(claims_list) <= 1:
+        return [{
+            "representative_text": c.claim_text,
+            "sentiment": c.sentiment_polarity,
+            "severity": c.severity,
+            "mention_count": 1,
+            "original_ids": [c.id],
+        } for c in claims_list]
+
+    claims_data = []
+    for i, c in enumerate(claims_list):
+        claims_data.append({
+            "id": i,
+            "text": c.claim_text,
+            "sentiment": c.sentiment_polarity or "neutral",
+            "severity": float(c.severity or 0),
+        })
+
+    prompt = f"""You are analyzing consumer review claims under the theme "{theme_name}".
+Group the following claims that express the same core idea using similar or different words.
+
+RULES:
+- Claims with DIFFERENT sentiments (positive vs negative) must NEVER be grouped together.
+- Claims discussing the same topic but with completely different contexts should stay separate.
+  Example: "case is compact and portable" and "case uses premium metal" = SEPARATE
+  Example: "case is beautiful" and "case is well-designed" = SAME GROUP
+- For each group, write ONE clear representative claim that captures the shared meaning.
+- Return the severity as the average severity of the grouped claims.
+
+Claims:
+{_json.dumps(claims_data, indent=2)}
+
+Return JSON with this exact structure:
+{{
+  "groups": [
+    {{
+      "representative_text": "Clear single claim summarizing the group",
+      "sentiment": "positive|negative|neutral",
+      "severity": 0.7,
+      "member_ids": [0, 2, 5]
+    }}
+  ]
+}}"""
+
+    provider = os.getenv("LLM_PROVIDER", "openai")
+    try:
+        if provider == "openai":
+            import openai
+            client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a data deduplication expert. Output valid JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                timeout=30.0
+            )
+            result = _json.loads(response.choices[0].message.content)
+        elif provider == "gemini":
+            import google.generativeai as genai
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel('gemini-1.5-pro')
+            response = model.generate_content(prompt + "\nOutput raw JSON.")
+            result = _json.loads(response.text.strip('```json').strip('```'))
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
+
+        groups = result.get("groups", [])
+        deduped = []
+        for group in groups:
+            member_ids = group.get("member_ids", [])
+            original_claim_ids = [claims_list[mid].id for mid in member_ids if mid < len(claims_list)]
+            deduped.append({
+                "representative_text": group.get("representative_text", ""),
+                "sentiment": group.get("sentiment", "neutral"),
+                "severity": float(group.get("severity", 0.5)),
+                "mention_count": len(member_ids),
+                "original_ids": original_claim_ids,
+            })
+        return deduped
+
+    except Exception as e:
+        print(f"WARNING: Claim dedup failed for theme '{theme_name}': {e}")
+        # Fallback: return each claim as-is with mention_count=1
+        return [{
+            "representative_text": c.claim_text,
+            "sentiment": c.sentiment_polarity,
+            "severity": c.severity,
+            "mention_count": 1,
+            "original_ids": [c.id],
+        } for c in claims_list]
+
+
+def cluster_product_claims(product_id: int, db: Session) -> dict:
+    """
+    Re-cluster all claims for a product into themes.
+    Deletes old themes and creates new ones from clustering.
+    Then deduplicates claims within each theme using AI.
+    """
+    # Get all claims for this product through reviews
+    claims = (
+        db.query(models.Claim)
+        .join(models.Review, models.Claim.review_id == models.Review.id)
+        .filter(models.Review.product_id == product_id)
+        .all()
+    )
+
+    if not claims:
+        return {"status": "success", "themes_created": 0}
+
+    # Delete old themes for this product
+    db.query(models.Theme).filter(models.Theme.product_id == product_id).delete()
+    db.flush()
+
+    # Clear theme_id on all claims first
+    for claim in claims:
+        claim.theme_id = None
+    db.flush()
+
+    # Cluster
+    claims_texts = [c.claim_text for c in claims if c.claim_text]
+    cluster_labels = cluster_claims(claims_texts)
+
+    # Build theme names using LLM or fallback heuristic
+    unique_clusters = sorted(set(cluster_labels))
+    theme_mapping = {}
+
+    # Collect all cluster claim texts for batch LLM naming
+    cluster_texts_map = {}
+    for cid in unique_clusters:
+        cluster_texts_map[cid] = [
+            claims[i].claim_text for i, label in enumerate(cluster_labels) if label == cid
+        ]
+
+    # Try LLM theme naming
+    theme_names = _generate_theme_names(cluster_texts_map)
+
+    for cid in unique_clusters:
+        cluster_claims_list = [
+            claims[i] for i, label in enumerate(cluster_labels) if label == cid
+        ]
+
+        # Use LLM name if available, else fallback to shortest claim heuristic
+        if cid in theme_names and theme_names[cid]:
+            theme_name = theme_names[cid]
+        else:
+            representative = min(cluster_claims_list, key=lambda c: len(c.claim_text))
+            name_words = representative.claim_text.split()[:6]
+            theme_name = " ".join(name_words)
+            if len(name_words) == 6:
+                theme_name += "..."
+
+        positive_count = sum(
+            1 for c in cluster_claims_list if c.sentiment_polarity == "positive"
+        )
+        total = len(cluster_claims_list)
+
+        theme = models.Theme(
+            product_id=product_id,
+            name=theme_name,
+            claim_count=total,
+            positive_ratio=round(positive_count / total, 2) if total > 0 else 0.0,
+        )
+        db.add(theme)
+        db.flush()
+        theme_mapping[cid] = theme
+
+    # Assign theme_id to claims
+    for claim, cluster_id in zip(claims, cluster_labels):
+        claim.theme_id = theme_mapping[cluster_id].id
+
+    # ── AI Deduplication: group similar claims within each theme ──
+    print(f"DEBUG: Starting AI deduplication for product {product_id}...")
+    for cid, theme in theme_mapping.items():
+        theme_claims = [c for c in claims if c.theme_id == theme.id]
+        if not theme_claims:
+            continue
+
+        deduped_groups = deduplicate_claims_ai(theme_claims, theme.name)
+
+        # Delete old individual claims, replace with deduplicated representatives
+        old_claim_ids = [c.id for c in theme_claims]
+
+        # For each group, keep one claim as representative and delete the rest
+        kept_claim_ids = set()
+        for group in deduped_groups:
+            if not group["original_ids"]:
+                continue
+            # Keep the first original claim as the representative
+            representative_id = group["original_ids"][0]
+            kept_claim_ids.add(representative_id)
+
+            # Update the representative claim with deduped data
+            rep_claim = db.query(models.Claim).filter(models.Claim.id == representative_id).first()
+            if rep_claim:
+                rep_claim.claim_text = group["representative_text"]
+                rep_claim.sentiment_polarity = group["sentiment"]
+                rep_claim.severity = group["severity"]
+                rep_claim.mention_count = group["mention_count"]
+
+            # Delete the other claims in this group
+            for oid in group["original_ids"][1:]:
+                dup_claim = db.query(models.Claim).filter(models.Claim.id == oid).first()
+                if dup_claim:
+                    db.delete(dup_claim)
+
+        # Update theme claim count to reflect deduped count
+        theme.claim_count = len(deduped_groups)
+
+    db.flush()
+
+    # Recalculate product sentiment
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if product:
+        remaining_claims = (
+            db.query(models.Claim)
+            .join(models.Review, models.Claim.review_id == models.Review.id)
+            .filter(models.Review.product_id == product_id)
+            .all()
+        )
+        total_claims = len(remaining_claims)
+        positive = sum(1 for c in remaining_claims if c.sentiment_polarity == "positive")
+        negative = sum(1 for c in remaining_claims if c.sentiment_polarity == "negative")
+        product.overall_sentiment_score = round(
+            (positive - negative * 0.5) / max(total_claims, 1), 2
+        )
+        import json
+        
+        summary_data = _generate_summary_and_advices(product.name, theme_names, cluster_texts_map)
+        product.summary = summary_data.get("summary", "")
+        
+        advices = summary_data.get("advices", [])
+        product.advices = json.dumps(advices)
+
+    db.commit()
+
+    print(f"DEBUG: Created {len(unique_clusters)} themes for product {product_id} (with AI dedup)")
+
+    return {"status": "success", "themes_created": len(unique_clusters)}
+
+def extract_and_update_summary(product_id: int, db: Session, focus: str = None):
+    """Regenerates the summary and advice for a product, optionally with a custom focus."""
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        return None
+
+    themes = db.query(models.Theme).filter(models.Theme.product_id == product_id).all()
+    
+    cluster_texts_map = {}
+    theme_names = {}
+    for theme in themes:
+        theme_names[theme.id] = theme.name
+        claims = db.query(models.Claim).filter(models.Claim.theme_id == theme.id).all()
+        cluster_texts_map[theme.id] = [c.claim_text for c in claims]
+
+    result = _generate_summary_and_advices(product.name, theme_names, cluster_texts_map, focus)
+    if result.get("summary"):
+        product.summary = result["summary"]
+    if result.get("advices") is not None:
+        import json
+        product.advices = json.dumps(result["advices"])
+        
+    db.commit()
+    db.refresh(product)
+    return product
+
+def detect_csv_columns(columns: list[str], sample_data: list[dict]) -> dict:
+    """Uses LLM to confidently identify which column contains review text, ratings, and product names."""
+    import json
+    import os
+    
+    provider = os.getenv("LLM_PROVIDER", "openai")
+    
+    sample_str = json.dumps(sample_data, indent=2)
+    prompt = f"""
+I have a dataset of product reviews with the following columns:
+{columns}
+
+Here are the first 5 rows:
+{sample_str}
+
+Analyze this data and determine:
+1. Which column most likely contains the actual review text? (This is required)
+2. Which column most likely contains the numeric star rating? (This is optional, return null if none is apparent)
+3. Which column most likely contains the name of the product? (Useful if the CSV contains reviews for multiple different products. return null if it seems all reviews are for a single product or no name is found).
+
+Return ONLY valid JSON in this exact format, with no markdown formatting:
+{{
+  "review_column": "exact_column_name_here",
+  "rating_column": "exact_column_name_here_or_null",
+  "product_column": "exact_column_name_here_or_null"
+}}
+"""
+    try:
+        if provider == "openai":
+            import openai
+            client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You map dataset columns for consumer reviews. Output JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                timeout=15.0,
+            )
+            return json.loads(response.choices[0].message.content)
+            
+        elif provider == "gemini":
+            import google.generativeai as genai
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(prompt + "\nOutput raw JSON without markdown.")
+            text = response.text.strip()
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.endswith("```"):
+                text = text[:-3]
+            return json.loads(text.strip())
+            
+    except Exception as e:
+        print(f"DEBUG: CSV column detection LLM call failed: {e}")
+        # Fallback to naive heuristics
+        lower_cols = [c.lower() for c in columns]
+        review_col = None
+        rating_col = None
+        product_col = None
+        for orig, lower in zip(columns, lower_cols):
+            if any(k in lower for k in ["review", "content", "text", "body"]):
+                review_col = orig
+            if any(k in lower for k in ["rating", "star", "score"]):
+                rating_col = orig
+            if any(k in lower for k in ["product", "brand", "item", "title"]):
+                product_col = orig
+        return {"review_column": review_col, "rating_column": rating_col, "product_column": product_col}
+        
+    return {"review_column": None, "rating_column": None, "product_column": None}
+
+def run_url_ingestion_background(product_id: int, url: str):
+    """
+    Background worker for URL ingestion. Scrapes, extracts reviews using AI, 
+    processes claims, and marks product as ready.
+    """
+    from database import SessionLocal
+    from main import batch_ingest_reviews, BatchIngestRequest, BatchReviewItem
+    from urllib.parse import urlparse
+    import time
+
+    db = SessionLocal()
+    try:
+        product = db.query(models.Product).filter(models.Product.id == product_id).first()
+        if not product:
+            return
+
+        print(f"DEBUG: Background ingestion started for product {product_id} from {url}")
+        
+        # Scrape and AI filter
+        result = scrape_reviews_from_url(url)
+        extracted_texts = result["reviews"]
+        scraped_name = result["product_name"]
+
+        # Rename product if it was a generic placeholder
+        if product.name == "Scraping in progress...":
+            product.name = scraped_name
+            db.commit()
+
+        if not extracted_texts:
+            print("DEBUG: No valid reviews found by AI scraper.")
+            product.status = "ready" # Marks as done, but empty
+            db.commit()
+            return
+            
+        domain = urlparse(url).netloc
+        if domain.startswith("www."):
+            domain = domain[4:]
+
+        reviews_payload = [
+            BatchReviewItem(text=text, source=domain) 
+            for text in extracted_texts
+        ]
+        
+        # Insert reviews into DB with the new 'source_url' field directly 
+        for payload in reviews_payload:
+             review = models.Review(
+                 product_id=product_id,
+                 original_text=payload.text,
+                 source=payload.source,
+                 source_url=url, # store the exact source url
+                 star_rating=payload.star_rating,
+             )
+             db.add(review)
+             
+        db.commit()
+        
+        # Now cluster the claims the usual way, since reviews are already saved
+        from pipeline import process_review_sync, cluster_product_claims
+        
+        reviews = db.query(models.Review).filter(
+            models.Review.product_id == product_id, 
+            models.Review.source_url == url
+        ).all()
+        
+        for r in reviews:
+            process_review_sync(r.id, db)
+            
+        # Recluster
+        cluster_product_claims(product_id, db)
+        
+        # Mark as done
+        product.status = "ready"
+        db.commit()
+        print(f"DEBUG: Background ingestion complete for product {product_id}")
+
+    except Exception as e:
+        print(f"DEBUG: Background ingestion failed: {e}")
+        # Make sure to release it from processing state so UI doesn't hang forever
+        if 'product' in locals() and product:
+            product.status = "error" 
+            db.commit()
+    finally:
+        db.close()
+
+
+def prune_html_and_extract_ai_reviews(html_content: str, max_chars: int = 15000) -> dict:
+    import json
+    import os
+    from bs4 import BeautifulSoup
+    
+    # 1. Clean HTML
+    soup = BeautifulSoup(html_content, "html.parser")
+    product_name = "Unknown Product"
+    title_tag = soup.find("h1") or soup.find("title")
+    if title_tag:
+        product_name = title_tag.get_text(strip=True)
+        
+    for script in soup(["script", "style", "nav", "footer", "header", "aside", "svg", "button", "iframe"]):
+        script.extract()
+        
+    raw_text = soup.get_text(separator='\n', strip=True)
+    
+    # Prune giant texts to fit LLM window, prioritizing end of doc where reviews usually are
+    if len(raw_text) > max_chars:
+        # Keep first 2k chars (title/desc) and last (max_chars-2k) chars (reviews)
+        raw_text = raw_text[:2000] + "\n...[TRUNCATED]...\n" + raw_text[-(max_chars-2000):]
+        
+    provider = os.getenv("LLM_PROVIDER", "openai")
+    prompt = f"""
+You are an AI data extraction agent. I am providing you with the raw text content scraped from a product page.
+Your job is to identify and extract ONLY the genuine consumer reviews from this text.
+
+RULES:
+1. Ignore product descriptions, marketing copy, shipping details, or technical specs.
+2. Ignore navigation links, copyright notices, and "sign in" prompts.
+3. Extract each distinct user review as a separate string.
+4. Try to determine the official product name if it's clear.
+5. If you cannot find any text that looks like a consumer review, return an empty list.
+
+RAW SCRAPED TEXT:
+{raw_text}
+
+Return ONLY valid JSON in exactly this format without markdown wrappers.
+{{
+  "product_name": "Name of the product",
+  "reviews": [
+    "Review text 1...",
+    "Review text 2..."
+  ]
+}}
+"""
+    try:
+        if provider == "openai" and os.getenv("OPENAI_API_KEY"):
+            import openai
+            client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You extract consumer reviews from raw website text. Output JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                timeout=25.0,
+            )
+            data = json.loads(response.choices[0].message.content)
+            return {"product_name": data.get("product_name", product_name), "reviews": data.get("reviews", [])}
+        else:
+            # Fallback to Gemini
+            import google.generativeai as genai
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"response_mime_type": "application/json"})
+            response = model.generate_content(
+                f"System: You extract consumer reviews from raw website text. Output JSON only.\n\nUser: {prompt}"
+            )
+            data = json.loads(response.text)
+            return {"product_name": data.get("product_name", product_name), "reviews": data.get("reviews", [])}
+    except Exception as e:
+        print(f"DEBUG: AI Review Extraction failed: {e}")
+        return {"product_name": product_name, "reviews": []}
+
+    return {"product_name": product_name, "reviews": []}
+
+
+def scrape_reviews_from_url(url: str) -> dict:
+    """
+    Crawls a product URL, waits for dynamic content to render, and extracts
+    consumer reviews and product name using AI.
+    Returns: {"product_name": str, "reviews": list[str]}
+    """
+    from playwright.sync_api import sync_playwright
+    import time
+    
+    html_content = ""
+    print(f"DEBUG: Starting Playwright crawl for {url}")
+    
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        # Randomize user agent to avoid basic blocks
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
+        
+        try:
+            # Go to URL and wait until the network is mostly idle
+            page.goto(url, wait_until="networkidle", timeout=30000)
+            
+            # Additional wait just in case of lazy-loaded reviews
+            # Scroll down to trigger lazy loading
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight/2)")
+            time.sleep(2)
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            time.sleep(2)
+            
+            # Click "load more" reviews if it exists (Optional heuristics)
+            # page.evaluate("document.querySelectorAll('button').forEach(b => { if(b.innerText.toLowerCase().includes('more reviews') || b.innerText.toLowerCase().includes('load more')) b.click() })")
+            # time.sleep(2)
+            
+            html_content = page.content()
+        except Exception as e:
+            print(f"DEBUG: Playwright error: {e}")
+            try:
+                html_content = page.content()
+            except:
+                pass
+        finally:
+            browser.close()
+            
+    if not html_content:
+        raise ValueError("Failed to retrieve page content.")
+
+    print(f"DEBUG: Passing {len(html_content)} bytes of HTML to AI filter...")
+    result = prune_html_and_extract_ai_reviews(html_content)
+    
+    print(f"DEBUG: AI Scraper isolated {len(result['reviews'])} genuine reviews for: {result['product_name']}")
+    return result
+
+def extract_products_and_reviews_ai(raw_text: str) -> list:
+    """
+    Uses an LLM to parse a raw unformatted blob of text, identifying distinct 
+    products and separating their reviews into a structured JSON array.
+    """
+    import os
+    import json
+    
+    prompt = f"""
+Analyze the following raw text which contains consumer reviews for potentially multiple distinct products.
+Your job is to identify each unique physical or digital product mentioned, determine its likely category, and extract all reviews that correspond to it.
+
+1. Group reviews by the specific product they are talking about.
+2. Ignore irrelevant text, setup instructions, or non-review content.
+3. Return ONLY a valid JSON array of objects.
+
+RAW TEXT:
+{raw_text}
+
+Return ONLY valid JSON in exactly this format without markdown wrappers. Do not include any other text.
+[
+  {{
+    "product_name": "Name of the product",
+    "category": "Electronics",
+    "reviews": [
+      "Review text 1...",
+      "Review text 2..."
+    ]
+  }}
+]
+"""
+    try:
+        # Check provider (assuming OpenAI as primary, Gemini fallback like the url scraper)
+        provider = os.getenv("AI_PROVIDER", "openai").lower()
+        if provider == "openai" and os.getenv("OPENAI_API_KEY"):
+            import openai
+            client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You split unstructured raw review text into structured JSON arrays by Product. Output JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"}, # Note: json_object requires an object, so we might need a slight format tweak
+            )
+            # Safe parsing
+            content = response.choices[0].message.content
+            # If the LLM wraps it in an object like {"data": [...]}, handle it
+            data = json.loads(content)
+            if isinstance(data, dict):
+                # find the first list value
+                for k, v in data.items():
+                    if isinstance(v, list):
+                        return v
+                return []
+            return data if isinstance(data, list) else []
+            
+        else:
+            # Fallback to Gemini
+            import google.generativeai as genai
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"response_mime_type": "application/json"})
+            response = model.generate_content(
+                f"System: You split unstructured raw review text into structured JSON arrays by Product. Output JSON only.\n\nUser: {prompt}"
+            )
+            data = json.loads(response.text)
+            if isinstance(data, dict):
+                for k, v in data.items():
+                    if isinstance(v, list):
+                        return v
+                return []
+            return data if isinstance(data, list) else []
+            
+    except Exception as e:
+        print(f"DEBUG: Multi-Product AI Extraction failed: {e}")
+        return []
+
+def run_raw_ingestion_background(raw_text: str, source_url: str = None, db = None):
+    """
+    Background worker for Raw Text AI Ingestion.
+    Extracts structured products/reviews, handles deduplication, and processes claims.
+    """
+    from database import SessionLocal
+    import models
+    from pipeline import process_review_sync, cluster_product_claims
+
+    # Avoid passing db Session through threads, instance a new one safely
+    if not db:
+        db = SessionLocal()
+        
+    try:
+        print(f"DEBUG: Starting Background AI Raw Extraction...")
+        extracted_data = extract_products_and_reviews_ai(raw_text)
+        
+        if not extracted_data:
+            print("DEBUG: AI found no valid products/reviews in the raw text.")
+            return
+
+        for item in extracted_data:
+            p_name = item.get("product_name", "Unknown Product").strip()
+            p_cat = item.get("category", "Uncategorized").strip()
+            reviews_list = item.get("reviews", [])
+            
+            if not reviews_list:
+                continue
+                
+            # 1. Check if product already exists
+            product = db.query(models.Product).filter(models.Product.name == p_name).first()
+            if not product:
+                product = models.Product(name=p_name, category=p_cat, status="processing")
+                db.add(product)
+                db.commit()
+                db.refresh(product)
+            else:
+                # To prevent UI loops if we attach to an existing one, ensure it's "processing" temporarily
+                product.status = "processing"
+                db.commit()
+
+            # 2. Iterate reviews, check for duplicates if source_url is provided
+            added_reviews = 0
+            for r_text in reviews_list:
+                r_text = r_text.strip()
+                if len(r_text) < 5:
+                    continue
+                    
+                # Deduplication logic requested by user:
+                # "make sure that the same product isn't implemented or added twice if they're from the same source url"
+                is_duplicate = False
+                if source_url:
+                    existing_review = db.query(models.Review).filter(
+                        models.Review.product_id == product.id,
+                        models.Review.original_text == r_text,
+                        models.Review.source_url == source_url
+                    ).first()
+                    
+                    if existing_review:
+                        is_duplicate = True
+                
+                if not is_duplicate:
+                    review = models.Review(
+                        product_id=product.id,
+                        original_text=r_text,
+                        source="raw_ai_ingestion",
+                        source_url=source_url,
+                        star_rating=5.0, # default 5
+                    )
+                    db.add(review)
+                    db.commit()
+                    db.refresh(review)
+                    
+                    # Extract claims immediately
+                    process_review_sync(review.id, db)
+                    added_reviews += 1
+                    
+            # 3. Re-cluster and mark ready
+            if added_reviews > 0:
+                cluster_product_claims(product.id, db)
+            
+            product.status = "ready"
+            db.commit()
+            
+        print(f"DEBUG: Background Raw AI Ingestion complete. Processed {len(extracted_data)} distinct products.")
+
+    except Exception as e:
+        print(f"DEBUG: Background Raw Ingestion failed: {e}")
+    finally:
+        db.close()
+
+def ask_product_assistant(product_id: int, query: str, db: Session) -> str:
+    """
+    RAG-style chatbot that answers user questions about a product strictly using its reviews.
+    """
+    import os
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        return "Product not found."
+        
+    reviews = db.query(models.Review.original_text).filter(models.Review.product_id == product_id).limit(150).all()
+    review_texts = [r[0] for r in reviews]
+    
+    if not review_texts:
+        return "I'm sorry, there are no reviews available for this product yet. I need reviews to answer your questions."
+        
+    # Combine texts and truncate if needed
+    context = "\n---\n".join(review_texts)
+    if len(context) > 30000:
+        context = context[:30000] + "...[TRUNCATED]"
+
+    prompt = f"""
+You are an expert AI shopping assistant for the product: {product.name}.
+A user is asking you a specific question about this product.
+
+RULES:
+1. You MUST answer the user's question SOLELY based on the provided consumer reviews.
+2. DO NOT hallucinate features, specs, or information not found in the reviews.
+3. If the reviews do not contain the answer, politely state that you don't have enough information from the current reviews to answer that.
+4. Keep your answer concise, helpful, and objective. Use markdown formatting if it helps readability.
+
+USER QUESTION:
+"{query}"
+
+CONSUMER REVIEWS CONTEXT:
+{context}
+"""
+
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    try:
+        if provider == "openai" and os.getenv("OPENAI_API_KEY"):
+            import openai
+            client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a helpful product assistant strictly answering based on reviews."},
+                    {"role": "user", "content": prompt}
+                ],
+                timeout=15.0,
+            )
+            return response.choices[0].message.content
+        else:
+            import google.generativeai as genai
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(
+                f"System: You are a helpful product assistant strictly answering based on reviews.\n\nUser: {prompt}"
+            )
+            return response.text
+    except Exception as e:
+        print(f"DEBUG: Chatbot LLM call failed: {e}")
+        return "I'm sorry, I'm having trouble processing your request right now. Please try again later."

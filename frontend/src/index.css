@@ -1,0 +1,188 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap");
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+@custom-variant hover (&:hover);
+
+/*
+  HYVE Custom Theme — Deep Indigo + Teal
+  A premium dark-first design for AI-powered consumer intelligence.
+*/
+
+@theme inline {
+  /* ── Light Mode Defaults ── */
+  --color-background: hsl(220 20% 97%);
+  --color-foreground: hsl(224 30% 12%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(224 30% 12%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(224 30% 12%);
+
+  --color-primary: hsl(243 75% 59%);
+  --color-primary-foreground: hsl(0 0% 100%);
+
+  --color-secondary: hsl(220 16% 93%);
+  --color-secondary-foreground: hsl(224 30% 18%);
+
+  --color-muted: hsl(220 16% 93%);
+  --color-muted-foreground: hsl(220 10% 46%);
+
+  --color-accent: hsl(174 62% 47%);
+  --color-accent-foreground: hsl(0 0% 100%);
+
+  --color-destructive: hsl(0 72% 51%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+
+  --color-border: hsl(220 14% 89%);
+  --color-input: hsl(220 14% 89%);
+  --color-ring: hsl(243 75% 59%);
+
+  --radius: 0.625rem;
+
+  /* ── Custom HYVE Colors ── */
+  --color-positive: hsl(160 64% 43%);
+  --color-positive-foreground: hsl(0 0% 100%);
+  --color-warning: hsl(38 92% 50%);
+  --color-warning-foreground: hsl(0 0% 100%);
+  --color-chart-1: hsl(243 75% 59%);
+  --color-chart-2: hsl(174 62% 47%);
+  --color-chart-3: hsl(38 92% 50%);
+  --color-chart-4: hsl(0 72% 51%);
+  --color-chart-5: hsl(160 64% 43%);
+
+  /* ── Sidebar ── */
+  --color-sidebar-background: hsl(228 28% 12%);
+  --color-sidebar-foreground: hsl(220 16% 80%);
+  --color-sidebar-primary: hsl(243 75% 59%);
+  --color-sidebar-primary-foreground: hsl(0 0% 100%);
+  --color-sidebar-accent: hsl(228 20% 18%);
+  --color-sidebar-accent-foreground: hsl(220 16% 93%);
+  --color-sidebar-border: hsl(228 20% 20%);
+  --color-sidebar-ring: hsl(243 75% 59%);
+
+  /* ── Animations ── */
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-fade-in: fade-in 0.3s ease-out;
+  --animate-slide-up: slide-up 0.3s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+/* ── Dark Mode Overrides ── */
+.dark {
+  --color-background: hsl(228 28% 7%);
+  --color-foreground: hsl(220 16% 93%);
+  --color-card: hsl(228 24% 11%);
+  --color-card-foreground: hsl(220 16% 93%);
+  --color-popover: hsl(228 24% 11%);
+  --color-popover-foreground: hsl(220 16% 93%);
+
+  --color-primary: hsl(243 75% 65%);
+  --color-primary-foreground: hsl(0 0% 100%);
+
+  --color-secondary: hsl(228 20% 16%);
+  --color-secondary-foreground: hsl(220 16% 85%);
+
+  --color-muted: hsl(228 16% 16%);
+  --color-muted-foreground: hsl(220 10% 54%);
+
+  --color-accent: hsl(174 62% 42%);
+  --color-accent-foreground: hsl(0 0% 100%);
+
+  --color-destructive: hsl(0 62% 45%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+
+  --color-border: hsl(228 16% 18%);
+  --color-input: hsl(228 16% 18%);
+  --color-ring: hsl(243 75% 65%);
+
+  --color-positive: hsl(160 64% 38%);
+  --color-warning: hsl(38 85% 48%);
+
+  --color-sidebar-background: hsl(228 30% 6%);
+  --color-sidebar-foreground: hsl(220 16% 70%);
+  --color-sidebar-accent: hsl(228 20% 12%);
+  --color-sidebar-accent-foreground: hsl(220 16% 85%);
+  --color-sidebar-border: hsl(228 16% 14%);
+}
+
+/* ── React Flow Polish ── */
+.react-flow__node {
+  animation: node-entry 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes node-entry {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.react-flow__handle {
+  transition: all 0.2s ease;
+}
+
+.react-flow__handle:hover {
+  transform: scale(1.5);
+  box-shadow: 0 0 8px var(--color-primary);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family:
+      "Inter",
+      system-ui,
+      -apple-system,
+      sans-serif;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
