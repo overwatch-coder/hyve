@@ -74,12 +74,13 @@ def _generate_theme_names(cluster_texts_map: dict[int, list[str]]) -> dict[int, 
         sample = texts[:5]  # Max 5 per cluster to keep prompt short
         clusters_summary += f"Cluster {cid}: {'; '.join(sample)}\n"
 
-    prompt = f"""Given these clusters of consumer review claims, generate a short 2-3 word thematic label for each cluster.
-Return a JSON object mapping cluster ID to the label. Keep labels concise like "Battery Life", "Customer Service", "Build Quality", "Sound Quality".
+    prompt = f"""Given these clusters of consumer review claims, generate:
+1. A short 2-3 word thematic label for each cluster (e.g., "Battery Life", "Build Quality").
+2. One specific actionable recommendation for the product team based on the claims in that cluster.
 
 {clusters_summary}
 
-Return ONLY valid JSON like: {{"0": "Battery Life", "1": "Sound Quality"}}"""
+Return ONLY valid JSON like: {{"0": {{"name": "Battery Life", "recommendation": "Increase battery capacity..."}}, "1": {{"name": "Sound Quality", "recommendation": "Tune drivers for more bass..."}}}}"""
 
     try:
         if provider == "openai":
@@ -88,7 +89,7 @@ Return ONLY valid JSON like: {{"0": "Battery Life", "1": "Sound Quality"}}"""
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You generate concise thematic labels for clusters of consumer claims. Output JSON only."},
+                    {"role": "system", "content": "You generate concise thematic labels and actionable recommendations for consumer claims. Output JSON only."},
                     {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
@@ -301,10 +302,20 @@ def cluster_product_claims(product_id: int, db: Session) -> dict:
             claims[i] for i, label in enumerate(cluster_labels) if label == cid
         ]
 
-        # Use LLM name if available, else fallback to shortest claim heuristic
-        if cid in theme_names and theme_names[cid]:
-            theme_name = theme_names[cid]
-        else:
+        # Use LLM name/recommendation if available, else fallback
+        theme_name = "Other"
+        recommendation = None
+        
+        if cid in theme_names:
+            theme_info = theme_names[cid]
+            if isinstance(theme_info, dict):
+                theme_name = theme_info.get("name", "Other")
+                recommendation = theme_info.get("recommendation")
+            else:
+                # Fallback if LLM returned just a string (though prompt asks for dict)
+                theme_name = str(theme_info)
+
+        if not theme_name or theme_name == "Other":
             representative = min(cluster_claims_list, key=lambda c: len(c.claim_text))
             name_words = representative.claim_text.split()[:6]
             theme_name = " ".join(name_words)
@@ -321,6 +332,7 @@ def cluster_product_claims(product_id: int, db: Session) -> dict:
             name=theme_name,
             claim_count=total,
             positive_ratio=round(positive_count / total, 2) if total > 0 else 0.0,
+            recommendation=recommendation
         )
         db.add(theme)
         db.flush()
@@ -432,7 +444,7 @@ def detect_csv_columns(columns: list[str], sample_data: list[dict]) -> dict:
     
     provider = os.getenv("LLM_PROVIDER", "openai")
     
-    sample_str = json.dumps(sample_data, indent=2)
+    sample_str = json.dumps(sample_data, indent=2, default=str)
     prompt = f"""
 I have a dataset of product reviews with the following columns:
 {columns}
@@ -444,12 +456,14 @@ Analyze this data and determine:
 1. Which column most likely contains the actual review text? (This is required)
 2. Which column most likely contains the numeric star rating? (This is optional, return null if none is apparent)
 3. Which column most likely contains the name of the product? (Useful if the CSV contains reviews for multiple different products. return null if it seems all reviews are for a single product or no name is found).
+4. Which column most likely contains the date or timestamp of the review? (This is optional, return null if none is found).
 
 Return ONLY valid JSON in this exact format, with no markdown formatting:
 {{
   "review_column": "exact_column_name_here",
   "rating_column": "exact_column_name_here_or_null",
-  "product_column": "exact_column_name_here_or_null"
+  "product_column": "exact_column_name_here_or_null",
+  "date_column": "exact_column_name_here_or_null"
 }}
 """
     try:
@@ -486,6 +500,7 @@ Return ONLY valid JSON in this exact format, with no markdown formatting:
         review_col = None
         rating_col = None
         product_col = None
+        date_col = None
         for orig, lower in zip(columns, lower_cols):
             if any(k in lower for k in ["review", "content", "text", "body"]):
                 review_col = orig
@@ -493,9 +508,16 @@ Return ONLY valid JSON in this exact format, with no markdown formatting:
                 rating_col = orig
             if any(k in lower for k in ["product", "brand", "item", "title"]):
                 product_col = orig
-        return {"review_column": review_col, "rating_column": rating_col, "product_column": product_col}
+            if any(k in lower for k in ["date", "time", "posted", "timestamp"]):
+                date_col = orig
+        return {
+            "review_column": review_col, 
+            "rating_column": rating_col, 
+            "product_column": product_col,
+            "date_column": date_col
+        }
         
-    return {"review_column": None, "rating_column": None, "product_column": None}
+    return {"review_column": None, "rating_column": None, "product_column": None, "date_column": None}
 
 def run_url_ingestion_background(product_id: int, url: str):
     """
@@ -514,6 +536,9 @@ def run_url_ingestion_background(product_id: int, url: str):
             return
 
         print(f"DEBUG: Background ingestion started for product {product_id} from {url}")
+        
+        product.processing_step = "Scraping Target URL"
+        db.commit()
         
         # Scrape and AI filter
         result = scrape_reviews_from_url(url)
@@ -534,6 +559,9 @@ def run_url_ingestion_background(product_id: int, url: str):
         domain = urlparse(url).netloc
         if domain.startswith("www."):
             domain = domain[4:]
+
+        product.processing_step = "Archiving Discovery"
+        db.commit()
 
         reviews_payload = [
             BatchReviewItem(text=text, source=domain) 
@@ -561,13 +589,22 @@ def run_url_ingestion_background(product_id: int, url: str):
             models.Review.source_url == url
         ).all()
         
-        for r in reviews:
+        product.processing_step = f"Analyzing Sentiment (1/{len(reviews)})"
+        db.commit()
+
+        for idx, r in enumerate(reviews):
+            if idx % 5 == 0:
+                product.processing_step = f"Analyzing Sentiment ({idx+1}/{len(reviews)})"
+                db.commit()
             process_review_sync(r.id, db)
             
         # Recluster
+        product.processing_step = "Thematic Synthesis"
+        db.commit()
         cluster_product_claims(product_id, db)
         
         # Mark as done
+        product.processing_step = "Analysis Complete"
         product.status = "ready"
         db.commit()
         print(f"DEBUG: Background ingestion complete for product {product_id}")
@@ -578,6 +615,101 @@ def run_url_ingestion_background(product_id: int, url: str):
         if 'product' in locals() and product:
             product.status = "error" 
             db.commit()
+    finally:
+        db.close()
+
+def run_csv_ingestion_background(product_ids: list[int], csv_data_json: str, mapping: dict):
+    """
+    Background worker for CSV ingestion.
+    - Limits reviews to 1000 per product.
+    - Sorts by date if mapping['date_column'] exists.
+    - Processes each review.
+    - Updates status to 'ready'.
+    """
+    from database import SessionLocal
+    import pandas as pd
+    import json
+    import io
+    
+    db = SessionLocal()
+    try:
+        df = pd.read_json(io.StringIO(csv_data_json))
+        review_col = mapping.get("review_column")
+        rating_col = mapping.get("rating_column")
+        product_col = mapping.get("product_column")
+        date_col = mapping.get("date_column")
+
+        if date_col and date_col in df.columns:
+            try:
+                df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+                df = df.sort_values(by=date_col, ascending=False)
+            except:
+                pass
+
+        # 2. Iterate through products
+        for pid in product_ids:
+            product = db.query(models.Product).filter(models.Product.id == pid).first()
+            if not product: continue
+            
+            product.processing_step = "Grouping Product Reviews"
+            db.commit()
+
+            # Filter rows for this product
+            if product_col and product_col in df.columns:
+                p_df = df[df[product_col].astype(str).str.strip() == product.name]
+            else:
+                p_df = df
+            
+            # 3. Limit to 1000 reviews
+            p_df = p_df.head(1000)
+            
+            # 4. Ingest reviews
+            product.processing_step = f"Extracting AI Claims (1/{len(p_df)})"
+            db.commit()
+            
+            for idx, (_, row) in enumerate(p_df.iterrows()):
+                if idx % 10 == 0:
+                    product.processing_step = f"Extracting AI Claims ({idx+1}/{len(p_df)})"
+                    db.commit()
+
+                text = str(row[review_col]).strip()
+                if len(text) < 5: continue
+                
+                rating = None
+                if rating_col and rating_col in df.columns:
+                    try: rating = float(row[rating_col])
+                    except: pass
+                
+                review = models.Review(
+                    product_id=product.id,
+                    original_text=text,
+                    source="csv_upload",
+                    star_rating=rating
+                )
+                db.add(review)
+                db.flush()
+                
+                # Process AI extractions
+                process_review_sync(review.id, db)
+            
+            # 5. Finalize product
+            product.processing_step = "Harmonizing Thematic Clusters"
+            db.commit()
+            cluster_product_claims(product.id, db)
+            
+            product.processing_step = "Synthesizing Recommendations"
+            product.status = "ready"
+            db.commit()
+            print(f"DEBUG: Background CSV ingestion complete for product {product.id}")
+
+    except Exception as e:
+        print(f"DEBUG: Background CSV ingestion failed: {e}")
+        # Error handling for products
+        for pid in product_ids:
+            p = db.query(models.Product).filter(models.Product.id == pid).first()
+            if p: 
+                p.status = "error"
+        db.commit()
     finally:
         db.close()
 
@@ -828,41 +960,27 @@ def run_raw_ingestion_background(raw_text: str, source_url: str = None, db = Non
                 db.commit()
                 db.refresh(product)
             else:
-                # To prevent UI loops if we attach to an existing one, ensure it's "processing" temporarily
                 product.status = "processing"
+                product.processing_step = "Synthesizing Knowledge"
                 db.commit()
 
-            # 2. Iterate reviews, check for duplicates if source_url is provided
+            # 2. Process reviews
             added_reviews = 0
-            for r_text in reviews_list:
-                r_text = r_text.strip()
-                if len(r_text) < 5:
-                    continue
+            for r_idx, r_text in enumerate(p_reviews):
+                if r_idx % 5 == 0:
+                    product.processing_step = f"Distilling Claims ({r_idx+1}/{len(p_reviews)})"
+                    db.commit()
                     
-                # Deduplication logic requested by user:
-                # "make sure that the same product isn't implemented or added twice if they're from the same source url"
-                is_duplicate = False
-                if source_url:
-                    existing_review = db.query(models.Review).filter(
-                        models.Review.product_id == product.id,
-                        models.Review.original_text == r_text,
-                        models.Review.source_url == source_url
-                    ).first()
-                    
-                    if existing_review:
-                        is_duplicate = True
-                
-                if not is_duplicate:
+                text = str(r_text).strip()
+                if len(text) > 10:
                     review = models.Review(
                         product_id=product.id,
-                        original_text=r_text,
-                        source="raw_ai_ingestion",
-                        source_url=source_url,
-                        star_rating=5.0, # default 5
+                        original_text=text,
+                        source="raw_paste",
+                        source_url=source_url
                     )
                     db.add(review)
-                    db.commit()
-                    db.refresh(review)
+                    db.flush()
                     
                     # Extract claims immediately
                     process_review_sync(review.id, db)
@@ -870,10 +988,14 @@ def run_raw_ingestion_background(raw_text: str, source_url: str = None, db = Non
                     
             # 3. Re-cluster and mark ready
             if added_reviews > 0:
+                product.processing_step = "Harmonizing Patterns"
+                db.commit()
                 cluster_product_claims(product.id, db)
             
+            product.processing_step = "Analysis Complete"
             product.status = "ready"
             db.commit()
+            product_count += 1
             
         print(f"DEBUG: Background Raw AI Ingestion complete. Processed {len(extracted_data)} distinct products.")
 

@@ -84,9 +84,10 @@ def cluster_claims(claims_texts: list[str]) -> list[int]:
         warnings.simplefilter("ignore")
         model = SentenceTransformer('all-MiniLM-L6-v2')
     
-    # Determine number of clusters (simple heuristic: 1 cluster per 5 claims, max 10, min 2)
-    n_clusters = max(2, min(len(claims_texts) // 5, 10))
-    if len(claims_texts) < 3:
+    # Determine number of clusters (Roadmap requires 4-6 themes)
+    n_clusters = max(4, min(len(claims_texts) // 4, 6))
+    if len(claims_texts) < 4:
+        n_clusters = 1  # Too few to cluster meaningfully into 4 themes
         n_clusters = 1  # Too few to cluster meaningfully
 
     embeddings = model.encode(claims_texts)

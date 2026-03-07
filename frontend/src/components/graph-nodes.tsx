@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import api from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
 
 /* ── Shared Types ── */
 interface ExpandableNodeData {
@@ -80,7 +81,11 @@ export const ProductNode = memo(ProductNodeRaw);
 function ThemeNodeRaw({
   data,
 }: {
-  data: ExpandableNodeData & { themeData?: any; color?: string };
+  data: ExpandableNodeData & {
+    themeData?: any;
+    color?: string;
+    sentimentChildIds?: { pos: string; neg: string };
+  };
 }) {
   const theme = data.themeData;
   const positiveRatio = theme?.positive_ratio ?? 0.5;
@@ -94,67 +99,109 @@ function ThemeNodeRaw({
       : score >= 40
         ? "hsl(38 92% 50%)"
         : "hsl(0 72% 51%)";
-  const negBarColor = "hsl(0 72% 51%)";
 
   return (
     <div
-      className="flex flex-col rounded-lg select-none cursor-pointer transition-all duration-200 hover:shadow-lg"
+      className="flex flex-col rounded-xl select-none cursor-pointer transition-all duration-200 hover:shadow-xl group"
       style={{
-        background: "hsl(170 40% 96%)",
-        border: `1.5px solid hsl(170 35% 82%)`,
-        minWidth: 180,
-        maxWidth: 220,
+        background: "hsl(170 40% 98%)",
+        border: `2px solid hsl(170 35% 88%)`,
+        minWidth: 200,
+        maxWidth: 240,
+        padding: "2px",
       }}
     >
       <Handle
         type="target"
         position={Position.Top}
-        className="bg-border! border-none! w-2! h-2!"
+        className="bg-primary! border-none! w-2.5! h-2.5!"
       />
 
-      {/* Header row: name + score */}
-      <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
-        <span className="text-xs font-bold text-gray-800 leading-tight flex-1 mr-2">
-          {theme?.name ?? data.label}
-        </span>
-        <span
-          className="text-xs font-black shrink-0"
-          style={{ color: barColor }}
-        >
-          {score}%
-        </span>
-      </div>
+      <div className="p-3">
+        {/* Header row: name + score */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-black text-gray-900 leading-tight flex-1 mr-2">
+            {theme?.name ?? data.label}
+          </span>
+          <Badge className="font-black text-[10px] h-5 bg-primary/10 text-primary border-none">
+            {score}%
+          </Badge>
+        </div>
 
-      {/* Progress bar */}
-      <div className="px-3 pb-1">
-        <div className="w-full h-1.5 bg-gray-200 rounded-full flex overflow-hidden">
+        {/* Progress bar */}
+        <div className="w-full h-2 bg-gray-200/50 rounded-full flex overflow-hidden mb-3">
           <div
-            className="h-full rounded-full transition-all duration-500"
+            className="h-full transition-all duration-700 ease-out"
             style={{ width: `${score}%`, background: barColor }}
           />
           <div
-            className="h-full transition-all duration-500"
-            style={{ width: `${100 - score}%`, background: negBarColor }}
+            className="h-full transition-all duration-700 ease-out"
+            style={{ width: `${100 - score}%`, background: "hsl(0 72% 51%)" }}
           />
         </div>
-      </div>
 
-      {/* Review count */}
-      <div className="px-3 pb-2.5">
-        <span className="text-[10px] font-semibold" style={{ color: barColor }}>
-          {claimCount.toLocaleString()} reviews
-        </span>
+        {/* Review count */}
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+            {claimCount.toLocaleString()} Mentions
+          </span>
+          <div className="flex gap-1">
+            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <div className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+          </div>
+        </div>
       </div>
 
       <Handle
         type="source"
         position={Position.Bottom}
-        className="bg-border! border-none! w-2! h-2!"
+        className="bg-primary! border-none! w-2.5! h-2.5!"
       />
     </div>
   );
 }
 export const ThemeNode = memo(ThemeNodeRaw);
+
+/* ══════════════════════════════════════════════
+   Sentiment Node (Intermediate)
+   "Pros" or "Cons" label
+   ══════════════════════════════════════════════ */
+function SentimentNodeRaw({
+  data,
+}: {
+  data: { label: string; type: "pos" | "neg" };
+}) {
+  const isPos = data.type === "pos";
+  const color = isPos ? "hsl(160 64% 43%)" : "hsl(0 72% 51%)";
+  const bgColor = isPos ? "hsl(160 64% 96%)" : "hsl(0 72% 96%)";
+  const borderColor = isPos ? "hsl(160 64% 85%)" : "hsl(0 72% 85%)";
+
+  return (
+    <div
+      className="px-4 py-2 rounded-lg border-2 font-black uppercase tracking-[0.2em] text-[10px] select-none"
+      style={{
+        background: bgColor,
+        borderColor: borderColor,
+        color: color,
+        minWidth: 120,
+        textAlign: "center",
+      }}
+    >
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="rounded-full w-2! h-2! border-none! bg-muted-foreground/20!"
+      />
+      {data.label}
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="rounded-full w-2! h-2! border-none! bg-muted-foreground/20!"
+      />
+    </div>
+  );
+}
+export const SentimentNode = memo(SentimentNodeRaw);
 
 /* ══════════════════════════════════════════════
    Claim Node (Leaf)
@@ -177,61 +224,54 @@ function ClaimNodeRaw({
       ? "hsl(220 14% 50%)"
       : "hsl(0 72% 51%)";
 
-  const barColor = isPositive ? "hsl(160 64% 43%)" : "hsl(0 72% 51%)";
-  const severity = claim?.severity ?? 50;
   const mentions =
-    claim?.mention_count ?? Math.max(1, Math.round(severity * 50));
+    claim?.mention_count ??
+    Math.max(1, Math.round((claim?.severity ?? 0.5) * 50));
 
   return (
     <div
-      className="flex flex-col rounded-lg select-none cursor-pointer transition-all duration-200 hover:shadow-md"
+      className="flex flex-col rounded-xl select-none cursor-pointer transition-all duration-200 hover:shadow-lg group p-3 shadow-sm"
       style={{
-        background: "hsl(170 40% 96%)",
-        border: `1.5px solid hsl(170 35% 82%)`,
-        minWidth: 180,
-        maxWidth: 220,
+        background: "white",
+        border: `1.5px solid hsl(220 15% 90%)`,
+        minWidth: 200,
+        maxWidth: 260,
       }}
     >
       <Handle
         type="target"
         position={Position.Top}
-        className="bg-border! border-none! w-2! h-2!"
+        className="bg-muted-foreground/30! border-none! w-1.5! h-1.5!"
       />
 
-      {/* Dot + claim text */}
-      <div className="flex items-start gap-2 px-3 pt-2.5 pb-1.5">
+      <div className="flex items-start gap-2.5">
         <div
-          className="h-2 w-2 rounded-full mt-1 shrink-0"
+          className="h-2 w-2 rounded-full mt-1.5 shrink-0 shadow-[0_0_8px_rgba(var(--primary),0.2)]"
           style={{ background: dotColor }}
         />
-        <p className="text-[11px] font-semibold text-gray-800 leading-snug">
-          {data.label}
-        </p>
-      </div>
+        <div className="flex-1">
+          <p className="text-[11px] font-bold text-gray-900 leading-[1.4] mb-2">
+            {data.label}
+          </p>
 
-      {/* Mini progress bar + mentions */}
-      <div className="flex items-center gap-2 px-3 pb-2.5">
-        <div className="flex-1 h-1 bg-gray-200 rounded-full flex overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{
-              width: `${Math.min(severity * 100, 100)}%`,
-              background: barColor,
-            }}
-          />
+          <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-50">
+            <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">
+              Verified Evidence
+            </span>
+            <Badge
+              variant="outline"
+              className="h-4 px-1.5 text-[8px] font-black tracking-tight border-gray-100 bg-gray-50/50 text-gray-500"
+            >
+              {mentions} MENTIONS
+            </Badge>
+          </div>
         </div>
-        <span className="text-[9px] font-bold text-gray-500 shrink-0">
-          {severity > 0 ? Math.round(severity * 100) : 50}%
-        </span>
-        <span className="text-[9px] font-medium text-gray-400 shrink-0">
-          {mentions.toLocaleString()} mentions
-        </span>
       </div>
 
       <Handle
         type="source"
         position={Position.Bottom}
-        className="bg-border! border-none! w-2! h-2!"
+        className="opacity-0! w-0! h-0!"
       />
     </div>
   );

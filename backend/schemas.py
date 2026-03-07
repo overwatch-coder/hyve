@@ -37,6 +37,7 @@ class Theme(ThemeBase):
     product_id: int
     positive_ratio: float
     claim_count: int
+    recommendation: Optional[str] = None
     claims: List['Claim'] = []
     model_config = ConfigDict(from_attributes=True)
 

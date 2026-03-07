@@ -4,7 +4,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # Dependency injected URL or throw exception if not set
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./hyvedb.sqlite3")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///hyvedb.sqlite3")
 
 engine = create_engine(
     DATABASE_URL, 

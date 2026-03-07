@@ -19,6 +19,7 @@ class Product(Base):
     summary = Column(String, nullable=True)
     advices = Column(String, nullable=True) # Will store JSON list or pipe-separated string
     status = Column(String, default="ready") # "processing" or "ready"
+    processing_step = Column(String, nullable=True) # e.g. "Cleaning Data", "Extracting Claims"
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -65,6 +66,7 @@ class Theme(Base):
     
     positive_ratio = Column(Float, default=0.0)
     claim_count = Column(Integer, default=0)
+    recommendation = Column(Text, nullable=True) # AI-generated actionable recommendation
     
     # Relationships
     product = relationship("Product", back_populates="themes")

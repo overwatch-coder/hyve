@@ -9,6 +9,10 @@ import {
   BarChart3,
   Search,
   Plus,
+  Bot,
+  Loader2,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -156,6 +160,9 @@ export default function Dashboard() {
                   <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center">
                     Insights
                   </th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    Status
+                  </th>
                   <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground text-right border-l border-border/20">
                     Actions
                   </th>
@@ -168,9 +175,18 @@ export default function Dashboard() {
                     className="group hover:bg-primary/5 transition-colors"
                   >
                     <td className="px-6 py-4">
-                      <p className="text-sm font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
-                        {p.name}
-                      </p>
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`h-8 w-8 rounded-lg flex items-center justify-center ${p.status === "processing" ? "bg-primary/10 animate-pulse" : "bg-secondary/50"}`}
+                        >
+                          <Bot
+                            className={`h-4 w-4 ${p.status === "processing" ? "text-primary" : "text-muted-foreground"}`}
+                          />
+                        </div>
+                        <p className="text-sm font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                          {p.name}
+                        </p>
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[9px] font-black uppercase tracking-wider border border-primary/20">
@@ -207,6 +223,30 @@ export default function Dashboard() {
                         ) || 0}
                       </span>
                     </td>
+                    <td className="px-6 py-4">
+                      {p.status === "processing" ? (
+                        <div className="flex items-center gap-2 text-primary animate-pulse">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <span className="text-[10px] font-black uppercase tracking-widest">
+                            Processing
+                          </span>
+                        </div>
+                      ) : p.status === "error" ? (
+                        <div className="flex items-center gap-2 text-rose-500">
+                          <XCircle className="h-3 w-3" />
+                          <span className="text-[10px] font-black uppercase tracking-widest">
+                            Error
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-emerald-500">
+                          <CheckCircle2 className="h-3 w-3" />
+                          <span className="text-[10px] font-black uppercase tracking-widest">
+                            Ready
+                          </span>
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-right border-l border-border/20">
                       <div className="flex items-center justify-end gap-2">
                         <Link to={`/products/${p.id}`}>
@@ -214,6 +254,7 @@ export default function Dashboard() {
                             variant="ghost"
                             size="sm"
                             className="h-8 px-3 gap-2 text-[10px] font-black uppercase tracking-wider hover:bg-primary/10 hover:text-primary transition-all"
+                            disabled={p.status === "processing"}
                           >
                             <TrendingUp className="h-3 w-3" />
                             Analytics

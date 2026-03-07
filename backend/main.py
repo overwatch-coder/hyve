@@ -36,6 +36,17 @@ except Exception:
 # Create the database tables
 models.Base.metadata.create_all(bind=engine)
 
+# Ad-hoc migration for SQLite: Add processing_step to products if missing
+from sqlalchemy import text
+with engine.connect() as conn:
+    try:
+        conn.execute(text("ALTER TABLE products ADD COLUMN processing_step VARCHAR"))
+        conn.commit()
+        print("MIGRATION: Added processing_step column to products table.")
+    except Exception:
+        # Column likely already exists or table doesn't exist yet
+        pass
+
 app = FastAPI(
     title="HYVE API",
     description="Backend API for structured consumer reviews and AI analysis.",
@@ -565,6 +576,7 @@ def global_ingest_url(
     summary="Ingest reviews from a CSV (global) and handle multi-product creation",
 )
 async def global_ingest_csv(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     fallback_category: str = "Uncategorized",
     db: Session = Depends(get_db),
@@ -581,54 +593,46 @@ async def global_ingest_csv(
     if df.empty:
         raise HTTPException(status_code=400, detail="File is empty")
 
-    from pipeline import detect_csv_columns
+    from pipeline import detect_csv_columns, run_csv_ingestion_background
     mapping = detect_csv_columns(df.columns.tolist(), df.head(5).to_dict(orient="records"))
     
     review_col = mapping.get("review_column")
-    rating_col = mapping.get("rating_column")
-    product_col = mapping.get("product_column")
-
     if not review_col or review_col not in df.columns:
         raise HTTPException(status_code=422, detail="Could not identify review text column.")
 
-    df = df.dropna(subset=[review_col])
-    results = {"products_created": [], "reviews_added": 0}
-
-    # Group by product if product column exists, else treat all as one
+    product_col = mapping.get("product_column")
+    
+    # 1. Group and create products in 'processing' state
+    product_ids = []
     if product_col and product_col in df.columns:
-        groups = df.groupby(product_col)
+        product_names = df[product_col].dropna().unique().tolist()
     else:
-        # Fallback to "New Product" or a name from metadata? 
-        # For now, let's use the filename if no product column
-        groups = [ (file.filename.split('.')[0], df) ]
+        product_names = [file.filename.split('.')[0]]
 
-    for p_name, p_df in groups:
+    for p_name in product_names:
         p_name = str(p_name).strip()
         product = db.query(models.Product).filter(models.Product.name == p_name).first()
         if not product:
-            product = models.Product(name=p_name, category=fallback_category)
+            product = models.Product(name=p_name, category=fallback_category, status="processing")
             db.add(product)
             db.commit()
             db.refresh(product)
-            results["products_created"].append(p_name)
+        else:
+            product.status = "processing"
+            db.commit()
+            db.refresh(product)
+        product_ids.append(product.id)
 
-        reviews_payload = []
-        for _, row in p_df.iterrows():
-            text = str(row[review_col]).strip()
-            if len(text) < 5: continue
-            
-            rating = None
-            if rating_col and rating_col in df.columns:
-                try: rating = float(row[rating_col])
-                except: pass
-                
-            reviews_payload.append(BatchReviewItem(text=text, source=f"csv_{file.filename}", star_rating=rating))
-        
-        if reviews_payload:
-            batch_ingest_reviews(product.id, BatchIngestRequest(reviews=reviews_payload), db)
-            results["reviews_added"] += len(reviews_payload)
+    # 2. Trigger background task
+    # We pass the full CSV as JSON to the background task (safe for memory if not gigabytes)
+    csv_json = df.to_json()
+    background_tasks.add_task(run_csv_ingestion_background, product_ids, csv_json, mapping)
 
-    return results
+    return {
+        "status": "processing", 
+        "product_ids": product_ids, 
+        "message": f"Ingestion of {len(df)} reviews across {len(product_ids)} products started."
+    }
 
 if __name__ == "__main__":
     import uvicorn

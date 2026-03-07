@@ -1,364 +1,497 @@
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Search,
   ArrowRight,
   TrendingUp,
   MessageSquare,
   Sparkles,
   GitBranch,
   ShieldCheck,
+  UploadCloud,
+  Layers,
+  Zap,
+  Bot,
+  Link as LinkIcon,
+  FileText,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import api from "@/lib/api";
+import { toast } from "sonner";
 
 export default function Home() {
-  const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("paste");
+  const [reviewsRaw, setReviewsRaw] = useState("");
+  const [url, setUrl] = useState("");
+  const [file, setFile] = useState<File | null>(null);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/dashboard?q=${encodeURIComponent(searchQuery)}`);
-    }
-  };
+  const ingestMutation = useMutation({
+    mutationFn: async () => {
+      if (activeTab === "url") {
+        if (!url) throw new Error("Provide a URL to crawl.");
+        const res = await api.post("/ingest/url", {
+          url,
+          name: null,
+          category: "Technology",
+        });
+        return { type: "url", productId: res.data.product_id };
+      }
+      if (activeTab === "paste") {
+        if (!reviewsRaw.trim()) throw new Error("Paste some reviews first.");
+        await api.post(`/ingest/raw`, { text: reviewsRaw });
+        return { type: "raw_batch" };
+      }
+      if (activeTab === "upload") {
+        if (!file) throw new Error("Select a CSV file.");
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("fallback_category", "Technology");
+        const res = await api.post("/ingest/csv", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        return { type: "batch", results: res.data };
+      }
+      return null;
+    },
+    onSuccess: (data: any) => {
+      if (data?.type === "batch") {
+        toast.success("Analysis Started", {
+          description: "Hyve is processing your dataset in the background.",
+        });
+        if (data.results?.product_ids?.[0]) {
+          navigate(`/products/${data.results.product_ids[0]}`);
+        } else {
+          navigate("/dashboard");
+        }
+      } else if (data?.type === "raw_batch") {
+        toast.success("AI Synthesis Started", {
+          description: "Extracting products and insights from your text...",
+        });
+        if (data.results?.product_ids?.[0]) {
+          navigate(`/products/${data.results.product_ids[0]}`);
+        } else {
+          navigate("/dashboard");
+        }
+      } else if (data?.type === "url") {
+        toast.success("AI Crawl Started", {
+          description: "Fetching reviews and analyzing sentiment...",
+        });
+        navigate(`/products/${data.productId}`);
+      }
+      queryClient.invalidateQueries({ queryKey: ["products-list"] });
+    },
+    onError: (error: any) => {
+      toast.error("Analysis Failed", {
+        description: error.message || "Unauthorized or invalid input.",
+      });
+    },
+  });
 
   return (
-    <div className="flex flex-col min-h-screen bg-background -mt-8">
+    <div className="flex flex-col min-h-screen bg-background -mt-8 overflow-x-hidden">
       {/* ── HERO SECTION ── */}
-      <section className="relative flex flex-col items-center text-center pt-24 pb-20 px-4">
-        <div className="absolute inset-0 z-0 bg-linear-to-b from-primary/5 to-transparent pointer-events-none" />
+      <section className="relative pt-32 pb-32 px-6">
+        {/* Abstract Background Blobs */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-primary/5 blur-[120px] rounded-full -z-10" />
+        <div className="absolute top-40 right-[-10%] w-[500px] h-[500px] bg-emerald-500/5 blur-[100px] rounded-full -z-10" />
 
-        {/* Animated grid background */}
-        <div
-          className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right, var(--foreground) 1px, transparent 1px), linear-gradient(to bottom, var(--foreground) 1px, transparent 1px)",
-            backgroundSize: "40px 40px",
-          }}
-        />
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
+          {/* Left: Content */}
+          <div className="lg:col-span-7 space-y-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-xs font-black text-primary uppercase tracking-[0.2em]"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Collective Intelligence Engine</span>
+            </motion.div>
 
-        <div className="relative z-10 max-w-4xl mx-auto flex flex-col items-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 text-xs font-bold text-primary mb-8 uppercase tracking-widest shadow-sm">
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>AI-powered review intelligence</span>
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="text-6xl md:text-8xl font-black tracking-tight leading-[0.95] text-foreground"
+            >
+              Turn <span className="text-primary italic">Noise</span> Into{" "}
+              <br />
+              <span className="bg-linear-to-r from-primary to-emerald-500 bg-clip-text text-transparent">
+                Actionable
+              </span>{" "}
+              Clarity.
+            </motion.h1>
+
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-xl md:text-2xl text-muted-foreground font-medium max-w-2xl leading-relaxed"
+            >
+              HYVE clusters thousands of raw reviews into a visual decision
+              tree. Drill down from themes to specific claims in seconds.
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="flex flex-wrap gap-4 pt-4 font-mono uppercase tracking-widest text-[10px] font-bold text-muted-foreground/60"
+            >
+              <div className="flex items-center gap-2">
+                <Zap className="h-3 w-3 text-primary" />
+                D3.js Visualization
+              </div>
+              <div className="flex items-center gap-2">
+                <Bot className="h-3 w-3 text-primary" />
+                Gemini 1.5 Pro AI
+              </div>
+              <div className="flex items-center gap-2">
+                <Layers className="h-3 w-3 text-primary" />
+                Sentiment Layering
+              </div>
+            </motion.div>
           </div>
 
-          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-foreground leading-[1.1] mb-6">
-            Cut through the{" "}
-            <span className="text-primary underline decoration-primary/30 underline-offset-12">
-              noise
-            </span>
-            .<br />
-            Buy with clarity.
-          </h1>
-
-          <p className="text-lg md:text-xl text-muted-foreground font-medium max-w-2xl mb-12">
-            HYVE analyzes thousands of product reviews and distills them into an
-            interactive decision tree so you see exactly what matters, backed
-            by real evidence.
-          </p>
-
-          {/* Large Search Bar */}
-          <form
-            onSubmit={handleSearch}
-            className="w-full max-w-2xl relative mb-8 group"
+          {/* Right: Ingestion UI (Glassmorphism) */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.4 }}
+            className="lg:col-span-5"
           >
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+            <Card className="border-primary/20 bg-card/60 backdrop-blur-3xl shadow-[0_32px_64px_-16px_rgba(var(--primary),0.1)] overflow-hidden">
+              <div className="p-6 border-b border-border/30 bg-primary/5">
+                <h2 className="text-lg font-black uppercase tracking-widest flex items-center gap-2">
+                  <UploadCloud className="h-5 w-5 text-primary" />
+                  Quick Analyze
+                </h2>
+                <p className="text-sm text-muted-foreground font-medium mt-1">
+                  Upload reviews to generate your map
+                </p>
+              </div>
+
+              <div className="p-6">
+                <Tabs
+                  value={activeTab}
+                  onValueChange={setActiveTab}
+                  className="w-full"
+                >
+                  <TabsList className="grid w-full grid-cols-3 h-10 p-1 bg-muted/30 rounded-lg mb-6">
+                    <TabsTrigger
+                      value="paste"
+                      className="text-[10px] font-black uppercase tracking-widest gap-2"
+                    >
+                      <FileText className="h-3.5 w-3.5" /> Paste
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="upload"
+                      className="text-[10px] font-black uppercase tracking-widest gap-2"
+                    >
+                      <UploadCloud className="h-3.5 w-3.5" /> File
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="url"
+                      className="text-[10px] font-black uppercase tracking-widest gap-2"
+                    >
+                      <LinkIcon className="h-3.5 w-3.5" /> URL
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <div className="min-h-[160px]">
+                    <AnimatePresence mode="wait">
+                      {activeTab === "paste" && (
+                        <motion.div
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          key="paste"
+                        >
+                          <textarea
+                            className="w-full h-32 p-4 rounded-xl bg-background/50 border border-border/50 text-sm font-medium focus:ring-2 ring-primary/20 outline-none resize-none transition-all"
+                            placeholder="Paste unstructured feedback here..."
+                            value={reviewsRaw}
+                            onChange={(e) => setReviewsRaw(e.target.value)}
+                          />
+                        </motion.div>
+                      )}
+
+                      {activeTab === "upload" && (
+                        <motion.div
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          key="upload"
+                        >
+                          <div
+                            className="w-full h-32 border-2 border-dashed border-primary/20 rounded-xl flex flex-col items-center justify-center bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer"
+                            onClick={() =>
+                              document.getElementById("file-hero")?.click()
+                            }
+                          >
+                            <UploadCloud className="h-8 w-8 text-primary/40 mb-2" />
+                            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                              {file ? file.name : "Choose CSV or Excel"}
+                            </span>
+                            <input
+                              id="file-hero"
+                              type="file"
+                              className="hidden"
+                              onChange={(e) =>
+                                setFile(e.target.files?.[0] || null)
+                              }
+                            />
+                          </div>
+                        </motion.div>
+                      )}
+
+                      {activeTab === "url" && (
+                        <motion.div
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          key="url"
+                        >
+                          <Input
+                            className="h-14 rounded-xl bg-background/50 border border-border/50 font-medium"
+                            placeholder="https://amazon.com/product-link"
+                            value={url}
+                            onChange={(e) => setUrl(e.target.value)}
+                          />
+                          <p className="text-[10px] font-bold text-muted-foreground mt-3 uppercase tracking-widest flex items-center gap-1.5 opacity-60">
+                            <Bot className="h-3 w-3 text-primary" /> Multi-Agent
+                            Scraping Enabled
+                          </p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  <Button
+                    className="w-full h-14 rounded-xl mt-6 font-black uppercase tracking-[0.2em] shadow-lg shadow-primary/20 group"
+                    onClick={() => ingestMutation.mutate()}
+                    disabled={ingestMutation.isPending}
+                  >
+                    {ingestMutation.isPending ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <>
+                        Ignite Analysis
+                        <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                      </>
+                    )}
+                  </Button>
+                </Tabs>
+              </div>
+            </Card>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── FEATURED ANALYSES (The "Products" section) ── */}
+      <section className="py-24 px-6 bg-muted/20">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex justify-between items-end mb-12">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary mb-2">
+                Live Examples
+              </p>
+              <h2 className="text-4xl font-black tracking-tighter">
+                Community Hyped Products
+              </h2>
             </div>
-            <Input
-              type="text"
-              placeholder='Try "Sony WH-1000XM5" or "NovaPhone X12"...'
-              className="w-full pl-12 pr-32 py-8 text-lg rounded-2xl bg-card border-2 border-border/50 focus-visible:ring-primary/20 focus-visible:border-primary shadow-xl transition-all"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <div className="absolute inset-y-2 right-2">
+            <Link to="/dashboard">
               <Button
-                type="submit"
-                size="lg"
-                className="h-full px-8 rounded-xl font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all"
+                variant="ghost"
+                className="font-bold uppercase tracking-widest text-[10px]"
               >
-                Analyze
+                Explore All Intelligence{" "}
+                <ArrowRight className="ml-2 h-3.5 w-3.5" />
               </Button>
-            </div>
-          </form>
-
-          {/* Quick Links */}
-          <div className="flex flex-wrap items-center justify-center gap-6 text-sm font-medium text-muted-foreground">
-            <Link
-              to="/products/1"
-              className="hover:text-primary transition-colors flex items-center gap-1"
-            >
-              MacBook Pro M4 <ArrowRight className="h-3 w-3" />
-            </Link>
-            <Link
-              to="/products/2"
-              className="hover:text-primary transition-colors flex items-center gap-1"
-            >
-              Galaxy S25 Ultra <ArrowRight className="h-3 w-3" />
-            </Link>
-            <Link
-              to="/products/3"
-              className="hover:text-primary transition-colors flex items-center gap-1"
-            >
-              Dyson V15 <ArrowRight className="h-3 w-3" />
-            </Link>
-            <Link
-              to="/products/4"
-              className="hover:text-primary transition-colors flex items-center gap-1"
-            >
-              NovaPhone X12 <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
-        </div>
-      </section>
 
-      <div className="w-full border-t border-border/40" />
-
-      {/* ── STATS SECTION ── */}
-      <section className="py-12 bg-card/30">
-        <div className="max-w-6xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8 divide-x divide-border/20 text-center">
-          <div className="flex flex-col items-center">
-            <p className="text-4xl font-black text-primary mb-2">500+</p>
-            <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-              Reviews per analysis
-            </p>
-          </div>
-          <div className="flex flex-col items-center">
-            <p className="text-4xl font-black text-primary mb-2">12</p>
-            <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-              Product categories
-            </p>
-          </div>
-          <div className="flex flex-col items-center">
-            <p className="text-4xl font-black text-primary mb-2">94%</p>
-            <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-              Claim accuracy
-            </p>
-          </div>
-          <div className="flex flex-col items-center">
-            <p className="text-4xl font-black text-primary mb-2">&lt; 30s</p>
-            <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-              Analysis time
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ── HOW IT WORKS ── */}
-      <section className="py-24 bg-muted/20 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <p className="text-xs uppercase tracking-widest font-bold text-primary mb-4">
-              How it works
-            </p>
-            <h2 className="text-4xl font-extrabold tracking-tight mb-4 text-foreground">
-              From 5,000 reviews to one clear answer
-            </h2>
-            <p className="text-muted-foreground font-medium max-w-2xl mx-auto text-lg">
-              HYVE transforms unstructured review data into a structured
-              decision framework in seconds.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               {
-                num: "01",
-                icon: Search,
-                title: "Search any product",
-                desc: "Enter a product name. HYVE fetches and analyzes thousands of reviews from across the web instantly.",
+                id: 1,
+                name: "Sony WH-1000XM5",
+                category: "Audio",
+                score: 88,
+                color: "emerald",
+                img: "🎧",
               },
               {
-                num: "02",
-                icon: Sparkles,
-                title: "AI clusters the signal",
-                desc: "Our models group reviews into themes - Battery, Camera, Build Quality - and extract concrete claims with confidence scores.",
+                id: 2,
+                name: "Apple MacBook Pro M4",
+                category: "Computing",
+                score: 94,
+                color: "emerald",
+                img: "💻",
               },
               {
-                num: "03",
-                icon: GitBranch,
-                title: "Explore the decision tree",
-                desc: "Navigate an interactive tree: zoom into themes, drill into claims, and read the verbatim evidence behind every insight.",
+                id: 3,
+                name: "Dyson V15 Detect",
+                category: "Home Appliances",
+                score: 62,
+                color: "amber",
+                img: "🧹",
               },
-              {
-                num: "04",
-                icon: ShieldCheck,
-                title: "Decide with confidence",
-                desc: "Get a clear verdict summary and a visual breakdown that shows exactly what real buyers love - and what to watch out for.",
-              },
-            ].map((step, i) => (
-              <Card
-                key={i}
-                className="border-border/40 bg-card hover:border-primary/30 transition-all hover:shadow-lg shadow-sm"
-              >
-                <CardContent className="p-8">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                      <step.icon className="h-6 w-6" />
-                    </div>
-                    <span className="text-4xl font-black text-muted-foreground/20">
-                      {step.num}
-                    </span>
-                  </div>
-                  <h3 className="text-xl font-bold mb-3">{step.title}</h3>
-                  <p className="text-muted-foreground text-sm font-medium leading-relaxed">
-                    {step.desc}
-                  </p>
-                </CardContent>
-              </Card>
+            ].map((prod) => (
+              <motion.div key={prod.id} whileHover={{ y: -8 }}>
+                <Link to={`/products/${prod.id}`}>
+                  <Card className="border-border/40 hover:border-primary/50 transition-all shadow-sm hover:shadow-2xl overflow-hidden group">
+                    <CardContent className="p-0">
+                      <div className="h-32 bg-primary/5 flex items-center justify-center text-4xl group-hover:scale-110 transition-transform duration-500">
+                        {prod.img}
+                      </div>
+                      <div className="p-6">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60 mb-1">
+                              {prod.category}
+                            </p>
+                            <h3 className="text-xl font-bold group-hover:text-primary transition-colors">
+                              {prod.name}
+                            </h3>
+                          </div>
+                          <div
+                            className={cn(
+                              "h-10 w-10 rounded-lg flex items-center justify-center font-black text-sm border-2",
+                              prod.color === "emerald"
+                                ? "border-emerald-500/20 text-emerald-500 bg-emerald-500/5"
+                                : "border-amber-500/20 text-amber-500 bg-amber-500/5",
+                            )}
+                          >
+                            {prod.score}
+                          </div>
+                        </div>
+
+                        {/* Progress bar */}
+                        <div className="w-full h-2 bg-gray-200/50 rounded-full flex overflow-hidden mb-3">
+                          <div
+                            className="h-full transition-all duration-700 ease-out"
+                            style={{
+                              width: `${prod.score}%`,
+                              background:
+                                prod.color === "emerald"
+                                  ? "hsl(142 71% 45%)"
+                                  : "hsl(36 89% 53%)",
+                            }}
+                          />
+                          <div
+                            className="h-full transition-all duration-700 ease-out"
+                            style={{
+                              width: `${100 - prod.score}%`,
+                              background: "hsl(0 72% 51%)",
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary">
+                          Open Decision Map <ArrowRight className="h-3 w-3" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── POPULAR PRODUCTS ── */}
-      <section className="py-24 px-6 max-w-6xl mx-auto w-full">
-        <div className="flex justify-between items-end mb-10">
-          <div>
-            <p className="text-xs uppercase tracking-widest font-bold text-primary mb-2">
-              Featured Analyses
-            </p>
-            <h2 className="text-3xl font-bold tracking-tight text-foreground">
-              Popular right now
-            </h2>
+      {/* ── CORE DIFFERENTIATORS ── */}
+      <section className="py-24 px-6 border-t border-border/30">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
+            {[
+              {
+                icon: GitBranch,
+                title: "Drill-Down Logic",
+                desc: "No more overall scores. Navigate from themes to specific verified claims.",
+              },
+              {
+                icon: TrendingUp,
+                title: "Conflict Detection",
+                desc: "AI identifies when reviews disagree and highlights the tension points.",
+              },
+              {
+                icon: MessageSquare,
+                title: "Chat-with-Review",
+                desc: "Ask our AI assistant specific questions and get answers cited from the dataset.",
+              },
+              {
+                icon: ShieldCheck,
+                title: "Source Integrity",
+                desc: "Every claim mapped back to original text. Full transparency, zero hallucination.",
+              },
+            ].map((feature, i) => (
+              <div key={i} className="space-y-4">
+                <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+                  <feature.icon className="h-6 w-6" />
+                </div>
+                <h3 className="text-lg font-bold uppercase tracking-tight">
+                  {feature.title}
+                </h3>
+                <p className="text-sm font-medium text-muted-foreground leading-relaxed">
+                  {feature.desc}
+                </p>
+              </div>
+            ))}
           </div>
-          <Link
-            to="/dashboard"
-            className="text-sm font-bold text-primary flex items-center gap-1 hover:underline"
-          >
-            View all <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[
-            {
-              name: "NovaPhone X12",
-              brand: "NovaTech",
-              price: "$799",
-              score: 74,
-              scoreColor: "text-emerald-500",
-              reviews: "5,842",
-              tags: ["Camera", "Battery Life", "Display"],
-              img: "📱",
-            },
-            {
-              name: "Galaxy S25 Ultra",
-              brand: "Samsung",
-              price: "$1,299",
-              score: 88,
-              scoreColor: "text-emerald-500",
-              reviews: "12,041",
-              tags: ["S Pen", "Camera", "Battery Life"],
-              img: "📱",
-            },
-            {
-              name: "Pixel 9 Pro",
-              brand: "Google",
-              price: "$999",
-              score: 82,
-              scoreColor: "text-emerald-500",
-              reviews: "7,214",
-              tags: ["AI Features", "Camera", "Software"],
-              img: "📱",
-            },
-          ].map((prod, i) => (
-            <Link key={i} to={`/products/${i + 1}`}>
-              <Card className="border-border/40 hover:border-primary/50 transition-all cursor-pointer group hover:shadow-xl shadow-sm bg-card overflow-hidden">
-                <CardContent className="p-6">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="flex items-center gap-4">
-                      <div className="h-16 w-16 bg-secondary/50 rounded-xl flex items-center justify-center text-3xl">
-                        {prod.img}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-muted-foreground mb-1">
-                          {prod.brand}
-                        </p>
-                        <h3 className="text-lg font-bold group-hover:text-primary transition-colors">
-                          {prod.name}
-                        </h3>
-                        <p className="text-sm font-medium text-muted-foreground">
-                          {prod.price}
-                        </p>
-                      </div>
-                    </div>
-                    <div
-                      className={`h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center font-black ${prod.scoreColor}`}
-                    >
-                      {prod.score}
-                    </div>
-                  </div>
-
-                  <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden mb-4 flex">
-                    <div
-                      className="h-full bg-emerald-500"
-                      style={{ width: `${prod.score}%` }}
-                    />
-                    <div
-                      className="h-full bg-rose-500"
-                      style={{ width: `${100 - prod.score}%` }}
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground mb-4">
-                    <MessageSquare className="h-3.5 w-3.5" />
-                    {prod.reviews} reviews analyzed
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {prod.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="px-2.5 py-1 rounded-full bg-secondary text-[10px] font-bold text-muted-foreground uppercase tracking-wider"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
         </div>
       </section>
 
-      {/* ── BOTTOM CTA ── */}
-      <section className="py-24 bg-primary/5 text-center px-4 relative overflow-hidden">
-        <div className="absolute inset-0 bg-primary/5" />
-        <div className="relative z-10 max-w-2xl mx-auto flex flex-col items-center">
-          <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6">
-            <TrendingUp className="h-8 w-8 text-primary" />
-          </div>
-          <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-4">
-            Ready to make smarter buying decisions?
+      {/* ── FOOTER-ISH CTA ── */}
+      <section className="py-32 px-6 text-center bg-primary/5">
+        <div className="max-w-3xl mx-auto space-y-8">
+          <Trophy className="h-12 w-12 text-primary mx-auto opacity-50" />
+          <h2 className="text-4xl md:text-5xl font-black tracking-tighter">
+            Ready to Buy Smarter?
           </h2>
-          <p className="text-muted-foreground font-medium mb-10 text-lg">
-            Stop scrolling through hundreds of reviews. Let HYVE surface what
-            matters in seconds.
+          <p className="text-xl text-muted-foreground font-medium">
+            Join 5,000+ shoppers and product teams using collective intelligence
+            to make better decisions.
           </p>
-          <div className="relative w-full max-w-lg mb-4 shadow-2xl rounded-xl">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <Input
-              type="text"
-              placeholder="Search a product to get started..."
-              className="w-full pl-10 pr-28 py-6 rounded-xl bg-card border-border/50"
-            />
-            <div className="absolute inset-y-1 right-1">
-              <Button className="h-full px-6 rounded-lg font-bold">
-                Analyze
-              </Button>
-            </div>
-          </div>
+          <Button
+            size="lg"
+            className="h-16 px-12 rounded-2xl font-black uppercase tracking-[0.3em]"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          >
+            Analyze Your First Product
+          </Button>
         </div>
       </section>
     </div>
   );
 }
+
+const Trophy = (props: any) => (
+  <svg
+    {...props}
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+    <path d="M4 22h16" />
+    <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+  </svg>
+);

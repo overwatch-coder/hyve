@@ -11,12 +11,14 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import dagre from "dagre";
-
-import { Card, CardContent } from "@/components/ui/card";
-import { useQuery } from "@tanstack/react-query";
-import api from "@/lib/api";
-import { useParams, Link } from "react-router-dom";
+import HYVEAccordion from "@/components/HYVEAccordion";
+import ExperimentMode from "@/components/ExperimentMode";
 import {
+  LayoutGrid,
+  ListTree,
+  Play,
+  Search as SearchIcon,
+  X,
   ChevronRight,
   Maximize2,
   Minimize2,
@@ -27,21 +29,36 @@ import {
   ArrowRight,
   GitBranch,
   Info,
+  Loader2,
+  Bot,
+  Zap,
+  Quote,
 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { AnimatePresence, motion } from "framer-motion";
+
+import { Card, CardContent } from "@/components/ui/card";
+import { useQuery } from "@tanstack/react-query";
+import api from "@/lib/api";
+import { useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 import {
   ProductNode,
   ClaimNode,
   SummaryNode,
   ThemeNode,
+  SentimentNode,
 } from "@/components/graph-nodes";
 
 /* ── Custom node-type registry ── */
 const nodeTypes = {
   product: ProductNode,
   theme: ThemeNode,
+  sentiment: SentimentNode,
   claim: ClaimNode,
   summary: SummaryNode,
 };
@@ -123,43 +140,129 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
     const themeId = `theme-${theme.id}`;
     themeChildIds.push(themeId);
 
-    const claimChildIds: string[] = [];
+    const posSentimentId = `sentiment-pos-${theme.id}`;
+    const negSentimentId = `sentiment-neg-${theme.id}`;
 
-    theme.claims?.forEach((claim: any) => {
-      const claimId = `claim-${claim.id}`;
-      claimChildIds.push(claimId);
+    const posClaims =
+      theme.claims?.filter((c: any) => c.sentiment_polarity === "positive") ||
+      [];
+    const negClaims =
+      theme.claims?.filter((c: any) => c.sentiment_polarity !== "positive") ||
+      [];
+
+    const sentimentNodes: string[] = [];
+
+    // --- POSITIVE GROUP ---
+    if (posClaims.length > 0) {
+      sentimentNodes.push(posSentimentId);
+      const claimIds: string[] = [];
+
+      posClaims.forEach((claim: any) => {
+        const claimId = `claim-${claim.id}`;
+        claimIds.push(claimId);
+        nodes.push({
+          id: claimId,
+          type: "claim",
+          data: {
+            label:
+              claim.claim_text.length > 70
+                ? claim.claim_text.substring(0, 70) + "..."
+                : claim.claim_text,
+            fullClaim: claim,
+          },
+          position: { x: 0, y: 0 },
+          hidden: true,
+        });
+
+        edges.push({
+          id: `e-${posSentimentId}-${claimId}`,
+          source: posSentimentId,
+          target: claimId,
+          type: "smoothstep",
+          style: { stroke: "hsl(160 64% 43%)", strokeWidth: 1.5, opacity: 0.4 },
+          hidden: true,
+        });
+      });
 
       nodes.push({
-        id: claimId,
-        type: "claim",
+        id: posSentimentId,
+        type: "sentiment",
         data: {
-          label:
-            claim.claim_text.length > 60
-              ? claim.claim_text.substring(0, 60) + "..."
-              : claim.claim_text,
-          fullClaim: claim,
+          label: "Pros",
+          type: "pos",
+          expanded: false,
+          childIds: claimIds,
+          childCount: claimIds.length,
         },
         position: { x: 0, y: 0 },
         hidden: true,
       });
 
-      // Edge: Theme → Claim
-      const sentimentColor =
-        claim.sentiment_polarity === "positive"
-          ? "hsl(160 64% 43%)"
-          : claim.sentiment_polarity === "negative"
-            ? "hsl(0 72% 51%)"
-            : "hsl(220 14% 50%)";
-
       edges.push({
-        id: `e-${themeId}-${claimId}`,
+        id: `e-${themeId}-${posSentimentId}`,
         source: themeId,
-        target: claimId,
+        target: posSentimentId,
         type: "smoothstep",
-        style: { stroke: sentimentColor, strokeWidth: 1.5, opacity: 0.5 },
+        style: { stroke: "hsl(160 64% 43%)", strokeWidth: 2, opacity: 0.6 },
         hidden: true,
       });
-    });
+    }
+
+    // --- NEGATIVE GROUP ---
+    if (negClaims.length > 0) {
+      sentimentNodes.push(negSentimentId);
+      const claimIds: string[] = [];
+
+      negClaims.forEach((claim: any) => {
+        const claimId = `claim-${claim.id}`;
+        claimIds.push(claimId);
+        nodes.push({
+          id: claimId,
+          type: "claim",
+          data: {
+            label:
+              claim.claim_text.length > 70
+                ? claim.claim_text.substring(0, 70) + "..."
+                : claim.claim_text,
+            fullClaim: claim,
+          },
+          position: { x: 0, y: 0 },
+          hidden: true,
+        });
+
+        edges.push({
+          id: `e-${negSentimentId}-${claimId}`,
+          source: negSentimentId,
+          target: claimId,
+          type: "smoothstep",
+          style: { stroke: "hsl(0 72% 51%)", strokeWidth: 1.5, opacity: 0.4 },
+          hidden: true,
+        });
+      });
+
+      nodes.push({
+        id: negSentimentId,
+        type: "sentiment",
+        data: {
+          label: "Cons",
+          type: "neg",
+          expanded: false,
+          childIds: claimIds,
+          childCount: claimIds.length,
+        },
+        position: { x: 0, y: 0 },
+        hidden: true,
+      });
+
+      edges.push({
+        id: `e-${themeId}-${negSentimentId}`,
+        source: themeId,
+        target: negSentimentId,
+        type: "smoothstep",
+        style: { stroke: "hsl(0 72% 51%)", strokeWidth: 2, opacity: 0.6 },
+        hidden: true,
+      });
+    }
 
     // Theme node
     nodes.push({
@@ -169,8 +272,8 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
         label: theme.name,
         themeData: theme,
         expanded: false,
-        childIds: claimChildIds,
-        childCount: claimChildIds.length,
+        childIds: sentimentNodes,
+        childCount: sentimentNodes.length,
       },
       position: { x: 0, y: 0 },
       hidden: true,
@@ -187,7 +290,7 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
     });
   });
 
-  // Product root node — visible by default
+  // Product root node
   nodes.push({
     id: productNodeId,
     type: "product",
@@ -197,32 +300,11 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
       reviewCount,
       category,
       expanded: false,
-      childIds: [...themeChildIds, "summary-node"],
+      childIds: themeChildIds,
       childCount: themeChildIds.length,
     },
     position: { x: 0, y: 0 },
     hidden: false,
-  });
-
-  // Summary terminal node — hidden until product is expanded
-  let advicesData: string[] = [];
-  try {
-    advicesData = product.advices ? JSON.parse(product.advices) : [];
-  } catch (e) {
-    console.error("Failed to parse advices JSON:", e);
-  }
-
-  nodes.push({
-    id: "summary-node",
-    type: "summary",
-    data: {
-      summary: product.summary,
-      advices: advicesData,
-      score: product.overall_sentiment_score,
-      productId: product.id,
-    },
-    position: { x: 0, y: 0 },
-    hidden: true,
   });
 
   return getLayoutedElements(nodes, edges);
@@ -247,6 +329,11 @@ function ExploreInner() {
   const { productId } = useParams<{ productId: string }>();
   const { fitView, setCenter } = useReactFlow();
   const fitViewCalled = useRef(false);
+
+  const [viewMode, setViewMode] = useState<"accordion" | "graph">("graph");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isExperimentMode, setIsExperimentMode] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // FETCH: Deep Product Structure (Tree & Claims)
   const {
@@ -537,21 +624,169 @@ function ExploreInner() {
     }
   }, [nodes, fitView]);
 
-  if (isLoading || !analyticsData || !productData) {
+  if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-muted-foreground gap-4">
         <div className="h-10 w-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-        <p className="font-semibold text-lg">
-          Loading Decision Intelligence...
+        <p className="font-semibold text-lg animate-pulse">
+          Initializing HYVE Intelligence...
         </p>
       </div>
     );
   }
 
-  if (isError) {
+  if (isError || !productData) {
     return (
       <div className="flex items-center justify-center h-full text-destructive">
         Failed to load product map.
+      </div>
+    );
+  }
+
+  // ── Processing UI ──
+  if (productData.status === "processing" || !analyticsData) {
+    const currentStep =
+      productData.processing_step || "Initializing AI Pipeline";
+
+    const allStages = [
+      {
+        id: "ingest",
+        label: "Cleaning & Parsing Data",
+        icon: Sparkles,
+        keywords: ["cleaning", "parsing", "grouping", "directing", "ingest"],
+      },
+      {
+        id: "scraping",
+        label: "Crawling URL & Sources",
+        icon: SearchIcon,
+        keywords: ["scraping", "crawling", "discovery"],
+      },
+      {
+        id: "claims",
+        label: "Extracting Consumer Claims",
+        icon: Zap,
+        keywords: ["extracting", "claims", "distilling"],
+      },
+      {
+        id: "sentiment",
+        label: "Analyzing Sentiment Polarity",
+        icon: ArrowRight,
+        keywords: ["sentiment", "polarity", "analysing"],
+      },
+      {
+        id: "clustering",
+        label: "Thematic Clustering",
+        icon: GitBranch,
+        keywords: ["clustering", "harmonizing", "thematic", "synthesis"],
+      },
+      {
+        id: "summary",
+        label: "Generating Recommendation Engine",
+        icon: Bot,
+        keywords: ["summary", "advice", "recommendations", "synthesizing"],
+      },
+    ];
+
+    // Determine current stage index based on keyword matching
+    const currentStageIndex = allStages.findIndex((s) =>
+      s.keywords.some((k) => currentStep.toLowerCase().includes(k)),
+    );
+
+    return (
+      <div className="max-w-4xl mx-auto py-20 px-6 animate-in fade-in zoom-in duration-700">
+        <Card className="border-border/40 bg-card overflow-hidden shadow-2xl">
+          <CardContent className="p-0">
+            <div className="p-8 border-b border-border/20 bg-primary/2">
+              <div className="flex items-center gap-6 mb-8">
+                <div className="h-20 w-20 bg-primary/10 rounded-3xl flex items-center justify-center relative">
+                  <Bot className="h-10 w-10 text-primary animate-bounce shadow-inner" />
+                  <div className="absolute -top-1 -right-1 h-5 w-5 bg-emerald-500 rounded-full border-4 border-card animate-pulse" />
+                </div>
+                <div className="space-y-1">
+                  <h1 className="text-3xl font-black tracking-tight">
+                    {productData.name}
+                  </h1>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest border border-primary/20">
+                      Live Analysis
+                    </span>
+                    <p className="text-muted-foreground font-medium text-sm flex items-center gap-2">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      {currentStep}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
+                {allStages.map((stage, i) => {
+                  const isCompleted = i < currentStageIndex;
+                  const isActive = i === currentStageIndex;
+
+                  return (
+                    <div
+                      key={stage.id}
+                      className={`flex items-center gap-4 transition-all duration-500 ${!isActive && !isCompleted ? "opacity-40 grayscale" : ""}`}
+                    >
+                      <div
+                        className={`h-10 w-10 rounded-2xl flex items-center justify-center transition-all duration-500 ${
+                          isCompleted
+                            ? "bg-emerald-500/10 text-emerald-500"
+                            : isActive
+                              ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-110"
+                              : "bg-secondary text-muted-foreground"
+                        }`}
+                      >
+                        {isCompleted ? (
+                          <CheckCircle2 className="h-5 w-5" />
+                        ) : (
+                          <stage.icon
+                            className={`h-5 w-5 ${isActive ? "animate-pulse" : ""}`}
+                          />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex justify-between items-center mb-1">
+                          <span
+                            className={`text-sm font-bold ${isActive ? "text-primary" : ""}`}
+                          >
+                            {stage.label}
+                          </span>
+                          {isActive && (
+                            <span className="text-[9px] font-black uppercase tracking-widest animate-pulse">
+                              Running
+                            </span>
+                          )}
+                        </div>
+                        <div className="w-full h-1 bg-secondary rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-1000 ${isCompleted ? "w-full bg-emerald-500" : isActive ? "bg-primary animate-progress-indefinite" : "w-0"}`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-6 bg-muted/30 flex items-center justify-between gap-4">
+              <p className="text-xs text-muted-foreground font-medium max-w-md">
+                We are processing thousands of consumer claims to build your
+                decision map.
+                <span className="text-foreground font-bold">
+                  {" "}
+                  This page will automatically update
+                </span>{" "}
+                once the analysis is ready.
+              </p>
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Live Processing
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -751,164 +986,384 @@ function ExploreInner() {
       </div>
 
       {/* ── DECISION MAP & CHATBOT ── */}
-      <div className="flex items-center gap-2 mt-4 text-foreground/90">
-        <GitBranch className="h-5 w-5 text-primary" />
-        <h2 className="text-2xl font-bold tracking-tight">Decision Map</h2>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-4">
+        <div className="flex items-center gap-2 text-foreground/90">
+          <GitBranch className="h-5 w-5 text-primary" />
+          <h2 className="text-2xl font-bold tracking-tight">
+            Consumer Insights
+          </h2>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search Bar */}
+          <div className="relative w-full md:w-64">
+            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search claims..."
+              className="pl-9 bg-card border-border/50"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <Tabs
+            value={viewMode}
+            onValueChange={(v) => setViewMode(v as any)}
+            className="w-auto"
+          >
+            <TabsList className="grid grid-cols-2 w-[220px]">
+              <TabsTrigger
+                value="accordion"
+                className="flex items-center gap-2"
+              >
+                <ListTree className="h-3.5 w-3.5" />
+                Accordion
+              </TabsTrigger>
+              <TabsTrigger value="graph" className="flex items-center gap-2">
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Graph
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {/* Experiment Trigger (A/B Testing) */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 transition-all font-bold"
+            onClick={() => setIsExperimentMode(true)}
+          >
+            <Play className="h-3.5 w-3.5 fill-current" />
+            <span>A/B TEST</span>
+          </Button>
+        </div>
       </div>
 
       {/* Instruction banner */}
-      <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg border border-border/30 text-xs text-muted-foreground">
-        <Info className="h-3.5 w-3.5 shrink-0" />
-        <p>
-          Double-click a <strong className="text-foreground">theme node</strong>{" "}
-          to expand claims. Double-click a{" "}
-          <strong className="text-foreground">claim node</strong> to reveal
-          supporting evidence.
-        </p>
+      <div className="flex items-center justify-between gap-4 px-4 py-2 bg-muted/50 rounded-lg border border-border/30">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Info className="h-3.5 w-3.5 shrink-0" />
+          <p>
+            {viewMode === "accordion"
+              ? "Expand themes to see grouped consumer claims and AI-generated product recommendations."
+              : "Double-click a theme node to expand claims. Double-click a claim node to reveal supporting evidence."}
+          </p>
+        </div>
+        {searchQuery && (
+          <Badge
+            variant="secondary"
+            className="text-[10px] font-bold h-5 px-1.5 bg-primary/10 text-primary border-primary/20"
+          >
+            SEARCH ACTIVE
+          </Badge>
+        )}
       </div>
 
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-6 min-h-[600px] pb-10">
-        {/* GRAPH VIEW */}
-        <div className="md:col-span-3 border border-border/50 rounded-2xl bg-[hsl(160_20%_97%)] dark:bg-card overflow-hidden relative shadow-inner">
-          {nodes.length > 0 && (
-            <>
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onNodeDoubleClick={handleNodeDoubleClick}
-                nodeTypes={nodeTypes}
-                fitView
-                fitViewOptions={{ padding: 0.25 }}
-                style={{ background: "transparent" }}
-                proOptions={{ hideAttribution: true }}
-                nodesDraggable={true}
-                nodesConnectable={false}
-                minZoom={0.3}
-                maxZoom={2}
-              >
-                <Panel
-                  position="top-right"
-                  className="bg-card/80 backdrop-blur-md border border-border/50 p-2 rounded-lg shadow-xl m-4 flex flex-col gap-1"
-                >
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="justify-start text-xs hover:text-primary transition-all"
-                    onClick={expandAll}
-                  >
-                    <Maximize2 className="h-3.5 w-3.5 mr-2" /> Expand All
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="justify-start text-xs hover:text-destructive transition-all"
-                    onClick={collapseAll}
-                  >
-                    <Minimize2 className="h-3.5 w-3.5 mr-2" /> Collapse All
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="justify-start text-xs"
-                    onClick={resetLayout}
-                  >
-                    <RefreshCcw className="h-3.5 w-3.5 mr-2" /> Reset View
-                  </Button>
-                </Panel>
-                <Background
-                  gap={20}
-                  size={1}
-                  color="hsl(160 15% 88%)"
-                  className="dark:opacity-20"
-                />
-                <Controls />
-              </ReactFlow>
-            </>
-          )}
-        </div>
-
-        {/* AI CHATBOT */}
-        <div className="md:col-span-1">
-          <Card className="h-full border-border/50 shadow-md flex flex-col overflow-hidden bg-card/80">
-            <div className="p-4 border-b border-border/30 flex items-center gap-2 bg-linear-to-r from-primary/10 to-transparent shrink-0">
-              <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
-                <Sparkles className="h-4 w-4 text-primary" />
-              </div>
-              <h3 className="font-bold text-sm">Product AI Assistant</h3>
+      <div className="flex-1 grid grid-cols-1 gap-6 min-h-[600px] pb-10">
+        {/* MAIN VIEW AREA (Now full width) */}
+        <div className="min-h-[600px]">
+          {viewMode === "accordion" ? (
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <HYVEAccordion
+                themes={productData.themes || []}
+                searchQuery={searchQuery}
+              />
             </div>
-
-            <div
-              ref={chatScrollRef}
-              className="flex-1 p-4 overflow-y-auto space-y-4 text-sm font-medium"
-            >
-              <div className="bg-secondary p-3 rounded-lg rounded-tl-sm text-foreground/80 max-w-[90%]">
-                Hi! Have any specific questions about the {productData?.name}?
-                Ask me anything and I'll answer strictly using real consumer
-                feedback.
-              </div>
-
-              {chatHistory.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`p-3 rounded-lg max-w-[90%] ${
-                      msg.role === "user"
-                        ? "bg-primary text-primary-foreground rounded-tr-sm"
-                        : "bg-secondary text-foreground/80 rounded-tl-sm"
-                    }`}
+          ) : (
+            <div className="h-full border border-border/50 rounded-2xl bg-[hsl(160_20%_97%)] dark:bg-card overflow-hidden relative shadow-inner">
+              {nodes.length > 0 && (
+                <>
+                  <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onNodeDoubleClick={handleNodeDoubleClick}
+                    nodeTypes={nodeTypes}
+                    fitView
+                    fitViewOptions={{ padding: 0.25 }}
+                    style={{ background: "transparent" }}
+                    proOptions={{ hideAttribution: true }}
+                    nodesDraggable={true}
+                    nodesConnectable={false}
+                    minZoom={0.3}
+                    maxZoom={2}
                   >
-                    {msg.content}
-                  </div>
-                </div>
-              ))}
-
-              {isChatLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-secondary p-3 rounded-lg rounded-tl-sm text-foreground/80 max-w-[90%] flex items-center gap-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-primary animate-ping" />
-                    <div
-                      className="h-1.5 w-1.5 rounded-full bg-primary animate-ping"
-                      style={{ animationDelay: "150ms" }}
+                    <Panel
+                      position="top-right"
+                      className="bg-card/80 backdrop-blur-md border border-border/50 p-2 rounded-lg shadow-xl m-4 flex flex-col gap-1"
+                    >
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="justify-start text-xs hover:text-primary transition-all"
+                        onClick={expandAll}
+                      >
+                        <Maximize2 className="h-3.5 w-3.5 mr-2" /> Expand All
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="justify-start text-xs hover:text-destructive transition-all"
+                        onClick={collapseAll}
+                      >
+                        <Minimize2 className="h-3.5 w-3.5 mr-2" /> Collapse All
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="justify-start text-xs"
+                        onClick={resetLayout}
+                      >
+                        <RefreshCcw className="h-3.5 w-3.5 mr-2" /> Reset View
+                      </Button>
+                    </Panel>
+                    <Background
+                      gap={20}
+                      size={1}
+                      color="hsl(160 15% 88%)"
+                      className="dark:opacity-20"
                     />
-                    <div
-                      className="h-1.5 w-1.5 rounded-full bg-primary animate-ping"
-                      style={{ animationDelay: "300ms" }}
-                    />
-                  </div>
-                </div>
+                    <Controls />
+                  </ReactFlow>
+                </>
               )}
             </div>
+          )}
 
-            <div className="p-3 border-t border-border/30 bg-background/50 shrink-0">
-              <form
-                onSubmit={handleChatSubmit}
-                className="relative flex items-center"
-              >
-                <Input
-                  placeholder="Ask about this product..."
-                  className="pr-10 bg-background text-sm"
-                  value={chatQuery}
-                  onChange={(e) => setChatQuery(e.target.value)}
-                  disabled={isChatLoading}
-                />
-                <Button
-                  type="submit"
-                  size="icon"
-                  variant="ghost"
-                  className="absolute right-1 h-8 w-8 text-muted-foreground hover:text-primary"
-                  disabled={isChatLoading || !chatQuery.trim()}
-                >
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </form>
+          {/* ── SUMMARY & ADVICE SECTION (Decoupled from Graph) ── */}
+          {productData && productData.status !== "processing" && (
+            <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+              <Card className="border-border/40 bg-card/60 backdrop-blur-xl shadow-2xl overflow-hidden">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
+                  {/* Summary Side */}
+                  <div className="lg:col-span-7 p-8 border-b lg:border-b-0 lg:border-r border-border/20">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="h-10 w-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                        <Bot className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-black tracking-tight flex items-center gap-2">
+                          Product Synthesis
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] uppercase tracking-widest border-primary/20 text-primary"
+                          >
+                            AI Core
+                          </Badge>
+                        </h3>
+                        <p className="text-xs text-muted-foreground font-medium">
+                          Holistic analysis of consumer sentiment
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <Quote className="absolute -top-2 -left-2 h-8 w-8 text-primary/5 -z-10" />
+                      <p className="text-sm leading-relaxed font-medium text-foreground/80 italic">
+                        "
+                        {productData.summary ||
+                          "No summary available for this product."}
+                        "
+                      </p>
+                    </div>
+
+                    <div className="mt-8 flex items-center gap-4 p-4 bg-muted/30 rounded-2xl border border-border/50">
+                      <div className="flex-1">
+                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-1">
+                          Overall Sentiment
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-linear-to-r from-red-500 via-yellow-500 to-emerald-500 transition-all duration-1000"
+                              style={{
+                                width: `${productData.overall_sentiment_score * 100}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="text-xs font-black font-mono">
+                            {(
+                              productData.overall_sentiment_score * 100
+                            ).toFixed(0)}
+                            %
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Advice Side */}
+                  <div className="lg:col-span-5 p-8 bg-primary/2">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="h-10 w-10 bg-emerald-500/10 rounded-xl flex items-center justify-center">
+                        <Zap className="h-5 w-5 text-emerald-500" />
+                      </div>
+                      <h3 className="text-lg font-black tracking-tight">
+                        AI Strategies
+                      </h3>
+                    </div>
+
+                    <div className="space-y-4">
+                      {(() => {
+                        let advices: string[] = [];
+                        try {
+                          advices = productData.advices
+                            ? JSON.parse(productData.advices)
+                            : [];
+                        } catch (e) {
+                          console.error(e);
+                        }
+
+                        if (advices.length === 0)
+                          return (
+                            <p className="text-xs text-muted-foreground italic">
+                              No specific strategies identified yet.
+                            </p>
+                          );
+
+                        return advices.map((advice, idx) => (
+                          <div
+                            key={idx}
+                            className="group flex gap-4 p-4 rounded-2xl bg-background/50 border border-border/40 hover:border-primary/30 transition-all duration-300 shadow-sm hover:shadow-md"
+                          >
+                            <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-[10px] font-black italic text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                              {idx + 1}
+                            </div>
+                            <p className="text-xs font-bold leading-relaxed text-foreground/80">
+                              {advice}
+                            </p>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </Card>
             </div>
-          </Card>
+          )}
         </div>
       </div>
+
+      {/* ── FLOATING COLLAPSIBLE CHATBOT (Bottom Left) ── */}
+      <div className="fixed bottom-6 left-6 z-40 flex flex-col items-start gap-4">
+        <AnimatePresence>
+          {isChatOpen && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="w-80 md:w-96 h-[500px] mb-2"
+            >
+              <Card className="h-full border-primary/20 shadow-2xl flex flex-col overflow-hidden bg-background/95 backdrop-blur-xl">
+                <div className="p-4 border-b border-border/30 flex items-center justify-between bg-primary/5 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                    </div>
+                    <h3 className="font-bold text-sm">Product AI Assistant</h3>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setIsChatOpen(false)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div
+                  ref={chatScrollRef}
+                  className="flex-1 p-4 overflow-y-auto space-y-4 text-sm font-medium"
+                >
+                  <div className="bg-muted p-3 rounded-xl rounded-tl-none text-foreground/80 max-w-[90%] border border-border/50">
+                    Hi! Have any specific questions about the{" "}
+                    {productData?.name}? Ask me anything and I'll answer
+                    strictly using real consumer feedback.
+                  </div>
+
+                  {chatHistory.map((msg, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                    >
+                      <div
+                        className={cn(
+                          "p-3 rounded-xl max-w-[90%] shadow-sm",
+                          msg.role === "user"
+                            ? "bg-primary text-primary-foreground rounded-tr-none"
+                            : "bg-muted text-foreground/80 rounded-tl-none border border-border/50",
+                        )}
+                      >
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))}
+
+                  {isChatLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-muted p-3 rounded-xl rounded-tl-none text-foreground/80 max-w-[90%] flex items-center gap-2 border border-border/50">
+                        <div className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" />
+                        <div
+                          className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce"
+                          style={{ animationDelay: "150ms" }}
+                        />
+                        <div
+                          className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce"
+                          style={{ animationDelay: "300ms" }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 border-t border-border/30 bg-background/50 shrink-0">
+                  <form
+                    onSubmit={handleChatSubmit}
+                    className="relative flex items-center"
+                  >
+                    <Input
+                      placeholder="Ask about this product..."
+                      className="pr-10 bg-background text-sm rounded-lg"
+                      value={chatQuery}
+                      onChange={(e) => setChatQuery(e.target.value)}
+                      disabled={isChatLoading}
+                    />
+                    <Button
+                      type="submit"
+                      size="icon"
+                      variant="ghost"
+                      className="absolute right-1 h-8 w-8 text-muted-foreground hover:text-primary"
+                      disabled={isChatLoading || !chatQuery.trim()}
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </form>
+                </div>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <Button
+          size="icon"
+          className={cn(
+            "h-14 w-14 rounded-full shadow-2xl transition-all duration-300",
+            isChatOpen
+              ? "rotate-90 opacity-0 scale-75"
+              : "hover:scale-110 active:scale-95",
+          )}
+          onClick={() => setIsChatOpen(true)}
+        >
+          <Sparkles className="h-6 w-6" />
+        </Button>
+      </div>
+
+      {isExperimentMode && (
+        <ExperimentMode
+          productId={productId || "unknown"}
+          onClose={() => setIsExperimentMode(false)}
+        />
+      )}
     </div>
   );
 }
