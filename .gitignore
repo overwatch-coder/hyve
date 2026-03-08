@@ -29,7 +29,6 @@ hyvedb.sqlite3
 *.njsproj
 *.sln
 *.sw?
-*.txt
 nul
 
 /tasks
