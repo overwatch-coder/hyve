@@ -318,10 +318,10 @@ function ExploreInner() {
               </Button>
             )}
 
-            <div className="p-10">
-              <div className="flex items-center gap-8 mb-12">
-                <div className="h-24 w-24 bg-primary/10 rounded-4xl flex items-center justify-center relative group">
-                  <div className="absolute inset-0 bg-primary/5 rounded-4xl animate-ping" />
+            <div className="p-6 md:p-10">
+              <div className="flex flex-col md:flex-row items-center md:items-start gap-4 md:gap-8 mb-8 md:mb-12 text-center md:text-left">
+                <div className="h-20 w-20 md:h-24 md:w-24 bg-primary/10 rounded-3xl md:rounded-4xl flex items-center justify-center relative group shrink-0">
+                  <div className="absolute inset-0 bg-primary/5 rounded-3xl md:rounded-4xl animate-ping" />
                   <AnimatePresence mode="wait">
                     {processingDone ? (
                       <motion.div
@@ -330,7 +330,7 @@ function ExploreInner() {
                         animate={{ scale: 1, rotate: 0 }}
                         className="relative z-10"
                       >
-                        <CheckCircle2 className="h-12 w-12 text-emerald-500" />
+                        <CheckCircle2 className="h-10 w-10 md:h-12 md:w-12 text-emerald-500" />
                       </motion.div>
                     ) : (
                       <motion.div
@@ -338,7 +338,7 @@ function ExploreInner() {
                         exit={{ scale: 0, rotate: 90 }}
                         className="relative z-10"
                       >
-                        <Bot className="h-12 w-12 text-primary animate-bounce shadow-inner" />
+                        <Bot className="h-10 w-10 md:h-12 md:w-12 text-primary animate-bounce shadow-inner" />
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -353,13 +353,13 @@ function ExploreInner() {
                 </div>
 
                 <div className="space-y-2">
-                  <h2 className="text-4xl font-black tracking-tight italic uppercase">
+                  <h2 className="text-2xl md:text-4xl font-black tracking-tight italic uppercase">
                     {processingDone ? "Extraction Complete" : "AI Ingestion"}
                   </h2>
                   <div className="flex items-center gap-2">
                     <Badge
                       variant="outline"
-                      className="bg-primary/5 text-primary border-primary/20 font-black uppercase tracking-widest text-[10px] px-3"
+                      className="bg-primary/5 text-primary border-primary/20 font-black uppercase tracking-widest text-[10px] px-3 max-w-[150px] md:max-w-none truncate"
                     >
                       {productData.name}
                     </Badge>
@@ -373,7 +373,7 @@ function ExploreInner() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-x-12 gap-y-6 mb-10">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4 md:gap-y-6 mb-8 md:mb-10">
                 {allStages.map((stage, i) => {
                   const isCompleted = i < effectiveStageIndex || processingDone;
                   const isActive = i === effectiveStageIndex && !processingDone;
@@ -402,20 +402,20 @@ function ExploreInner() {
                         )}
                       >
                         {isCompleted ? (
-                          <CheckCircle2 className="h-6 w-6" />
+                          <CheckCircle2 className="h-5 w-5 md:h-6 md:w-6" />
                         ) : (
                           <stage.icon
                             className={cn(
-                              "h-6 w-6",
+                              "h-5 w-5 md:h-6 md:w-6",
                               isActive && "animate-pulse",
                             )}
                           />
                         )}
                       </div>
-                      <div className="space-y-0.5">
+                      <div className="space-y-0.5 min-w-0">
                         <span
                           className={cn(
-                            "text-xs font-black uppercase tracking-widest",
+                            "text-[10px] md:text-xs font-black uppercase tracking-widest truncate block",
                             isActive
                               ? "text-primary"
                               : isCompleted
@@ -426,7 +426,7 @@ function ExploreInner() {
                           {isCompleted ? "✓ " : isActive ? "⟳ " : ""}
                           {stage.label.split(" ")[0]}
                         </span>
-                        <p className="text-sm font-bold opacity-80 whitespace-nowrap">
+                        <p className="text-sm font-bold opacity-80 whitespace-nowrap truncate">
                           {stage.label}
                         </p>
                       </div>

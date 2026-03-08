@@ -168,10 +168,10 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
         </div>
 
         {/* Selection */}
-        <div className="flex-1 flex items-center justify-center p-8">
+        <div className="flex-1 overflow-y-auto px-4 py-8 md:p-8 flex items-center justify-center">
           <div className="w-full max-w-3xl">
-            <div className="text-center mb-10">
-              <h2 className="text-3xl font-black tracking-tighter uppercase">
+            <div className="text-center mb-8 md:mb-10">
+              <h2 className="text-2xl md:text-3xl font-black tracking-tighter uppercase">
                 Choose Your Platform
               </h2>
               <p className="text-sm text-muted-foreground mt-2 font-medium">
@@ -185,13 +185,13 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
               {/* Traditional */}
               <Card
                 className="group cursor-pointer border-border/40 hover:border-border transition-all duration-300 hover:shadow-lg rounded-2xl overflow-hidden"
                 onClick={() => startExperiment("traditional")}
               >
-                <CardHeader className="p-8 pb-4">
+                <CardHeader className="p-6 md:p-8 pb-4">
                   <div className="h-12 w-12 bg-muted rounded-xl flex items-center justify-center mb-4 group-hover:bg-muted/80 transition-colors">
                     <ListIcon className="h-6 w-6 text-muted-foreground" />
                   </div>
@@ -203,7 +203,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                     Walmart.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="px-8 pb-8">
+                <CardContent className="px-6 md:px-8 pb-6 md:pb-8">
                   <ul className="space-y-2 text-xs text-muted-foreground font-medium mb-6">
                     {[
                       "Linear scroll of individual reviews",
@@ -227,7 +227,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                 className="group cursor-pointer border-primary/30 hover:border-primary transition-all duration-300 hover:shadow-xl hover:shadow-primary/10 rounded-2xl overflow-hidden bg-primary/2"
                 onClick={() => startExperiment("hyve")}
               >
-                <CardHeader className="p-8 pb-4">
+                <CardHeader className="p-6 md:p-8 pb-4">
                   <div className="h-12 w-12 bg-primary/15 rounded-xl flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
                     <Zap className="h-6 w-6 text-primary fill-primary" />
                   </div>
@@ -239,7 +239,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                     normally use.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="px-8 pb-8">
+                <CardContent className="px-6 md:px-8 pb-6 md:pb-8">
                   <ul className="space-y-2 text-xs text-primary/70 font-bold mb-6">
                     {[
                       "Interactive AI decision tree",
@@ -266,7 +266,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
 
   /* ── SHARED: FLOATING MISSION HUD (bottom-right, vertical panel) ── */
   const HUDPanel = (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
+    <div className="fixed bottom-0 left-0 right-0 md:bottom-6 md:right-6 md:left-auto z-50 flex flex-col items-end md:gap-2">
       <AnimatePresence>
         {hudExpanded && (
           <motion.div
@@ -274,7 +274,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className="w-72 bg-card/95 backdrop-blur-xl border border-border/40 rounded-2xl shadow-2xl overflow-hidden"
+            className="w-full md:w-72 bg-card/95 backdrop-blur-xl border-t md:border border-border/40 rounded-t-3xl md:rounded-2xl shadow-2xl overflow-hidden"
           >
             {/* Header */}
             <div className="px-4 py-3 border-b border-border/20 flex items-center justify-between bg-card/60">
@@ -363,9 +363,9 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
       {/* Toggle button */}
       <motion.button
         className={cn(
-          "h-10 px-4 rounded-full border font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-lg transition-all",
+          "h-10 px-4 rounded-full border font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-lg transition-all mb-4 mr-4 md:mb-0 md:mr-0",
           hudExpanded
-            ? "bg-card border-border/40 text-muted-foreground hover:text-foreground"
+            ? "bg-card border-border/40 text-muted-foreground hover:text-foreground md:flex hidden"
             : "bg-primary text-primary-foreground border-primary shadow-primary/20",
         )}
         whileHover={{ scale: 1.03 }}
@@ -458,11 +458,11 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
       </div>
 
       {/* Traditional Reviews Content */}
-      <div className="flex-1 overflow-y-auto pb-28">
-        <div className="max-w-3xl mx-auto p-8 space-y-8">
+      <div className="flex-1 overflow-y-auto pb-44 md:pb-28">
+        <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6 md:space-y-8">
           {/* Product Header */}
-          <div className="flex flex-col gap-2 border-b border-border/20 pb-8">
-            <h2 className="text-3xl font-black tracking-tight">
+          <div className="flex flex-col gap-2 border-b border-border/20 pb-6 md:pb-8">
+            <h2 className="text-2xl md:text-3xl font-black tracking-tight">
               {product?.name}
             </h2>
             <div className="flex items-center gap-3">
@@ -518,7 +518,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
             {reviews?.map((review: any) => (
               <div
                 key={review.id}
-                className="p-6 bg-card border border-border/30 rounded-2xl space-y-3 hover:border-border/60 transition-colors"
+                className="p-4 md:p-6 bg-card border border-border/30 rounded-2xl space-y-3 hover:border-border/60 transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">

@@ -26,11 +26,11 @@ export default function Products() {
   );
 
   return (
-    <div className="flex flex-col gap-10 animate-fade-in pb-12">
+    <div className="flex flex-col gap-6 md:gap-10 animate-fade-in pb-12">
       {/* Header & Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1">
-          <h2 className="text-3xl font-black tracking-tight underline decoration-primary/30 underline-offset-8">
+          <h2 className="text-2xl md:text-3xl font-black tracking-tight underline decoration-primary/30 underline-offset-8">
             Products
           </h2>
           <p className="text-sm text-muted-foreground font-medium pt-2">
@@ -38,18 +38,18 @@ export default function Products() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative w-64 group">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="relative w-full sm:w-64 group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
             <Input
               placeholder="Search products..."
-              className="pl-10 bg-card text-xs h-10 border-border/40 focus:border-primary/40 focus:ring-primary/10 rounded-xl transition-all shadow-sm"
+              className="pl-10 bg-card text-xs h-10 border-border/40 focus:border-primary/40 focus:ring-primary/10 rounded-xl transition-all shadow-sm w-full"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Link to="/new">
-            <Button className="h-10 px-6 gap-2 font-bold shadow-lg shadow-primary/20 rounded-xl hover:translate-y-[-2px] transition-all active:translate-y-0">
+          <Link to="/new" className="w-full sm:w-auto">
+            <Button className="w-full h-10 px-6 gap-2 font-bold shadow-lg shadow-primary/20 rounded-xl hover:translate-y-[-2px] transition-all active:translate-y-0">
               <Plus className="h-4 w-4" />
               New Analysis
             </Button>
@@ -72,9 +72,9 @@ export default function Products() {
           {filteredProducts?.map((p: any) => (
             <Card
               key={p.id}
-              className="group border-border/40 bg-card/40 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-300 hover:border-primary/40 hover:translate-y-[-4px] hover:shadow-2xl hover:shadow-primary/5"
+              className="group border-border/40 bg-card/40 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-300 hover:border-primary/40 hover:md:translate-y-[-4px] hover:shadow-2xl hover:shadow-primary/5"
             >
-              <CardContent className="p-6 flex-1 flex flex-col gap-6">
+              <CardContent className="p-4 md:p-6 flex-1 flex flex-col gap-6">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1.5">
                     <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[9px] font-black uppercase tracking-wider border border-primary/20">

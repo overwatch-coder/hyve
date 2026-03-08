@@ -103,7 +103,7 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-background -mt-8 overflow-x-hidden">
       {/* ── HERO SECTION ── */}
-      <section className="relative pt-32 pb-32 px-6">
+      <section className="relative pt-16 md:pt-32 pb-20 md:pb-32 px-4 md:px-6">
         {/* Abstract Background Blobs */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-primary/5 blur-[120px] rounded-full -z-10" />
         <div className="absolute top-40 right-[-10%] w-[500px] h-[500px] bg-emerald-500/5 blur-[100px] rounded-full -z-10" />
@@ -124,10 +124,10 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="text-6xl md:text-8xl font-black tracking-tight leading-[0.95] text-foreground"
+              className="text-4xl md:text-8xl font-black tracking-tight leading-none md:leading-[0.95] text-foreground"
             >
               Turn <span className="text-primary italic">Noise</span> Into{" "}
-              <br />
+              <br className="hidden md:block" />
               <span className="bg-linear-to-r from-primary to-emerald-500 bg-clip-text text-transparent">
                 Actionable
               </span>{" "}
@@ -138,7 +138,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="text-xl md:text-2xl text-muted-foreground font-medium max-w-2xl leading-relaxed"
+              className="text-lg md:text-2xl text-muted-foreground font-medium max-w-2xl leading-relaxed"
             >
               HYVE clusters thousands of raw reviews into a visual decision
               tree. Drill down from themes to specific claims in seconds.
@@ -170,20 +170,20 @@ export default function Home() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.4 }}
-            className="lg:col-span-5"
+            className="lg:col-span-5 w-full max-w-md mx-auto lg:max-w-none"
           >
             <Card className="border-primary/20 bg-card/60 backdrop-blur-3xl shadow-[0_32px_64px_-16px_rgba(var(--primary),0.1)] overflow-hidden">
-              <div className="p-6 border-b border-border/30 bg-primary/5">
-                <h2 className="text-lg font-black uppercase tracking-widest flex items-center gap-2">
-                  <UploadCloud className="h-5 w-5 text-primary" />
+              <div className="p-4 md:p-6 border-b border-border/30 bg-primary/5">
+                <h2 className="text-base md:text-lg font-black uppercase tracking-widest flex items-center gap-2">
+                  <UploadCloud className="h-4 w-4 md:h-5 md:w-5 text-primary" />
                   Quick Analyze
                 </h2>
-                <p className="text-sm text-muted-foreground font-medium mt-1">
+                <p className="text-xs md:text-sm text-muted-foreground font-medium mt-1">
                   Upload reviews to generate your map
                 </p>
               </div>
 
-              <div className="p-6">
+              <div className="p-4 md:p-6">
                 <Tabs
                   value={activeTab}
                   onValueChange={setActiveTab}
@@ -301,21 +301,21 @@ export default function Home() {
       </section>
 
       {/* ── FEATURED ANALYSES (The "Products" section) ── */}
-      <section className="py-24 px-6 bg-muted/20">
+      <section className="py-16 md:py-24 px-4 md:px-6 bg-muted/20">
         <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-end mb-12">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 md:mb-12 gap-6">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary mb-2">
+              <p className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] text-primary mb-2">
                 Live Examples
               </p>
-              <h2 className="text-4xl font-black tracking-tighter">
+              <h2 className="text-3xl md:text-4xl font-black tracking-tighter">
                 Community Hyped Products
               </h2>
             </div>
-            <Link to="/dashboard">
+            <Link to="/products" className="w-full md:w-auto">
               <Button
                 variant="ghost"
-                className="font-bold uppercase tracking-widest text-[10px]"
+                className="w-full md:w-auto font-bold uppercase tracking-widest text-[10px] justify-between md:justify-center"
               >
                 Explore All Intelligence{" "}
                 <ArrowRight className="ml-2 h-3.5 w-3.5" />
@@ -456,19 +456,19 @@ export default function Home() {
       </section>
 
       {/* ── FOOTER-ISH CTA ── */}
-      <section className="py-32 px-6 text-center bg-primary/5">
-        <div className="max-w-3xl mx-auto space-y-8">
-          <Trophy className="h-12 w-12 text-primary mx-auto opacity-50" />
-          <h2 className="text-4xl md:text-5xl font-black tracking-tighter">
+      <section className="py-20 md:py-32 px-4 md:px-6 text-center bg-primary/5">
+        <div className="max-w-3xl mx-auto space-y-6 md:space-y-8">
+          <Trophy className="h-10 w-10 md:h-12 md:w-12 text-primary mx-auto opacity-50" />
+          <h2 className="text-3xl md:text-5xl font-black tracking-tighter">
             Ready to Buy Smarter?
           </h2>
-          <p className="text-xl text-muted-foreground font-medium">
+          <p className="text-lg md:text-xl text-muted-foreground font-medium">
             Join 5,000+ shoppers and product teams using collective intelligence
             to make better decisions.
           </p>
           <Button
             size="lg"
-            className="h-16 px-12 rounded-2xl font-black uppercase tracking-[0.3em]"
+            className="w-full md:w-auto h-14 md:h-16 px-12 rounded-2xl font-black uppercase tracking-[0.3em] text-xs"
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           >
             Analyze Your First Product

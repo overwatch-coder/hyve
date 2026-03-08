@@ -670,7 +670,7 @@ export default function ExploreContent({
   return (
     <div className="flex flex-col animate-fade-in flex-1 overflow-y-auto scroll-smooth bg-background">
       {/* ── PAGE HERO ── */}
-      <div className="px-8 pt-6 pb-4 border-b border-border/20 bg-card/30">
+      <div className="px-4 md:px-8 pt-4 md:pt-6 pb-4 border-b border-border/20 bg-card/30">
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
           <Link
             to="/products"
@@ -689,10 +689,10 @@ export default function ExploreContent({
         </nav>
 
         {!isExperiment && (
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
             <div className="flex items-center gap-5">
-              <div>
-                <h1 className="text-4xl font-black tracking-tighter text-foreground uppercase">
+              <div className="min-w-0">
+                <h1 className="text-2xl md:text-4xl font-black tracking-tighter text-foreground uppercase truncate">
                   {productData?.name || "Product Analysis"}
                 </h1>
                 <div className="flex items-center gap-3 mt-1.5">
@@ -727,22 +727,23 @@ export default function ExploreContent({
               </div>
             </div>
 
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
               <Tabs
                 value={viewMode}
                 onValueChange={(v) => setViewMode(v as any)}
+                className="w-full sm:w-auto"
               >
-                <TabsList className="h-9 bg-muted/60 border border-border/30">
+                <TabsList className="h-9 w-full sm:w-auto bg-muted/60 border border-border/30">
                   <TabsTrigger
                     value="graph"
-                    className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-3"
+                    className="flex-1 sm:flex-none flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-3"
                   >
                     <LayoutGrid className="h-3.5 w-3.5" />
                     Graph
                   </TabsTrigger>
                   <TabsTrigger
                     value="accordion"
-                    className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-3"
+                    className="flex-1 sm:flex-none flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-3"
                   >
                     <ListTree className="h-3.5 w-3.5" />
                     Accordion
@@ -754,7 +755,7 @@ export default function ExploreContent({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-[10px] font-black uppercase tracking-widest border-border/50 hover:border-primary/50 hover:text-primary transition-all gap-2 h-9 px-4"
+                  className="flex-1 sm:flex-none text-[10px] font-black uppercase tracking-widest border-border/50 hover:border-primary/50 hover:text-primary transition-all gap-2 h-9 px-4"
                   onClick={() => setShowRegenModal(true)}
                   disabled={regenerateSummary.isPending}
                 >
@@ -768,10 +769,13 @@ export default function ExploreContent({
               )}
 
               {!hideExperimentTrigger && (
-                <div onClick={onStartExperiment}>
+                <div
+                  onClick={onStartExperiment}
+                  className="flex-1 sm:flex-none"
+                >
                   <Button
                     size="sm"
-                    className="flex items-center gap-2 font-black uppercase tracking-widest text-[10px] h-9 px-4 bg-primary text-primary-foreground shadow-md shadow-primary/20 hover:shadow-primary/30 transition-all"
+                    className="w-full flex items-center gap-2 font-black uppercase tracking-widest text-[10px] h-9 px-4 bg-primary text-primary-foreground shadow-md shadow-primary/20 hover:shadow-primary/30 transition-all"
                   >
                     <Play className="h-3.5 w-3.5 fill-current" />
                     A/B Mission
@@ -783,7 +787,7 @@ export default function ExploreContent({
         )}
       </div>
 
-      <div className="px-8 pt-6 pb-32 flex flex-col gap-10">
+      <div className="px-4 md:px-8 pt-6 pb-32 flex flex-col gap-8 md:gap-10">
         {/* ── INTELLIGENCE MATRIX (immediately after hero) ── */}
         <div ref={matrixRef} className="scroll-mt-4">
           <div className="flex items-center justify-between mb-4">
