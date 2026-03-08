@@ -14,3 +14,4 @@ scikit_learn==1.8.0
 sentence_transformers==5.2.3
 SQLAlchemy==2.0.48
 uvicorn==0.41.0
+python-multipart
