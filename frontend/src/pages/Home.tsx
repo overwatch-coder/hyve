@@ -74,7 +74,7 @@ export default function Home() {
         if (firstId) {
           navigate(`/products/${firstId}${batchTag}`);
         } else {
-          navigate("/dashboard");
+          navigate("/products");
         }
       } else if (data?.type === "raw_batch") {
         toast.success("AI Synthesis Started", {
@@ -83,7 +83,7 @@ export default function Home() {
         if (firstId) {
           navigate(`/products/${firstId}${batchTag}`);
         } else {
-          navigate("/dashboard");
+          navigate("/products");
         }
       } else if (data?.type === "url") {
         toast.success("AI Crawl Started", {

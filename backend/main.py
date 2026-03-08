@@ -536,10 +536,36 @@ def global_ingest_raw(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    from pipeline import run_raw_ingestion_background
-    # Since this can create multiple products, we set ingest_type in the background task loop
+    from pipeline import run_raw_ingestion_background, extract_products_and_reviews_ai, predict_product_category
+    
+    # 1. Preliminarily extract product names so we can return IDs for redirection
+    print(f"DEBUG: Preliminarily extracting product names from raw text...")
+    extracted_data = extract_products_and_reviews_ai(payload.text)
+    
+    product_ids = []
+    if extracted_data:
+        for item in extracted_data:
+            p_name = item.get("product_name", "Unknown Product").strip()
+            p_cat = item.get("category")
+            if not p_cat or p_cat.lower() in ["uncategorized", "undefined"]:
+                p_cat = predict_product_category(p_name)
+            
+            product = db.query(models.Product).filter(models.Product.name == p_name).first()
+            if not product:
+                product = models.Product(name=p_name, category=p_cat, status="processing", ingest_type="text", processing_step="Initializing AI Pipeline")
+                db.add(product)
+                db.commit()
+                db.refresh(product)
+            product_ids.append(product.id)
+
+    # 2. Trigger full ingestion in background
     background_tasks.add_task(run_raw_ingestion_background, payload.text, payload.source_url, db)
-    return {"status": "processing"}
+    
+    return {
+        "status": "processing",
+        "product_ids": product_ids,
+        "is_batch": len(product_ids) > 1
+    }
 
 class UrlIngestRequest(schemas.BaseModel):
     url: str
@@ -558,6 +584,8 @@ def global_ingest_url(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
+    from pipeline import run_url_ingestion_background, predict_product_category
+    
     # Check if product exists or create a placeholder
     product = None
     if payload.product_id:
@@ -569,13 +597,18 @@ def global_ingest_url(
         
     if not product:
         final_name = payload.name if payload.name else "Scraping in progress..."
-        product = models.Product(name=final_name, category=payload.category, status="processing", ingest_type="url")
+        final_cat = payload.category
+        if final_cat.lower() in ["uncategorized", "undefined"] and payload.name:
+            final_cat = predict_product_category(payload.name)
+            
+        product = models.Product(name=final_name, category=final_cat, status="processing", ingest_type="url", processing_step="Scraping Target URL")
         db.add(product)
         db.commit()
         db.refresh(product)
     else:
         product.status = "processing"
         product.ingest_type = "url"
+        product.processing_step = "Scraping Target URL"
         db.commit()
         db.refresh(product)
 
@@ -628,13 +661,19 @@ async def global_ingest_csv(
         p_name = str(p_name).strip()
         product = db.query(models.Product).filter(models.Product.name == p_name).first()
         if not product:
-            product = models.Product(name=p_name, category=fallback_category, status="processing", ingest_type="csv")
+            from pipeline import predict_product_category
+            p_cat = fallback_category
+            if p_cat.lower() in ["uncategorized", "undefined"]:
+                p_cat = predict_product_category(p_name)
+                
+            product = models.Product(name=p_name, category=p_cat, status="processing", ingest_type="csv", processing_step="Grouping Product Reviews")
             db.add(product)
             db.commit()
             db.refresh(product)
         else:
             product.status = "processing"
             product.ingest_type = "csv"
+            product.processing_step = "Grouping Product Reviews"
             db.commit()
             db.refresh(product)
         product_ids.append(product.id)
@@ -647,6 +686,7 @@ async def global_ingest_csv(
     return {
         "status": "processing", 
         "product_ids": product_ids, 
+        "reviews_added": len(df),
         "message": f"Ingestion of {len(df)} reviews across {len(product_ids)} products started."
     }
 

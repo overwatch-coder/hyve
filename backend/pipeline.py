@@ -8,6 +8,35 @@ import models
 from ai_engine import extract_claims_from_llm, cluster_claims
 
 
+
+def predict_product_category(product_name: str) -> str:
+    """Use AI to predict a product's category from its name."""
+    import json
+    import os
+    
+    provider = os.getenv("LLM_PROVIDER", "openai")
+    prompt = f"Predict a 1-2 word category for a product named '{product_name}'. Example: 'Electronics', 'Footwear', 'Consumer Appliances'. Return ONLY the category name."
+    
+    try:
+        if provider == "openai":
+            import openai
+            client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                timeout=5.0
+            )
+            return response.choices[0].message.content.strip().replace('"', '').replace("'", "")
+        else:
+            import google.generativeai as genai
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            return response.text.strip().replace('"', '').replace("'", "")
+    except Exception as e:
+        print(f"DEBUG: Category prediction failed: {e}")
+        return "Uncategorized"
+
 def process_review_sync(review_id: int, db: Session) -> dict:
     """
     Process a single review synchronously:
@@ -1013,6 +1042,7 @@ def run_raw_ingestion_background(raw_text: str, source_url: str = None, db = Non
             print("DEBUG: AI found no valid products/reviews in the raw text.")
             return
 
+        product_count = 0
         for item in extracted_data:
             p_name = item.get("product_name", "Unknown Product").strip()
             p_cat = item.get("category", "Uncategorized").strip()
@@ -1031,14 +1061,19 @@ def run_raw_ingestion_background(raw_text: str, source_url: str = None, db = Non
             else:
                 product.status = "processing"
                 product.ingest_type = "text"
-                product.processing_step = "Cleaning & Parsing Data"
+                product.processing_step = "Parsing AI Metadata"
                 db.commit()
 
             # 2. Process reviews
             added_reviews = 0
-            for r_idx, r_text in enumerate(p_reviews):
+            print(f"DEBUG: Processing {len(reviews_list)} reviews for {p_name}")
+            if not isinstance(reviews_list, list):
+                print(f"DEBUG: ERROR - reviews_list is not a list: {type(reviews_list)}")
+                continue
+
+            for r_idx, r_text in enumerate(reviews_list):
                 if r_idx % 5 == 0:
-                    product.processing_step = f"Distilling Claims ({r_idx+1}/{len(p_reviews)})"
+                    product.processing_step = f"Distilling Claims ({r_idx+1}/{len(reviews_list)})"
                     db.commit()
                     
                 text = str(r_text).strip()

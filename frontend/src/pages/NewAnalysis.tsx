@@ -108,17 +108,21 @@ export default function NewAnalysis() {
       return null;
     },
     onSuccess: (data: any) => {
-      if (data?.type === "batch") {
-        toast.success("Batch Ingestion Started", {
-          description: `Processed ${data.results.reviews_added} reviews for ${data.results.products_created.length} products.`,
-        });
-        navigate("/dashboard");
-      } else if (data?.type === "raw_batch") {
-        toast.success("AI Analysis Started", {
-          description:
-            "Hyve is analyzing the raw text and automatically creating products.",
-        });
-        navigate("/dashboard");
+      if (data.type === "batch" || (data.results && data.results.is_batch)) {
+        const productIds = data.results?.product_ids || [];
+        const reviewsAdded = data.results?.reviews_added || 0;
+        const productsCreated = productIds.length;
+
+        toast.success(
+          `Ingestion started: ${reviewsAdded} reviews and ${productsCreated} products detected.`,
+        );
+
+        if (productIds.length > 0) {
+          // Redirect to the first product to show processing progress
+          navigate(`/products/${productIds[0]}?batch=true`);
+        } else {
+          navigate("/products");
+        }
       } else if (data?.type === "url") {
         toast.success("AI Crawl Started", {
           description: "We are currently scraping and analyzing the URL.",
@@ -126,9 +130,10 @@ export default function NewAnalysis() {
         navigate(`/products/${data.productId}`);
       } else if (data?.type === "single") {
         toast.success("Analysis Complete", {
-          description: `Successfully analyzed the product.`,
+          description:
+            "Your product is being analyzed. This may take a minute.",
         });
-        navigate(`/products/${data.productId}`);
+        navigate("/products");
       }
 
       queryClient.invalidateQueries({ queryKey: ["products-list"] });

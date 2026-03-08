@@ -128,7 +128,14 @@ function ExploreInner() {
         id: "ingest",
         label: "Extracting AI Data",
         icon: Sparkles,
-        keywords: ["cleaning", "parsing", "grouping", "ingest", "archiving"],
+        keywords: [
+          "cleaning",
+          "parsing",
+          "grouping",
+          "ingest",
+          "archiving",
+          "metadata",
+        ],
       },
       {
         id: "claims",
@@ -210,6 +217,7 @@ function ExploreInner() {
           "grouping",
           "ingest",
           "knowledge",
+          "metadata",
         ],
       },
       {

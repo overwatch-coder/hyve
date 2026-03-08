@@ -41,7 +41,6 @@ import remarkGfm from "remark-gfm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
-import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -64,6 +63,7 @@ import {
   ThemeNode,
   SentimentNode,
 } from "@/components/graph-nodes";
+import { Link } from "react-router-dom";
 
 /* ── Custom node-type registry ── */
 const nodeTypes = {
@@ -336,6 +336,7 @@ export interface ExploreContentProps {
   setViewMode: (mode: "accordion" | "graph") => void;
   hideExperimentTrigger?: boolean;
   isExperiment?: boolean;
+  onStartExperiment?: () => void;
 }
 
 export default function ExploreContent({
@@ -347,6 +348,7 @@ export default function ExploreContent({
   setViewMode,
   hideExperimentTrigger = false,
   isExperiment = false,
+  onStartExperiment,
 }: ExploreContentProps) {
   const queryClient = useQueryClient();
   const [showRegenModal, setShowRegenModal] = useState(false);
@@ -766,7 +768,7 @@ export default function ExploreContent({
               )}
 
               {!hideExperimentTrigger && (
-                <Link to={`/experiment/${productId}`}>
+                <div onClick={onStartExperiment}>
                   <Button
                     size="sm"
                     className="flex items-center gap-2 font-black uppercase tracking-widest text-[10px] h-9 px-4 bg-primary text-primary-foreground shadow-md shadow-primary/20 hover:shadow-primary/30 transition-all"
@@ -774,7 +776,7 @@ export default function ExploreContent({
                     <Play className="h-3.5 w-3.5 fill-current" />
                     A/B Mission
                   </Button>
-                </Link>
+                </div>
               )}
             </div>
           </div>

@@ -86,6 +86,8 @@ class ProductBase(BaseModel):
     summary_seller: Optional[str] = None
     advices_seller: Optional[str] = None
     status: str = "ready"
+    ingest_type: Optional[str] = None
+    processing_step: Optional[str] = None
 class RawIngestRequest(BaseModel):
     text: str
     source_url: Optional[str] = None
