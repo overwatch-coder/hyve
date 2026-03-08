@@ -15,6 +15,7 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { getSentimentVerdict, getSentimentColor } from "@/lib/sentiment";
 
 interface SentimentCounts {
   positive: number;
@@ -89,10 +90,10 @@ export default function ProductDetails() {
       <div className="flex flex-col gap-4">
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Link
-            to="/dashboard"
+            to="/products"
             className="hover:text-foreground transition-colors"
           >
-            Dashboard
+            Products
           </Link>
           <ChevronRight className="h-3 w-3" />
           <span className="text-foreground font-medium truncate max-w-[200px]">
@@ -145,18 +146,17 @@ export default function ProductDetails() {
             description: "Extracted insights",
           },
           {
-            label: "Overall Sentiment",
-            value: `${Math.round(data.overall_sentiment * 100)}%`,
+            label: "Consumer Reception",
+            value: getSentimentVerdict(data.overall_sentiment),
             icon: data.overall_sentiment >= 0.5 ? TrendingUp : TrendingDown,
-            color:
-              data.overall_sentiment >= 0.5
-                ? "text-emerald-500"
-                : "text-rose-500",
+            color: getSentimentColor(data.overall_sentiment),
             bg:
-              data.overall_sentiment >= 0.5
+              data.overall_sentiment >= 0.7
                 ? "bg-emerald-500/10"
-                : "bg-rose-500/10",
-            description: "Weighted approval score",
+                : data.overall_sentiment >= 0.45
+                  ? "bg-amber-500/10"
+                  : "bg-rose-500/10",
+            description: `${Math.round(data.overall_sentiment * 100)}% positive reviews · Higher = better`,
           },
           {
             label: "Active Themes",
@@ -325,7 +325,13 @@ export default function ProductDetails() {
                     <th className="text-left p-4 font-bold">Theme</th>
                     <th className="text-center p-4">Volume</th>
                     <th className="text-center p-4">Severity</th>
-                    <th className="p-4 text-right">Sentiment Mix</th>
+                    <th className="p-4 text-right">
+                      Sentiment
+                      <br />
+                      <span className="text-[8px] normal-case font-medium opacity-60">
+                        Green = positive · Red = negative
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/30">

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
+import { getSentimentVerdict, getSentimentColor } from "@/lib/sentiment";
 
 export default function Products() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -84,11 +85,11 @@ export default function Products() {
                     </h3>
                   </div>
                   <div className="h-10 w-10 rounded-xl bg-muted/50 flex flex-col items-center justify-center border border-border/40 group-hover:border-primary/30 transition-all shadow-inner">
-                    <p className="text-[10px] font-black text-muted-foreground uppercase leading-none mb-0.5">
-                      Sc.
+                    <p className="text-[9px] font-black text-muted-foreground uppercase leading-none mb-0.5">
+                      +Score
                     </p>
                     <p
-                      className={`text-sm font-black ${p.overall_sentiment_score > 0 ? "text-emerald-500" : "text-rose-500"}`}
+                      className={`text-sm font-black ${getSentimentColor(p.overall_sentiment_score)}`}
                     >
                       {(p.overall_sentiment_score * 100).toFixed(0)}
                     </p>
@@ -115,28 +116,42 @@ export default function Products() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                    <span>Performance</span>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
+                    <span className="text-muted-foreground">
+                      Consumer Reception
+                    </span>
                     <span
-                      className={
-                        p.overall_sentiment_score >= 0.5
-                          ? "text-emerald-500"
-                          : "text-rose-500"
-                      }
+                      className={getSentimentColor(p.overall_sentiment_score)}
                     >
-                      {p.overall_sentiment_score >= 0.5
-                        ? "STABLE"
-                        : "SENSITIVE"}
+                      {getSentimentVerdict(p.overall_sentiment_score)}
                     </span>
                   </div>
-                  <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden flex shadow-inner">
+                  {/* Two-tone bar: green = positive share, rose = negative share */}
+                  <div
+                    className="h-1.5 w-full bg-secondary rounded-full overflow-hidden flex shadow-inner"
+                    title={`${(p.overall_sentiment_score * 100).toFixed(0)}% positive reviews · Higher is better`}
+                  >
                     <div
-                      className={`h-full transition-all duration-1000 ${p.overall_sentiment_score >= 0 ? "bg-emerald-500" : "bg-rose-500"}`}
+                      className="h-full bg-emerald-500 transition-all duration-1000"
+                      style={{ width: `${p.overall_sentiment_score * 100}%` }}
+                    />
+                    <div
+                      className="h-full bg-rose-500 transition-all duration-1000"
                       style={{
-                        width: `${Math.abs(p.overall_sentiment_score) * 100}%`,
+                        width: `${(1 - p.overall_sentiment_score) * 100}%`,
                       }}
                     />
+                  </div>
+                  <div className="flex justify-between text-[9px] font-bold text-muted-foreground/60 px-1">
+                    <span>
+                      👍 {(p.overall_sentiment_score * 100).toFixed(0)}%
+                      positive (higher is better)
+                    </span>
+                    <span>
+                      {((1 - p.overall_sentiment_score) * 100).toFixed(0)}%
+                      negative 👎
+                    </span>
                   </div>
                 </div>
 

@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
+import { getSentimentVerdict, getSentimentColor } from "@/lib/sentiment";
 
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -152,7 +153,9 @@ export default function Dashboard() {
                     Category
                   </th>
                   <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center">
-                    Sentiment
+                    <span title="Higher % = more positive reviews · Lower % = more complaints">
+                      Reception ↑better
+                    </span>
                   </th>
                   <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground text-center">
                     Themes
@@ -193,21 +196,34 @@ export default function Dashboard() {
                         {p.category || "General"}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex flex-col items-center gap-1">
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col items-center gap-1.5">
                         <span
-                          className={`text-xs font-black ${p.overall_sentiment_score > 0 ? "text-emerald-500" : "text-rose-500"}`}
+                          className={`text-xs font-black ${getSentimentColor(p.overall_sentiment_score)}`}
                         >
-                          {(p.overall_sentiment_score * 100).toFixed(0)}%
+                          {getSentimentVerdict(p.overall_sentiment_score)}
                         </span>
-                        <div className="h-1 w-16 bg-secondary rounded-full overflow-hidden shadow-inner">
+                        <div
+                          className="h-1.5 w-20 bg-secondary rounded-full overflow-hidden flex shadow-inner"
+                          title={`${(p.overall_sentiment_score * 100).toFixed(0)}% positive · Higher is better`}
+                        >
                           <div
-                            className={`h-full transition-all duration-1000 ${p.overall_sentiment_score >= 0 ? "bg-emerald-500" : "bg-rose-500"}`}
+                            className="h-full bg-emerald-500 transition-all duration-1000"
                             style={{
-                              width: `${Math.abs(p.overall_sentiment_score) * 100}%`,
+                              width: `${p.overall_sentiment_score * 100}%`,
+                            }}
+                          />
+                          <div
+                            className="h-full bg-rose-500 transition-all duration-1000"
+                            style={{
+                              width: `${(1 - p.overall_sentiment_score) * 100}%`,
                             }}
                           />
                         </div>
+                        <span className="text-[9px] font-bold text-muted-foreground/60">
+                          {(p.overall_sentiment_score * 100).toFixed(0)}% pos
+                          (higher is better)
+                        </span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">

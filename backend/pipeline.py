@@ -339,6 +339,11 @@ def cluster_product_claims(product_id: int, db: Session) -> dict:
         theme_mapping[cid] = theme
 
     # Assign theme_id to claims
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if product:
+        product.processing_step = "Harmonizing Patterns & Thematic Clusters"
+        db.commit()
+
     for claim, cluster_id in zip(claims, cluster_labels):
         claim.theme_id = theme_mapping[cluster_id].id
 
@@ -382,21 +387,41 @@ def cluster_product_claims(product_id: int, db: Session) -> dict:
 
     db.flush()
 
-    # Recalculate product sentiment
+    # ── Recalculate per-theme positive_ratio AFTER deduplication ──
+    # Uses severity-weighted formula: weight positive claims more if they have higher severity/mention_count
+    for cid, theme in theme_mapping.items():
+        theme_claims = db.query(models.Claim).filter(models.Claim.theme_id == theme.id).all()
+        if not theme_claims:
+            continue
+
+        total_weight = sum(max(c.mention_count, 1) * max(c.severity, 0.1) for c in theme_claims)
+        positive_weight = sum(
+            max(c.mention_count, 1) * max(c.severity, 0.1)
+            for c in theme_claims if c.sentiment_polarity == "positive"
+        )
+        theme.claim_count = len(theme_claims)
+        theme.positive_ratio = round(positive_weight / total_weight, 3) if total_weight > 0 else 0.0
+
+    db.flush()
+
+    # Recalculate product-level overall_sentiment_score
+    # Formula: weighted average of per-theme positive_ratio, weighted by claim_count
+    # Penalty: themes with positive_ratio < 0.3 drag score down more aggressively
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
     if product:
-        remaining_claims = (
-            db.query(models.Claim)
-            .join(models.Review, models.Claim.review_id == models.Review.id)
-            .filter(models.Review.product_id == product_id)
-            .all()
-        )
-        total_claims = len(remaining_claims)
-        positive = sum(1 for c in remaining_claims if c.sentiment_polarity == "positive")
-        negative = sum(1 for c in remaining_claims if c.sentiment_polarity == "negative")
-        product.overall_sentiment_score = round(
-            (positive - negative * 0.5) / max(total_claims, 1), 2
-        )
+        all_themes = list(theme_mapping.values())
+        total_claims_weight = sum(t.claim_count for t in all_themes)
+        if total_claims_weight > 0:
+            weighted_pos = sum(t.positive_ratio * t.claim_count for t in all_themes)
+            raw_score = weighted_pos / total_claims_weight
+            # Apply asymmetric penalty: depress score more for highly negative themes
+            severe_neg_penalty = sum(
+                (0.4 - t.positive_ratio) * t.claim_count
+                for t in all_themes if t.positive_ratio < 0.4
+            ) / total_claims_weight
+            adjusted_score = max(0.0, min(1.0, raw_score - severe_neg_penalty * 0.3))
+            product.overall_sentiment_score = round(adjusted_score, 3)
+
         import json
         
         summary_data = _generate_summary_and_advices(product.name, theme_names, cluster_texts_map)
@@ -599,7 +624,7 @@ def run_url_ingestion_background(product_id: int, url: str):
             process_review_sync(r.id, db)
             
         # Recluster
-        product.processing_step = "Thematic Synthesis"
+        product.processing_step = "Harmonizing Patterns"
         db.commit()
         cluster_product_claims(product_id, db)
         
@@ -664,12 +689,12 @@ def run_csv_ingestion_background(product_ids: list[int], csv_data_json: str, map
             p_df = p_df.head(1000)
             
             # 4. Ingest reviews
-            product.processing_step = f"Extracting AI Claims (1/{len(p_df)})"
+            product.processing_step = f"Distilling Insights (1/{len(p_df)})"
             db.commit()
             
             for idx, (_, row) in enumerate(p_df.iterrows()):
                 if idx % 10 == 0:
-                    product.processing_step = f"Extracting AI Claims ({idx+1}/{len(p_df)})"
+                    product.processing_step = f"Distilling Insights ({idx+1}/{len(p_df)})"
                     db.commit()
 
                 text = str(row[review_col]).strip()
@@ -693,11 +718,11 @@ def run_csv_ingestion_background(product_ids: list[int], csv_data_json: str, map
                 process_review_sync(review.id, db)
             
             # 5. Finalize product
-            product.processing_step = "Harmonizing Thematic Clusters"
+            product.processing_step = "Harmonizing Patterns"
             db.commit()
             cluster_product_claims(product.id, db)
             
-            product.processing_step = "Synthesizing Recommendations"
+            product.processing_step = "Analysis Complete"
             product.status = "ready"
             db.commit()
             print(f"DEBUG: Background CSV ingestion complete for product {product.id}")
@@ -709,6 +734,7 @@ def run_csv_ingestion_background(product_ids: list[int], csv_data_json: str, map
             p = db.query(models.Product).filter(models.Product.id == pid).first()
             if p: 
                 p.status = "error"
+                p.processing_step = f"Error: {str(e)}"
         db.commit()
     finally:
         db.close()
@@ -935,7 +961,8 @@ def run_raw_ingestion_background(raw_text: str, source_url: str = None, db = Non
     # Avoid passing db Session through threads, instance a new one safely
     if not db:
         db = SessionLocal()
-        
+    
+    product = None
     try:
         print(f"DEBUG: Starting Background AI Raw Extraction...")
         extracted_data = extract_products_and_reviews_ai(raw_text)
@@ -955,13 +982,14 @@ def run_raw_ingestion_background(raw_text: str, source_url: str = None, db = Non
             # 1. Check if product already exists
             product = db.query(models.Product).filter(models.Product.name == p_name).first()
             if not product:
-                product = models.Product(name=p_name, category=p_cat, status="processing")
+                product = models.Product(name=p_name, category=p_cat, status="processing", ingest_type="text")
                 db.add(product)
                 db.commit()
                 db.refresh(product)
             else:
                 product.status = "processing"
-                product.processing_step = "Synthesizing Knowledge"
+                product.ingest_type = "text"
+                product.processing_step = "Cleaning & Parsing Data"
                 db.commit()
 
             # 2. Process reviews
@@ -1001,6 +1029,10 @@ def run_raw_ingestion_background(raw_text: str, source_url: str = None, db = Non
 
     except Exception as e:
         print(f"DEBUG: Background Raw Ingestion failed: {e}")
+        if product:
+            product.status = "error"
+            product.processing_step = f"Error: {str(e)}"
+            db.commit()
     finally:
         db.close()
 

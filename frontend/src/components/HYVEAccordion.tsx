@@ -5,10 +5,10 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Lightbulb, TrendingUp, TrendingDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getSentimentVerdict, getSentimentColor } from "@/lib/sentiment";
 
 interface Claim {
   id: number;
@@ -87,22 +87,31 @@ const HYVEAccordion: React.FC<HYVEAccordionProps> = ({
                   <div className="flex items-center gap-3">
                     <div className="flex flex-col items-end gap-1">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                        Sentiment
+                        Reception
                       </span>
                       <div className="flex items-center gap-2">
-                        <Progress
-                          value={theme.positive_ratio * 100}
-                          className="w-20 h-1.5"
-                        />
+                        <div
+                          className="w-20 h-1.5 bg-secondary rounded-full overflow-hidden flex"
+                          title={`Higher % = more positive consumer reviews. ${Math.round(theme.positive_ratio * 100)}% are positive.`}
+                        >
+                          <div
+                            className="h-full bg-emerald-500"
+                            style={{ width: `${theme.positive_ratio * 100}%` }}
+                          />
+                          <div
+                            className="h-full bg-rose-500"
+                            style={{
+                              width: `${(1 - theme.positive_ratio) * 100}%`,
+                            }}
+                          />
+                        </div>
                         <span
                           className={cn(
                             "text-xs font-black",
-                            theme.positive_ratio >= 0.5
-                              ? "text-emerald-500"
-                              : "text-rose-500",
+                            getSentimentColor(theme.positive_ratio),
                           )}
                         >
-                          {Math.round(theme.positive_ratio * 100)}%
+                          {getSentimentVerdict(theme.positive_ratio)}
                         </span>
                       </div>
                     </div>

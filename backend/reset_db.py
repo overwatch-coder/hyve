@@ -1,5 +1,6 @@
 import models
-from database import engine, SessionLocal
+from database import engine
+from ingest_reviews import main as ingest_reviews_main
 
 def reset_db():
     print("Resetting database...")
@@ -11,9 +12,10 @@ def reset_db():
     models.Base.metadata.create_all(bind=engine)
     print("Recreated all tables.")
     
-    # Optionally seed with initial structure if needed
-    # (But ingest_reviews.py will do most of the work)
-    print("Database reset complete.")
+    # Seed with initial structure if needed (Using python seed.py) if you don't have api keys
+    # But ingest_reviews.py will do most of the work if you have api keys
+    ingest_reviews_main()
+    print("Database reset and seeded complete.")
 
 if __name__ == "__main__":
     reset_db()

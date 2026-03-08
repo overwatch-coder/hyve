@@ -106,6 +106,27 @@ class Product(ProductBase):
     # Use paginated /reviews?product_id= endpoint instead.
     model_config = ConfigDict(from_attributes=True)
 
+# --- Experiments ---
+class ExperimentResultBase(BaseModel):
+    product_id: int
+    platform: str
+    time_seconds: int
+    participant_name: Optional[str] = None
+
+class ExperimentResultCreate(ExperimentResultBase):
+    pass
+
+class ExperimentResult(ExperimentResultBase):
+    id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class ExperimentAnalytics(BaseModel):
+    platform_stats: List[dict] # [{"platform": "hyve", "avg_time": 12.5, "count": 10}, ...]
+    total_participants: int
+    recent_activity: List[ExperimentResult]
+
 # Update forward refs
 Theme.model_rebuild()
 Product.model_rebuild()
+ExperimentResult.model_rebuild()

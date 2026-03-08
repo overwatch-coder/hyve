@@ -524,6 +524,7 @@ def global_ingest_raw(
     db: Session = Depends(get_db),
 ):
     from pipeline import run_raw_ingestion_background
+    # Since this can create multiple products, we set ingest_type in the background task loop
     background_tasks.add_task(run_raw_ingestion_background, payload.text, payload.source_url, db)
     return {"status": "processing"}
 
@@ -555,12 +556,13 @@ def global_ingest_url(
         
     if not product:
         final_name = payload.name if payload.name else "Scraping in progress..."
-        product = models.Product(name=final_name, category=payload.category, status="processing")
+        product = models.Product(name=final_name, category=payload.category, status="processing", ingest_type="url")
         db.add(product)
         db.commit()
         db.refresh(product)
     else:
         product.status = "processing"
+        product.ingest_type = "url"
         db.commit()
         db.refresh(product)
 
@@ -613,12 +615,13 @@ async def global_ingest_csv(
         p_name = str(p_name).strip()
         product = db.query(models.Product).filter(models.Product.name == p_name).first()
         if not product:
-            product = models.Product(name=p_name, category=fallback_category, status="processing")
+            product = models.Product(name=p_name, category=fallback_category, status="processing", ingest_type="csv")
             db.add(product)
             db.commit()
             db.refresh(product)
         else:
             product.status = "processing"
+            product.ingest_type = "csv"
             db.commit()
             db.refresh(product)
         product_ids.append(product.id)
@@ -633,6 +636,54 @@ async def global_ingest_csv(
         "product_ids": product_ids, 
         "message": f"Ingestion of {len(df)} reviews across {len(product_ids)} products started."
     }
+
+# --- Experiments ---
+@app.post("/experiments/results", tags=["Experiments"])
+def record_experiment_result(payload: schemas.ExperimentResultCreate, db: Session = Depends(get_db)):
+    """Record the result of an A/B testing session."""
+    db_result = models.ExperimentResult(
+        product_id=payload.product_id,
+        platform=payload.platform,
+        time_seconds=payload.time_seconds,
+        participant_name=payload.participant_name
+    )
+    db.add(db_result)
+    db.commit()
+    return {"status": "success", "id": db_result.id}
+
+@app.get("/experiments/analytics", response_model=schemas.ExperimentAnalytics, tags=["Experiments"])
+def get_experiment_analytics(db: Session = Depends(get_db)):
+    """Get aggregated analytics for A/B testing."""
+    from sqlalchemy import func
+    
+    # Platform stats
+    stats = db.query(
+        models.ExperimentResult.platform,
+        func.avg(models.ExperimentResult.time_seconds).label("avg_time"),
+        func.count(models.ExperimentResult.id).label("count")
+    ).group_by(models.ExperimentResult.platform).all()
+    
+    platform_stats = [
+        {"platform": s.platform, "avg_time": float(s.avg_time), "count": s.count}
+        for s in stats
+    ]
+    
+    # Total participants
+    total = db.query(func.count(models.ExperimentResult.id)).scalar()
+    
+    # Recent activity
+    recent = db.query(models.ExperimentResult).order_by(models.ExperimentResult.created_at.desc()).limit(10).all()
+    
+    return {
+        "platform_stats": platform_stats,
+        "total_participants": total,
+        "recent_activity": recent
+    }
+
+@app.get("/experiments/results", response_model=List[schemas.ExperimentResult], tags=["Experiments"])
+def list_experiment_results(db: Session = Depends(get_db)):
+    """List all experiment results for the detailed table."""
+    return db.query(models.ExperimentResult).order_by(models.ExperimentResult.created_at.desc()).all()
 
 if __name__ == "__main__":
     import uvicorn

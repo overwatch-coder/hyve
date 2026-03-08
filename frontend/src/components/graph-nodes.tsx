@@ -5,8 +5,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import api from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import api from "@/lib/api";
 
 /* ── Shared Types ── */
 interface ExpandableNodeData {
@@ -228,14 +229,27 @@ function ClaimNodeRaw({
     claim?.mention_count ??
     Math.max(1, Math.round((claim?.severity ?? 0.5) * 50));
 
+  const [isExpanded, setIsExpanded] = useState(false);
+  const label = data.label || "";
+  const isLong = label.length > 80;
+  const displayedLabel =
+    isLong && !isExpanded ? label.slice(0, 80) + "..." : label;
+
   return (
     <div
-      className="flex flex-col rounded-xl select-none cursor-pointer transition-all duration-200 hover:shadow-lg group p-3 shadow-sm"
+      className="flex flex-col rounded-xl select-none cursor-pointer transition-all duration-300 hover:shadow-lg group p-3 shadow-sm"
+      onDoubleClick={() => {
+        // Prevent double click from triggering parent if we want to handle expansion differently
+        // but for now let's use the Read More button
+      }}
       style={{
         background: "white",
         border: `1.5px solid hsl(220 15% 90%)`,
-        minWidth: 200,
-        maxWidth: 260,
+        minWidth: 220,
+        maxWidth: 300,
+        boxShadow: isExpanded
+          ? "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)"
+          : undefined,
       }}
     >
       <Handle
@@ -249,10 +263,27 @@ function ClaimNodeRaw({
           className="h-2 w-2 rounded-full mt-1.5 shrink-0 shadow-[0_0_8px_rgba(var(--primary),0.2)]"
           style={{ background: dotColor }}
         />
-        <div className="flex-1">
-          <p className="text-[11px] font-bold text-gray-900 leading-[1.4] mb-2">
-            {data.label}
+        <div className="flex-1 overflow-hidden">
+          <p
+            className={cn(
+              "text-[11px] font-bold text-gray-900 leading-[1.4] mb-1 transition-all",
+              isExpanded ? "whitespace-normal" : "",
+            )}
+          >
+            {displayedLabel}
           </p>
+
+          {isLong && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsExpanded(!isExpanded);
+              }}
+              className="text-[9px] font-black text-primary hover:underline uppercase tracking-widest mb-2"
+            >
+              {isExpanded ? "Show Less" : "Read More"}
+            </button>
+          )}
 
           <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-50">
             <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">

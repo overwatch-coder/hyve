@@ -19,6 +19,7 @@ class Product(Base):
     summary = Column(String, nullable=True)
     advices = Column(String, nullable=True) # Will store JSON list or pipe-separated string
     status = Column(String, default="ready") # "processing" or "ready"
+    ingest_type = Column(String, nullable=True) # "csv", "url", "text"
     processing_step = Column(String, nullable=True) # e.g. "Cleaning Data", "Extracting Claims"
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -71,3 +72,12 @@ class Theme(Base):
     # Relationships
     product = relationship("Product", back_populates="themes")
     claims = relationship("Claim", back_populates="theme")
+
+class ExperimentResult(Base):
+    __tablename__ = "experiment_results"
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), index=True)
+    platform = Column(String) # "hyve" or "traditional"
+    time_seconds = Column(Integer)
+    participant_name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -1,11 +1,21 @@
 import { useState } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
-import { Activity, Hexagon, X, AlertCircle, ShieldCheck } from "lucide-react";
+import {
+  Activity,
+  Hexagon,
+  X,
+  AlertCircle,
+  ShieldCheck,
+  BarChart2,
+} from "lucide-react";
 
 export default function RootLayout() {
   const location = useLocation();
   const [showDisclaimer, setShowDisclaimer] = useState(true);
+
+  // On the explore / product detail page we want full-bleed — no padding
+  const isProductPage = /^\/products\/[^/]+$/.test(location.pathname);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -72,6 +82,17 @@ export default function RootLayout() {
             <ShieldCheck className="h-3.5 w-3.5" />
             Admin
           </Link>
+          <Link
+            to="/test-analytics"
+            className={`text-sm font-semibold transition-colors flex items-center gap-1.5 ${
+              location.pathname === "/test-analytics"
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <BarChart2 className="h-3.5 w-3.5" />
+            A/B Results
+          </Link>
         </nav>
 
         <div className="flex items-center gap-4">
@@ -85,21 +106,29 @@ export default function RootLayout() {
         </div>
       </header>
 
-      <main className="flex-1 px-8 pt-8 pb-12">
+      <main
+        className={
+          isProductPage
+            ? "flex-1 flex flex-col overflow-hidden"
+            : "flex-1 px-8 pt-8 pb-12"
+        }
+      >
         <Outlet />
       </main>
 
-      <footer className="h-12 border-t border-border/40 flex items-center justify-between px-8 text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
-        <p>© {new Date().getFullYear()} HYVE - SHOP WITH INTELLIGENCE</p>
-        <div className="flex gap-4">
-          <span className="hover:text-foreground cursor-pointer transition-colors">
-            v1.0.0
-          </span>
-          <span className="hover:text-foreground cursor-pointer transition-colors">
-            Privacy
-          </span>
-        </div>
-      </footer>
+      {!isProductPage && (
+        <footer className="h-12 border-t border-border/40 flex items-center justify-between px-8 text-[10px] text-muted-foreground uppercase font-bold tracking-widest">
+          <p>© {new Date().getFullYear()} HYVE - SHOP WITH INTELLIGENCE</p>
+          <div className="flex gap-4">
+            <span className="hover:text-foreground cursor-pointer transition-colors">
+              v1.0.0
+            </span>
+            <span className="hover:text-foreground cursor-pointer transition-colors">
+              Privacy
+            </span>
+          </div>
+        </footer>
+      )}
 
       <Toaster />
     </div>

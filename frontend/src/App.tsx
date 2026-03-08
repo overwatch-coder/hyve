@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import RootLayout from "@/layouts/RootLayout";
@@ -10,6 +10,8 @@ import ThemeDetails from "@/pages/ThemeDetails";
 import Dashboard from "@/pages/Dashboard";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
+import TestAnalytics from "./pages/TestAnalytics";
+import ExperimentPage from "./pages/ExperimentPage";
 
 const queryClient = new QueryClient();
 
@@ -35,21 +37,20 @@ function App() {
               {/* New Analysis / Ingestion */}
               <Route path="new" element={<NewAnalysis />} />
 
+              {/* A/B Testing Mission */}
+              <Route
+                path="experiment/:productId"
+                element={<ExperimentPage />}
+              />
+
               {/* Deep dive into a specific Theme */}
               <Route
                 path="products/:productId/theme/:themeId"
                 element={<ThemeDetails />}
               />
 
-              {/* Legacy redirects */}
-              <Route
-                path="explore"
-                element={<Navigate to="/products" replace />}
-              />
-              <Route
-                path="explore/:productId"
-                element={<Navigate to="/products/:productId" replace />}
-              />
+              {/* Test Analytics */}
+              <Route path="test-analytics" element={<TestAnalytics />} />
 
               {/* Admin */}
               <Route path="admin/login" element={<AdminLogin />} />

@@ -46,8 +46,8 @@ export default function Home() {
       }
       if (activeTab === "paste") {
         if (!reviewsRaw.trim()) throw new Error("Paste some reviews first.");
-        await api.post(`/ingest/raw`, { text: reviewsRaw });
-        return { type: "raw_batch" };
+        const res = await api.post(`/ingest/raw`, { text: reviewsRaw });
+        return { type: "raw_batch", results: res.data };
       }
       if (activeTab === "upload") {
         if (!file) throw new Error("Select a CSV file.");
@@ -62,12 +62,17 @@ export default function Home() {
       return null;
     },
     onSuccess: (data: any) => {
+      const productIds = data?.results?.product_ids || [];
+      const firstId = productIds[0];
+      const isMultiple = productIds.length > 1;
+      const batchTag = isMultiple ? "?batch=true" : "";
+
       if (data?.type === "batch") {
         toast.success("Analysis Started", {
           description: "Hyve is processing your dataset in the background.",
         });
-        if (data.results?.product_ids?.[0]) {
-          navigate(`/products/${data.results.product_ids[0]}`);
+        if (firstId) {
+          navigate(`/products/${firstId}${batchTag}`);
         } else {
           navigate("/dashboard");
         }
@@ -75,8 +80,8 @@ export default function Home() {
         toast.success("AI Synthesis Started", {
           description: "Extracting products and insights from your text...",
         });
-        if (data.results?.product_ids?.[0]) {
-          navigate(`/products/${data.results.product_ids[0]}`);
+        if (firstId) {
+          navigate(`/products/${firstId}${batchTag}`);
         } else {
           navigate("/dashboard");
         }

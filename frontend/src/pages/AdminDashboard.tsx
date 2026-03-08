@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAdmin } from "@/hooks/useAdmin";
 import api from "@/lib/api";
 import { toast } from "sonner";
+import { getSentimentVerdict, getSentimentColor } from "@/lib/sentiment";
 import {
   Trash2,
   Eye,
@@ -150,13 +151,11 @@ export default function AdminDashboard() {
               color: "text-amber-500",
             },
             {
-              label: "Avg. Sentiment",
-              value: `${(statsData.avg_sentiment * 100).toFixed(0)}%`,
+              label: "Avg. Reception",
+              value: getSentimentVerdict(statsData.avg_sentiment),
               icon: TrendingUp,
-              color:
-                statsData.avg_sentiment >= 0.5
-                  ? "text-emerald-500"
-                  : "text-rose-500",
+              color: getSentimentColor(statsData.avg_sentiment),
+              hint: `${(statsData.avg_sentiment * 100).toFixed(0)}% of reviews are positive`,
             },
           ].map((stat) => (
             <Card key={stat.label} className="border-border/40 shadow-sm">
@@ -168,7 +167,14 @@ export default function AdminDashboard() {
                   <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
                     {stat.label}
                   </p>
-                  <p className="text-2xl font-black">{stat.value}</p>
+                  <p className="text-xl font-black" title={(stat as any).hint}>
+                    {stat.value}
+                  </p>
+                  {(stat as any).hint && (
+                    <p className="text-[9px] text-muted-foreground/60 font-bold mt-0.5">
+                      {(stat as any).hint}
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -225,20 +231,32 @@ export default function AdminDashboard() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex flex-col items-center gap-1.5">
                           <span
-                            className={`text-sm font-black ${p.overall_sentiment_score >= 0 ? "text-emerald-500" : "text-rose-500"}`}
+                            className={`text-xs font-black ${getSentimentColor(p.overall_sentiment_score)}`}
                           >
-                            {(p.overall_sentiment_score * 100).toFixed(0)}%
+                            {getSentimentVerdict(p.overall_sentiment_score)}
                           </span>
-                          <div className="h-1 w-12 bg-secondary rounded-full overflow-hidden">
+                          <div
+                            className="h-1.5 w-20 bg-secondary rounded-full overflow-hidden flex"
+                            title={`${(p.overall_sentiment_score * 100).toFixed(0)}% positive reviews · Higher is better`}
+                          >
                             <div
-                              className={`h-full transition-all ${p.overall_sentiment_score >= 0 ? "bg-emerald-500" : "bg-rose-500"}`}
+                              className="h-full bg-emerald-500 transition-all"
                               style={{
-                                width: `${Math.abs(p.overall_sentiment_score) * 100}%`,
+                                width: `${p.overall_sentiment_score * 100}%`,
+                              }}
+                            />
+                            <div
+                              className="h-full bg-rose-500 transition-all"
+                              style={{
+                                width: `${(1 - p.overall_sentiment_score) * 100}%`,
                               }}
                             />
                           </div>
+                          <span className="text-[9px] font-bold text-muted-foreground/60">
+                            {(p.overall_sentiment_score * 100).toFixed(0)}% pos
+                          </span>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-center">
