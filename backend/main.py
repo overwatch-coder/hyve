@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -44,8 +45,15 @@ with engine.connect() as conn:
         conn.commit()
         print("MIGRATION: Added processing_step column to products table.")
     except Exception:
-        # Column likely already exists or table doesn't exist yet
         pass
+    try:
+        conn.execute(text("ALTER TABLE products ADD COLUMN summary_seller TEXT"))
+        conn.commit()
+    except Exception: pass
+    try:
+        conn.execute(text("ALTER TABLE products ADD COLUMN advices_seller TEXT"))
+        conn.commit()
+    except Exception: pass
 
 app = FastAPI(
     title="HYVE API",
@@ -154,11 +162,12 @@ def regenerate_product_summary(product_id: int, req: schemas.RegenerateSummaryRe
 
 @app.post("/products/{product_id}/chat", tags=["Products"])
 def chat_with_product_ai(product_id: int, req: schemas.ChatRequest, db: Session = Depends(get_db)):
+    """API endpoint for the product assistant chatbot. Returns a stream of text fragments."""
     from pipeline import ask_product_assistant
-    answer = ask_product_assistant(product_id, req.query, db)
-    if not answer:
-        raise HTTPException(status_code=500, detail="Failed to generate AI response.")
-    return {"answer": answer}
+    return StreamingResponse(
+        ask_product_assistant(product_id, req.query, db),
+        media_type="text/plain"
+    )
 
 @app.delete("/products/{product_id}", tags=["Products"])
 def delete_product(product_id: int, db: Session = Depends(get_db), admin=Depends(admin_required)):
@@ -238,22 +247,7 @@ class StatsResponse(schemas.BaseModel):
     total_themes: int
     avg_sentiment: float
 
-@app.get("/stats", response_model=StatsResponse, tags=["Stats"])
-def get_stats(db: Session = Depends(get_db)):
-    """Return aggregate platform statistics for the dashboard."""
-    total_products = db.query(models.Product).count()
-    total_claims = db.query(models.Claim).count()
-    total_themes = db.query(models.Theme).count()
-    avg_result = db.query(models.Product.overall_sentiment_score).all()
-    avg_sentiment = round(
-        sum(r[0] for r in avg_result) / max(len(avg_result), 1), 2
-    )
-    return StatsResponse(
-        total_products=total_products,
-        total_claims=total_claims,
-        total_themes=total_themes,
-        avg_sentiment=avg_sentiment,
-    )
+# REMOVED: @app.get("/stats")
 
 
 # --- Product Analytics ---
@@ -282,6 +276,10 @@ class ProductAnalyticsResponse(schemas.BaseModel):
     review_count: int
     claim_count: int
     overall_sentiment: float
+    summary: str | None = None
+    advices: list[str] | None = None
+    summary_seller: str | None = None
+    advices_seller: list[str] | None = None
     critical_risk_factor: RiskStrengthItem | None = None
     strongest_selling_point: RiskStrengthItem | None = None
     theme_breakdown: list[ThemeAnalytics]
@@ -341,6 +339,17 @@ def get_product_analytics(product_id: int, db: Session = Depends(get_db)):
                 severity_avg=most_positive.avg_severity,
             )
 
+    import json
+    adv_consumer = []
+    if product.advices:
+        try: adv_consumer = json.loads(product.advices)
+        except: adv_consumer = [product.advices]
+        
+    adv_seller = []
+    if product.advices_seller:
+        try: adv_seller = json.loads(product.advices_seller)
+        except: adv_seller = [product.advices_seller]
+
     return ProductAnalyticsResponse(
         product_id=product.id,
         product_name=product.name,
@@ -348,6 +357,10 @@ def get_product_analytics(product_id: int, db: Session = Depends(get_db)):
         review_count=review_count,
         claim_count=total_claims,
         overall_sentiment=product.overall_sentiment_score,
+        summary=product.summary,
+        advices=adv_consumer,
+        summary_seller=product.summary_seller,
+        advices_seller=adv_seller,
         critical_risk_factor=risk,
         strongest_selling_point=strength,
         theme_breakdown=theme_analytics,

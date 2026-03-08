@@ -35,6 +35,8 @@ import {
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AnimatePresence, motion } from "framer-motion";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -370,6 +372,10 @@ export default function ExploreContent({
     { role: "user" | "ai"; content: string }[]
   >([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [isChatStreaming, setIsChatStreaming] = useState(false);
+  const [activeRole, setActiveRole] = useState<"consumer" | "seller">(
+    "consumer",
+  );
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const regenerateSummary = useMutation({
@@ -405,29 +411,62 @@ export default function ExploreContent({
 
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatQuery.trim() || isChatLoading) return;
+    if (!chatQuery.trim() || isChatLoading || isChatStreaming) return;
+
     const userMsg = chatQuery;
     setChatQuery("");
     setChatHistory((prev) => [...prev, { role: "user", content: userMsg }]);
     setIsChatLoading(true);
+
     try {
-      const res = await api.post(`/products/${productId}/chat`, {
-        query: userMsg,
+      const baseUrl = api.defaults.baseURL || "http://localhost:8000";
+      const response = await fetch(`${baseUrl}/products/${productId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: userMsg }),
       });
-      setChatHistory((prev) => [
-        ...prev,
-        { role: "ai", content: res.data.answer },
-      ]);
-    } catch {
+
+      if (!response.ok) throw new Error("Failed to connect to AI");
+      if (!response.body) throw new Error("No response body from AI");
+
+      setIsChatLoading(false);
+      setIsChatStreaming(true);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let assistantMsg = "";
+
+      // Add initial empty AI message
+      setChatHistory((prev) => [...prev, { role: "ai", content: "" }]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        assistantMsg += chunk;
+
+        setChatHistory((prev) => {
+          const next = [...prev];
+          if (next.length > 0) {
+            next[next.length - 1].content = assistantMsg;
+          }
+          return next;
+        });
+      }
+    } catch (err: any) {
+      console.error("Chat Error:", err);
       setChatHistory((prev) => [
         ...prev,
         {
           role: "ai",
-          content: "Sorry, I couldn't reach the server. Please try again.",
+          content:
+            "Sorry, I'm having trouble connecting to my brain right now. Please try again soon.",
         },
       ]);
     } finally {
       setIsChatLoading(false);
+      setIsChatStreaming(false);
     }
   };
 
@@ -1013,15 +1052,42 @@ export default function ExploreContent({
                           </p>
                         </div>
                       </div>
+
+                      {/* Role Toggle */}
+                      <Tabs
+                        value={activeRole}
+                        onValueChange={(v: any) => setActiveRole(v)}
+                        className="bg-muted/50 p-1 rounded-xl h-9"
+                      >
+                        <TabsList className="bg-transparent border-none h-7">
+                          <TabsTrigger
+                            value="consumer"
+                            className="text-[10px] font-black uppercase tracking-widest px-4 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
+                          >
+                            Consumer
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="seller"
+                            className="text-[10px] font-black uppercase tracking-widest px-4 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
+                          >
+                            Business
+                          </TabsTrigger>
+                        </TabsList>
+                      </Tabs>
                     </div>
                   </CardHeader>
                   <CardContent className="p-8 space-y-6">
                     <div className="relative">
                       <Quote className="absolute -top-2 -left-1 h-8 w-8 text-primary/10" />
-                      <p className="text-lg leading-relaxed font-semibold text-foreground/90 italic pl-6">
-                        {productData.summary ||
-                          "No synthesis available for this product."}
-                      </p>
+                      <div className="text-lg leading-relaxed font-semibold text-foreground/90 italic pl-6 prose prose-sm dark:prose-invert max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {activeRole === "seller"
+                            ? productData.summary_seller ||
+                              "No business-specific synthesis available yet."
+                            : productData.summary ||
+                              "No consumer synthesis available for this product."}
+                        </ReactMarkdown>
+                      </div>
                     </div>
 
                     <div className="p-5 rounded-xl bg-muted/40 border border-border/20 flex items-start gap-4">
@@ -1069,9 +1135,11 @@ export default function ExploreContent({
                 {(() => {
                   let advices: string[] = [];
                   try {
-                    advices = productData?.advices
-                      ? JSON.parse(productData.advices)
-                      : [];
+                    const rawAdvices =
+                      activeRole === "seller"
+                        ? productData?.advices_seller
+                        : productData?.advices;
+                    advices = rawAdvices ? JSON.parse(rawAdvices) : [];
                   } catch {}
                   if (!advices.length) return null;
                   return (
@@ -1083,7 +1151,9 @@ export default function ExploreContent({
                           </div>
                           <div>
                             <CardTitle className="text-base font-black uppercase tracking-tight">
-                              Actionable Strategies
+                              {activeRole === "seller"
+                                ? "Business Strategies"
+                                : "Actionable Strategies"}
                             </CardTitle>
                             <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold mt-0.5">
                               AI-identified optimization paths
@@ -1394,7 +1464,15 @@ export default function ExploreContent({
                             : "bg-muted text-foreground/80 rounded-tl-none border border-border/30",
                         )}
                       >
-                        {msg.content}
+                        {msg.role === "ai" ? (
+                          <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:bg-muted-foreground/10 prose-pre:p-2 prose-pre:rounded-lg">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
+                        ) : (
+                          msg.content
+                        )}
                       </div>
                     </div>
                   ))}

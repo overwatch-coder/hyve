@@ -83,6 +83,8 @@ class ProductBase(BaseModel):
     category: str
     summary: Optional[str] = None
     advices: Optional[str] = None
+    summary_seller: Optional[str] = None
+    advices_seller: Optional[str] = None
     status: str = "ready"
 class RawIngestRequest(BaseModel):
     text: str

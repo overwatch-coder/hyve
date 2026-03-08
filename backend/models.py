@@ -18,6 +18,8 @@ class Product(Base):
     overall_sentiment_score = Column(Float, default=0.0)
     summary = Column(String, nullable=True)
     advices = Column(String, nullable=True) # Will store JSON list or pipe-separated string
+    summary_seller = Column(String, nullable=True)
+    advices_seller = Column(String, nullable=True) # Will store JSON list
     status = Column(String, default="ready") # "processing" or "ready"
     ingest_type = Column(String, nullable=True) # "csv", "url", "text"
     processing_step = Column(String, nullable=True) # e.g. "Cleaning Data", "Extracting Claims"

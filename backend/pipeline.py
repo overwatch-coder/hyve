@@ -109,12 +109,12 @@ Return ONLY valid JSON like: {{"0": {{"name": "Battery Life", "recommendation": 
         return {}
 
 def _generate_summary_and_advices(product_name: str, theme_names: dict, cluster_texts_map: dict, focus: str = None) -> dict:
-    """Use LLM to generate a summary and advice for the product based on all extracted themes and claims. Optionally apply a custom user focus."""
+    """Use LLM to generate summaries and advice for both consumers and sellers. Optionally apply a custom user focus."""
     import json
     if not cluster_texts_map:
-        return {"summary": "", "advices": "[]"}
+        return {"summary": "", "advices": [], "summary_seller": "", "advices_seller": []}
 
-    provider = os.getenv("LLM_PROVIDER", "openai")
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
     
     # Provide a concise summary of the data for the prompt
     data_summary = ""
@@ -123,13 +123,25 @@ def _generate_summary_and_advices(product_name: str, theme_names: dict, cluster_
         sample = texts[:5]
         data_summary += f"{theme}: {'; '.join(sample)}\n"
 
-    focus_prompt = f"\n\nUSER HAS REQUESTED A SPECIFIC FOCUS FOR THIS SUMMARY AND ADVICE: '{focus}'. Please tailor your executive summary and advices to specifically address this focus based on the data provided." if focus else ""
+    focus_prompt = f"\n\nUSER HAS REQUESTED A SPECIFIC FOCUS: '{focus}'. Please prioritize this focus in both perspectives." if focus else ""
 
-    prompt = f"""Given these summarized consumer review claims about '{product_name}', generate a short executive summary (1-2 sentences) of the overall sentiment and pros/cons. Also generate exactly 1 or 2 specific pieces of advice for a potential buyer.{focus_prompt}
+    prompt = f"""Given these summarized consumer review claims about '{product_name}', generate TWO perspectives:
+
+1. CONSUMER PERSPECTIVE:
+   - summary: A short executive summary (1-2 sentences) of the overall sentiment and pros/cons for a buyer.
+   - advices: Exactly 1 or 2 specific pieces of advice for a potential buyer.
+
+2. SELLER/BUSINESS PERSPECTIVE:
+   - summary: A strategic summary (1-2 sentences) of what the business owner should focus on next based on consumer pain points and strengths.
+   - advices: Exactly 1 or 2 actionable business strategies or improvements to increase customer satisfaction.
+
+{focus_prompt}
 
 {data_summary}
 
-Return ONLY valid JSON with keys "summary" (string) and "advices" (list of strings) like: {{"summary": "...", "advices": ["..."]}}"""
+Return ONLY valid JSON with keys:
+"summary" (string), "advices" (list of strings), "summary_seller" (string), "advices_seller" (list of strings).
+"""
 
     try:
         if provider == "openai":
@@ -138,17 +150,43 @@ Return ONLY valid JSON with keys "summary" (string) and "advices" (list of strin
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You summarize consumer reviews. Output JSON only."},
+                    {"role": "system", "content": "You are a product strategic analyst. Output JSON only."},
                     {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
-                timeout=15.0,
+                timeout=20.0,
             )
             result = json.loads(response.choices[0].message.content)
-            return {"summary": result.get("summary", ""), "advices": result.get("advices", [])}
+            return {
+                "summary": result.get("summary", ""),
+                "advices": result.get("advices", []),
+                "summary_seller": result.get("summary_seller", ""),
+                "advices_seller": result.get("advices_seller", [])
+            }
+        else:
+            import google.generativeai as genai
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(
+                f"System: You are a product strategic analyst. Output JSON only.\n\nUser: {prompt}"
+            )
+            text = response.text.strip()
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0].strip()
+            # In case Gemini doesn't use blocks
+            elif "{" in text:
+                text = text[text.find("{"):text.rfind("}")+1]
+                
+            result = json.loads(text)
+            return {
+                "summary": result.get("summary", ""),
+                "advices": result.get("advices", []),
+                "summary_seller": result.get("summary_seller", ""),
+                "advices_seller": result.get("advices_seller", [])
+            }
     except Exception as e:
         print(f"DEBUG: Summary/advice LLM call failed: {e}")
-        return {"summary": "", "advices": "[]"}
+        return {"summary": "", "advices": [], "summary_seller": "", "advices_seller": []}
 
 
 def deduplicate_claims_ai(claims_list: list, theme_name: str) -> list[dict]:
@@ -426,9 +464,9 @@ def cluster_product_claims(product_id: int, db: Session) -> dict:
         
         summary_data = _generate_summary_and_advices(product.name, theme_names, cluster_texts_map)
         product.summary = summary_data.get("summary", "")
-        
-        advices = summary_data.get("advices", [])
-        product.advices = json.dumps(advices)
+        product.advices = json.dumps(summary_data.get("advices", []))
+        product.summary_seller = summary_data.get("summary_seller", "")
+        product.advices_seller = json.dumps(summary_data.get("advices_seller", []))
 
     db.commit()
 
@@ -452,11 +490,15 @@ def extract_and_update_summary(product_id: int, db: Session, focus: str = None):
         cluster_texts_map[theme.id] = [c.claim_text for c in claims]
 
     result = _generate_summary_and_advices(product.name, theme_names, cluster_texts_map, focus)
+    import json
     if result.get("summary"):
         product.summary = result["summary"]
     if result.get("advices") is not None:
-        import json
         product.advices = json.dumps(result["advices"])
+    if result.get("summary_seller"):
+        product.summary_seller = result["summary_seller"]
+    if result.get("advices_seller") is not None:
+        product.advices_seller = json.dumps(result["advices_seller"])
         
     db.commit()
     db.refresh(product)
@@ -1036,20 +1078,23 @@ def run_raw_ingestion_background(raw_text: str, source_url: str = None, db = Non
     finally:
         db.close()
 
-def ask_product_assistant(product_id: int, query: str, db: Session) -> str:
+def ask_product_assistant(product_id: int, query: str, db: Session):
     """
     RAG-style chatbot that answers user questions about a product strictly using its reviews.
+    Returns a generator yielding text chunks (streaming).
     """
     import os
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
     if not product:
-        return "Product not found."
+        yield "Product not found."
+        return
         
     reviews = db.query(models.Review.original_text).filter(models.Review.product_id == product_id).limit(150).all()
     review_texts = [r[0] for r in reviews]
     
     if not review_texts:
-        return "I'm sorry, there are no reviews available for this product yet. I need reviews to answer your questions."
+        yield "I'm sorry, there are no reviews available for this product yet. I need reviews to answer your questions."
+        return
         
     # Combine texts and truncate if needed
     context = "\n---\n".join(review_texts)
@@ -1084,17 +1129,22 @@ CONSUMER REVIEWS CONTEXT:
                     {"role": "system", "content": "You are a helpful product assistant strictly answering based on reviews."},
                     {"role": "user", "content": prompt}
                 ],
+                stream=True,
                 timeout=15.0,
             )
-            return response.choices[0].message.content
+            for chunk in response:
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
         else:
             import google.generativeai as genai
             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
             model = genai.GenerativeModel('gemini-1.5-flash')
             response = model.generate_content(
-                f"System: You are a helpful product assistant strictly answering based on reviews.\n\nUser: {prompt}"
+                f"System: You are a helpful product assistant strictly answering based on reviews.\n\nUser: {prompt}",
+                stream=True
             )
-            return response.text
+            for chunk in response:
+                yield chunk.text
     except Exception as e:
         print(f"DEBUG: Chatbot LLM call failed: {e}")
-        return "I'm sorry, I'm having trouble processing your request right now. Please try again later."
+        yield "I'm sorry, I'm having trouble processing your request right now. Please try again later."

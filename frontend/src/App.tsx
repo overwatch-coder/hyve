@@ -7,7 +7,6 @@ import Products from "@/pages/Products";
 import Explore from "@/pages/Explore";
 import NewAnalysis from "@/pages/NewAnalysis";
 import ThemeDetails from "@/pages/ThemeDetails";
-import Dashboard from "@/pages/Dashboard";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
 import TestAnalytics from "./pages/TestAnalytics";
@@ -24,9 +23,6 @@ function App() {
             <Route path="/" element={<RootLayout />}>
               {/* Public/Landing */}
               <Route index element={<Home />} />
-
-              {/* Analytics Dashboard */}
-              <Route path="dashboard" element={<Dashboard />} />
 
               {/* Product Listing Map View */}
               <Route path="products" element={<Products />} />

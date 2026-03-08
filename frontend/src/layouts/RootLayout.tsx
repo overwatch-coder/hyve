@@ -52,16 +52,6 @@ export default function RootLayout() {
 
         <nav className="hidden md:flex items-center gap-6">
           <Link
-            to="/dashboard"
-            className={`text-sm font-semibold transition-colors ${
-              location.pathname === "/dashboard"
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Dashboard
-          </Link>
-          <Link
             to="/products"
             className={`text-sm font-semibold transition-colors ${
               location.pathname === "/products"
