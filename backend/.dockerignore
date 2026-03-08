@@ -1,0 +1,25 @@
+# Local development files
+venv/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local database and logs
+*.sqlite3
+hyvedb.sqlite3
+*.log
+uvicorn.log
+server.log
+
+# Frontend files (if accidentally included)
+node_modules/
+dist/
+
+# OS/Editor files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+nul
