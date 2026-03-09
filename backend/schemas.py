@@ -130,6 +130,21 @@ class ExperimentAnalytics(BaseModel):
     total_participants: int
     recent_activity: List[ExperimentResult]
 
+# --- Ingestion ---
+class BatchReviewItem(BaseModel):
+    text: str
+    source: str = "batch"
+    star_rating: Optional[float] = None
+
+class BatchIngestRequest(BaseModel):
+    reviews: List[BatchReviewItem]
+
+class BatchIngestResponse(BaseModel):
+    product_id: int
+    reviews_ingested: int
+    claims_extracted: int
+    themes_created: int
+
 # Update forward refs
 Theme.model_rebuild()
 Product.model_rebuild()

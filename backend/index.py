@@ -371,29 +371,17 @@ def get_product_analytics(product_id: int, db: Session = Depends(get_db)):
 
 
 # --- Batch Ingestion ---
-class BatchReviewItem(schemas.BaseModel):
-    text: str
-    source: str = "batch"
-    star_rating: float | None = None
-
-class BatchIngestRequest(schemas.BaseModel):
-    reviews: list[BatchReviewItem]
-
-class BatchIngestResponse(schemas.BaseModel):
-    product_id: int
-    reviews_ingested: int
-    claims_extracted: int
-    themes_created: int
+# Using schemas.BatchReviewItem, schemas.BatchIngestRequest, schemas.BatchIngestResponse
 
 @app.post(
     "/products/{product_id}/ingest",
-    response_model=BatchIngestResponse,
+    response_model=schemas.BatchIngestResponse,
     tags=["Ingestion"],
     summary="Batch ingest reviews and run AI pipeline",
 )
 def batch_ingest_reviews(
     product_id: int,
-    payload: BatchIngestRequest,
+    payload: schemas.BatchIngestRequest,
     db: Session = Depends(get_db),
 ):
     """
@@ -424,7 +412,7 @@ def batch_ingest_reviews(
     # Re-cluster all claims for this product
     cluster_result = cluster_product_claims(product_id, db)
 
-    return BatchIngestResponse(
+    return schemas.BatchIngestResponse(
         product_id=product_id,
         reviews_ingested=len(payload.reviews),
         claims_extracted=total_claims,
@@ -451,7 +439,7 @@ import io
 
 @app.post(
     "/products/{product_id}/ingest/csv",
-    response_model=BatchIngestResponse,
+    response_model=schemas.BatchIngestResponse,
     tags=["Ingestion"],
     summary="Ingest reviews from a CSV file via LLM column matching",
 )
@@ -514,7 +502,7 @@ async def ingest_csv(
             except (ValueError, TypeError):
                 pass
                 
-        reviews_payload.append(BatchReviewItem(
+        reviews_payload.append(schemas.BatchReviewItem(
             text=text,
             source=f"csv_upload_{file.filename}",
             star_rating=rating
@@ -523,7 +511,7 @@ async def ingest_csv(
     if not reviews_payload:
         raise HTTPException(status_code=400, detail="No valid reviews found in the extracted column.")
 
-    request_payload = BatchIngestRequest(reviews=reviews_payload)
+    request_payload = schemas.BatchIngestRequest(reviews=reviews_payload)
     
     # Delegate to standard batch ingest logic
     return batch_ingest_reviews(product_id, request_payload, db)
