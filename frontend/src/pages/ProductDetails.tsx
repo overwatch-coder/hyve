@@ -103,12 +103,12 @@ export default function ProductDetails() {
           <span className="text-primary font-medium">Analytics</span>
         </nav>
 
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="space-y-1">
-            <h2 className="text-4xl font-extrabold tracking-tight text-foreground">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div className="space-y-1.5">
+            <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground leading-tight">
               {data.product_name}
             </h2>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider">
                 {data.category}
               </span>
@@ -117,8 +117,8 @@ export default function ProductDetails() {
               </p>
             </div>
           </div>
-          <Link to={`/products/${productId}`}>
-            <Button className="h-11 px-6 gap-2 font-semibold shadow-lg shadow-primary/20 transition-all hover:translate-y-[-2px] hover:shadow-primary/30 active:translate-y-0">
+          <Link to={`/products/${productId}`} className="w-full md:w-auto">
+            <Button className="w-full h-12 md:h-11 px-6 gap-2 font-bold shadow-lg shadow-primary/20 transition-all hover:translate-y-[-2px] hover:shadow-primary/30 active:translate-y-0">
               Explore Decision Map
               <ArrowRight className="h-4 w-4" />
             </Button>

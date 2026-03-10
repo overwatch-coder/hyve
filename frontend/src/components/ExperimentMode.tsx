@@ -188,23 +188,23 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
               {/* Traditional */}
               <Card
-                className="group cursor-pointer border-border/40 hover:border-border transition-all duration-300 hover:shadow-lg rounded-2xl overflow-hidden"
+                className="group cursor-pointer border-border/40 hover:border-border transition-all duration-300 hover:shadow-lg rounded-2xl overflow-hidden flex flex-col"
                 onClick={() => startExperiment("traditional")}
               >
-                <CardHeader className="p-6 md:p-8 pb-4">
-                  <div className="h-12 w-12 bg-muted rounded-xl flex items-center justify-center mb-4 group-hover:bg-muted/80 transition-colors">
-                    <ListIcon className="h-6 w-6 text-muted-foreground" />
+                <CardHeader className="p-5 md:p-8 pb-3">
+                  <div className="h-10 w-10 md:h-12 md:w-12 bg-muted rounded-xl flex items-center justify-center mb-3 md:mb-4 group-hover:bg-muted/80 transition-colors">
+                    <ListIcon className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground" />
                   </div>
-                  <CardTitle className="text-xl font-black tracking-tight">
+                  <CardTitle className="text-lg md:text-xl font-black tracking-tight leading-tight">
                     Traditional Method
                   </CardTitle>
-                  <CardDescription className="text-sm font-medium mt-1">
+                  <CardDescription className="text-xs md:text-sm font-medium mt-1">
                     Standard review list format — similar to Amazon, Yelp, or
                     Walmart.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="px-6 md:px-8 pb-6 md:pb-8">
-                  <ul className="space-y-2 text-xs text-muted-foreground font-medium mb-6">
+                <CardContent className="px-5 md:px-8 pb-6 md:pb-8 flex-1 flex flex-col">
+                  <ul className="space-y-1.5 md:space-y-2 text-[11px] md:text-xs text-muted-foreground font-medium mb-5 flex-1">
                     {[
                       "Linear scroll of individual reviews",
                       "Static 1–5 star rating system",
@@ -216,7 +216,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                       </li>
                     ))}
                   </ul>
-                  <Button className="w-full font-black uppercase tracking-widest text-[10px] h-10 bg-muted text-foreground hover:bg-muted/80">
+                  <Button className="w-full font-black uppercase tracking-widest text-[9px] md:text-[10px] h-10 bg-muted text-foreground hover:bg-muted/80 mt-auto">
                     Start Traditional Test
                   </Button>
                 </CardContent>
@@ -224,23 +224,23 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
 
               {/* HYVE */}
               <Card
-                className="group cursor-pointer border-primary/30 hover:border-primary transition-all duration-300 hover:shadow-xl hover:shadow-primary/10 rounded-2xl overflow-hidden bg-primary/2"
+                className="group cursor-pointer border-primary/30 hover:border-primary transition-all duration-300 hover:shadow-xl hover:shadow-primary/10 rounded-2xl overflow-hidden bg-primary/2 flex flex-col"
                 onClick={() => startExperiment("hyve")}
               >
-                <CardHeader className="p-6 md:p-8 pb-4">
-                  <div className="h-12 w-12 bg-primary/15 rounded-xl flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
-                    <Zap className="h-6 w-6 text-primary fill-primary" />
+                <CardHeader className="p-5 md:p-8 pb-3">
+                  <div className="h-10 w-10 md:h-12 md:w-12 bg-primary/15 rounded-xl flex items-center justify-center mb-3 md:mb-4 group-hover:bg-primary/20 transition-colors">
+                    <Zap className="h-5 w-5 md:h-6 md:w-6 text-primary fill-primary" />
                   </div>
-                  <CardTitle className="text-xl font-black tracking-tight text-primary">
+                  <CardTitle className="text-lg md:text-xl font-black tracking-tight text-primary leading-tight">
                     HYVE Intelligence
                   </CardTitle>
-                  <CardDescription className="text-sm font-medium mt-1">
+                  <CardDescription className="text-xs md:text-sm font-medium mt-1">
                     Full AI-powered product analytics — the same page you'd
                     normally use.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="px-6 md:px-8 pb-6 md:pb-8">
-                  <ul className="space-y-2 text-xs text-primary/70 font-bold mb-6">
+                <CardContent className="px-5 md:px-8 pb-6 md:pb-8 flex-1 flex flex-col">
+                  <ul className="space-y-1.5 md:space-y-2 text-[11px] md:text-xs text-primary/70 font-bold mb-5 flex-1">
                     {[
                       "Interactive AI decision tree",
                       "Thematic sentiment breakdown",
@@ -252,7 +252,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                       </li>
                     ))}
                   </ul>
-                  <Button className="w-full font-black uppercase tracking-widest text-[10px] h-10 bg-primary text-primary-foreground shadow-md shadow-primary/20">
+                  <Button className="w-full font-black uppercase tracking-widest text-[9px] md:text-[10px] h-10 bg-primary text-primary-foreground shadow-md shadow-primary/20 mt-auto">
                     Start HYVE Test
                   </Button>
                 </CardContent>
@@ -365,7 +365,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
         className={cn(
           "h-10 px-4 rounded-full border font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-lg transition-all mb-4 mr-4 md:mb-0 md:mr-0",
           hudExpanded
-            ? "bg-card border-border/40 text-muted-foreground hover:text-foreground md:flex hidden"
+            ? "bg-card border-border/40 text-muted-foreground hover:text-foreground md:flex"
             : "bg-primary text-primary-foreground border-primary shadow-primary/20",
         )}
         whileHover={{ scale: 1.03 }}

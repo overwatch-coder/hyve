@@ -78,20 +78,20 @@ const HYVEAccordion: React.FC<HYVEAccordionProps> = ({
                   : "bg-card border-border",
             )}
           >
-            <AccordionTrigger className="hover:no-underline py-6">
-              <div className="flex flex-col items-start text-left w-full gap-2">
-                <div className="flex items-center justify-between w-full pr-4">
-                  <h3 className="text-xl font-bold tracking-tight">
+            <AccordionTrigger className="hover:no-underline py-5 md:py-6">
+              <div className="flex flex-col items-start text-left w-full gap-3 md:gap-2">
+                <div className="flex flex-col md:flex-row md:items-center justify-between w-full pr-4 gap-4 md:gap-0">
+                  <h3 className="text-lg md:text-xl font-bold tracking-tight leading-tight">
                     {theme.name}
                   </h3>
                   <div className="flex items-center gap-3">
-                    <div className="flex flex-col items-end gap-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <div className="flex flex-row md:flex-col items-center md:items-end gap-3 md:gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
                         Reception
                       </span>
                       <div className="flex items-center gap-2">
                         <div
-                          className="w-20 h-1.5 bg-secondary rounded-full overflow-hidden flex"
+                          className="w-16 md:w-20 h-1.5 bg-secondary rounded-full overflow-hidden flex shrink-0"
                           title={`Higher % = more positive consumer reviews. ${Math.round(theme.positive_ratio * 100)}% are positive.`}
                         >
                           <div
@@ -107,7 +107,7 @@ const HYVEAccordion: React.FC<HYVEAccordionProps> = ({
                         </div>
                         <span
                           className={cn(
-                            "text-xs font-black",
+                            "text-[11px] md:text-xs font-black whitespace-nowrap",
                             getSentimentColor(theme.positive_ratio),
                           )}
                         >
@@ -117,7 +117,7 @@ const HYVEAccordion: React.FC<HYVEAccordionProps> = ({
                     </div>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground font-medium">
+                <p className="text-[10px] md:text-xs text-muted-foreground font-medium">
                   {theme.claim_count} consumer insights extracted
                 </p>
               </div>

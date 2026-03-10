@@ -695,11 +695,11 @@ export default function ExploreContent({
                 <h1 className="text-2xl md:text-4xl font-black tracking-tighter text-foreground uppercase truncate">
                   {productData?.name || "Product Analysis"}
                 </h1>
-                <div className="flex items-center gap-3 mt-1.5">
+                <div className="flex items-center gap-3 mt-1.5 overflow-x-auto no-scrollbar pb-1">
                   {productData?.overall_sentiment_score != null && (
                     <div
                       className={cn(
-                        "flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border",
+                        "flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border shrink-0",
                         productData.overall_sentiment_score >= 0.7
                           ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
                           : productData.overall_sentiment_score >= 0.4
@@ -718,7 +718,7 @@ export default function ExploreContent({
                     </div>
                   )}
                   {analyticsData?.review_count && (
-                    <span className="text-[10px] text-muted-foreground font-medium">
+                    <span className="text-[10px] text-muted-foreground font-medium shrink-0 whitespace-nowrap">
                       {analyticsData.review_count.toLocaleString()} reviews
                       analyzed
                     </span>
@@ -727,23 +727,23 @@ export default function ExploreContent({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
               <Tabs
                 value={viewMode}
                 onValueChange={(v) => setViewMode(v as any)}
                 className="w-full sm:w-auto"
               >
-                <TabsList className="h-9 w-full sm:w-auto bg-muted/60 border border-border/30">
+                <TabsList className="h-10 w-full sm:w-auto bg-muted/60 border border-border/30">
                   <TabsTrigger
                     value="graph"
-                    className="flex-1 sm:flex-none flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-3"
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-4"
                   >
                     <LayoutGrid className="h-3.5 w-3.5" />
                     Graph
                   </TabsTrigger>
                   <TabsTrigger
                     value="accordion"
-                    className="flex-1 sm:flex-none flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-3"
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-4"
                   >
                     <ListTree className="h-3.5 w-3.5" />
                     Accordion
@@ -751,37 +751,35 @@ export default function ExploreContent({
                 </TabsList>
               </Tabs>
 
-              {productData && productData.status !== "processing" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 sm:flex-none text-[10px] font-black uppercase tracking-widest border-border/50 hover:border-primary/50 hover:text-primary transition-all gap-2 h-9 px-4"
-                  onClick={() => setShowRegenModal(true)}
-                  disabled={regenerateSummary.isPending}
-                >
-                  {regenerateSummary.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCcw className="h-3.5 w-3.5" />
-                  )}
-                  Regenerate
-                </Button>
-              )}
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                {productData && productData.status !== "processing" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 sm:flex-none text-[10px] font-black uppercase tracking-widest border-border/50 hover:border-primary/50 hover:text-primary transition-all gap-2 h-10 px-4"
+                    onClick={() => setShowRegenModal(true)}
+                    disabled={regenerateSummary.isPending}
+                  >
+                    {regenerateSummary.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCcw className="h-3.5 w-3.5" />
+                    )}
+                    Regenerate
+                  </Button>
+                )}
 
-              {!hideExperimentTrigger && (
-                <div
-                  onClick={onStartExperiment}
-                  className="flex-1 sm:flex-none"
-                >
+                {!hideExperimentTrigger && (
                   <Button
                     size="sm"
-                    className="w-full flex items-center gap-2 font-black uppercase tracking-widest text-[10px] h-9 px-4 bg-primary text-primary-foreground shadow-md shadow-primary/20 hover:shadow-primary/30 transition-all"
+                    onClick={onStartExperiment}
+                    className="flex-1 sm:flex-none flex items-center gap-2 font-black uppercase tracking-widest text-[10px] h-10 px-4 bg-primary text-primary-foreground shadow-md shadow-primary/20 hover:shadow-primary/30 transition-all"
                   >
                     <Play className="h-3.5 w-3.5 fill-current" />
                     A/B Mission
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         )}
