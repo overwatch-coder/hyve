@@ -6,6 +6,7 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  ReactFlowProvider,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import dagre from "dagre";
@@ -339,7 +340,7 @@ export interface ExploreContentProps {
   onStartExperiment?: () => void;
 }
 
-export default function ExploreContent({
+export function ExploreContentImpl({
   analyticsData,
   productData,
   productId,
@@ -756,7 +757,7 @@ export default function ExploreContent({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1 sm:flex-none text-[10px] font-black uppercase tracking-widest border-border/50 hover:border-primary/50 hover:text-primary transition-all gap-2 h-10 px-4"
+                    className="flex-1 sm:flex-none flex items-center justify-center text-[10px] font-black uppercase tracking-widest border-border/50 hover:border-primary/50 hover:text-primary transition-all gap-2 h-10 px-4 py-2"
                     onClick={() => setShowRegenModal(true)}
                     disabled={regenerateSummary.isPending}
                   >
@@ -773,7 +774,7 @@ export default function ExploreContent({
                   <Button
                     size="sm"
                     onClick={onStartExperiment}
-                    className="flex-1 sm:flex-none flex items-center gap-2 font-black uppercase tracking-widest text-[10px] h-10 px-4 bg-primary text-primary-foreground shadow-md shadow-primary/20 hover:shadow-primary/30 transition-all"
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 font-black uppercase tracking-widest text-[10px] h-10 px-4 py-2 bg-primary text-primary-foreground shadow-md shadow-primary/20 hover:shadow-primary/30 transition-all"
                   >
                     <Play className="h-3.5 w-3.5 fill-current" />
                     A/B Mission
@@ -1063,16 +1064,16 @@ export default function ExploreContent({
                         onValueChange={(v: any) => setActiveRole(v)}
                         className="bg-muted/50 p-1 rounded-xl h-9 w-full sm:w-auto overflow-x-auto no-scrollbar"
                       >
-                        <TabsList className="bg-transparent border-none h-7 flex w-fit min-w-full">
+                        <TabsList className="bg-transparent border-none h-7 flex w-full min-w-full">
                           <TabsTrigger
                             value="consumer"
-                            className="text-[10px] font-black uppercase tracking-widest px-4 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
+                            className="text-[10px] flex-1 font-black uppercase tracking-widest px-4 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
                           >
                             Consumer
                           </TabsTrigger>
                           <TabsTrigger
                             value="seller"
-                            className="text-[10px] font-black uppercase tracking-widest px-4 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
+                            className="text-[10px] flex-1 font-black uppercase tracking-widest px-4 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
                           >
                             Business
                           </TabsTrigger>
@@ -1537,5 +1538,13 @@ export default function ExploreContent({
         </Button>
       </div>
     </div>
+  );
+}
+
+export default function ExploreContent(props: ExploreContentProps) {
+  return (
+    <ReactFlowProvider>
+      <ExploreContentImpl {...props} />
+    </ReactFlowProvider>
   );
 }

@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { ReactFlowProvider } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import ExperimentMode from "@/components/ExperimentMode";
 import ExploreCore from "@/components/ExploreCore";
@@ -516,9 +515,7 @@ function ExploreInner() {
 export default function Explore() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <ReactFlowProvider>
-        <ExploreInner />
-      </ReactFlowProvider>
+      <ExploreInner />
     </div>
   );
 }
