@@ -32,3 +32,4 @@ hyvedb.sqlite3
 nul
 
 /tasks
+/backend/hyvedb.sqlite3
