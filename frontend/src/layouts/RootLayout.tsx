@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 export default function RootLayout() {
   const location = useLocation();
   const [showDisclaimer, setShowDisclaimer] = useState(true);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   // On the explore / product detail page we want full-bleed — no padding
   const isProductPage = /^\/products\/[^/]+$/.test(location.pathname);
@@ -106,7 +107,7 @@ export default function RootLayout() {
 
           {/* Mobile Navigation */}
           <div className="md:hidden">
-            <Sheet>
+            <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-9 w-9">
                   <Menu className="h-5 w-5" />
@@ -130,6 +131,7 @@ export default function RootLayout() {
                 <div className="flex flex-col gap-4">
                   <Link
                     to="/products"
+                    onClick={() => setSheetOpen(false)}
                     className={cn(
                       "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
                       location.pathname === "/products"
@@ -142,6 +144,7 @@ export default function RootLayout() {
                   </Link>
                   <Link
                     to="/admin"
+                    onClick={() => setSheetOpen(false)}
                     className={cn(
                       "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
                       location.pathname.startsWith("/admin")
@@ -154,6 +157,7 @@ export default function RootLayout() {
                   </Link>
                   <Link
                     to="/test-analytics"
+                    onClick={() => setSheetOpen(false)}
                     className={cn(
                       "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
                       location.pathname === "/test-analytics"
@@ -179,7 +183,7 @@ export default function RootLayout() {
           </div>
 
           <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-[10px] font-black text-primary">
-            JS
+            SCI
           </div>
         </div>
       </header>
