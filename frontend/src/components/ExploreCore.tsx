@@ -751,7 +751,7 @@ export default function ExploreContent({
                 </TabsList>
               </Tabs>
 
-              <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
                 {productData && productData.status !== "processing" && (
                   <Button
                     variant="outline"
@@ -788,8 +788,8 @@ export default function ExploreContent({
       <div className="px-4 md:px-8 pt-6 pb-32 flex flex-col gap-8 md:gap-10">
         {/* ── INTELLIGENCE MATRIX (immediately after hero) ── */}
         <div ref={matrixRef} className="scroll-mt-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+            <div className="w-full sm:w-auto">
               <h2 className="text-lg font-black tracking-tight text-foreground uppercase flex items-center gap-2">
                 <LayoutGrid className="h-5 w-5 text-primary" />
                 Intelligence Matrix
@@ -801,7 +801,7 @@ export default function ExploreContent({
               </p>
             </div>
             {viewMode === "graph" && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -937,8 +937,8 @@ export default function ExploreContent({
           analyticsData &&
           analyticsData.theme_breakdown?.length > 0 && (
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <div>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+                <div className="w-full sm:w-auto">
                   <h2 className="text-lg font-black tracking-tight text-foreground uppercase flex items-center gap-2">
                     <GitBranch className="h-5 w-5 text-primary" />
                     Consumer Insights
@@ -948,7 +948,7 @@ export default function ExploreContent({
                     Intelligence Matrix
                   </p>
                 </div>
-                <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest">
+                <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest w-full sm:w-auto">
                   <div className="flex items-center gap-1.5 text-muted-foreground">
                     <div className="h-2 w-2 rounded-full bg-emerald-500" />
                     Positive
@@ -1038,8 +1038,8 @@ export default function ExploreContent({
               <div className="lg:col-span-3 flex flex-col gap-6">
                 <Card className="border-border/30 bg-card/40 rounded-2xl shadow-sm overflow-hidden">
                   <CardHeader className="px-8 pt-8 pb-6 border-b border-border/20">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-center gap-3">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 w-full">
+                      <div className="flex items-center gap-3 w-full sm:w-auto">
                         <div className="h-10 w-10 bg-primary/10 rounded-xl flex items-center justify-center">
                           <Sparkles className="h-5 w-5 text-primary" />
                         </div>
@@ -1061,9 +1061,9 @@ export default function ExploreContent({
                       <Tabs
                         value={activeRole}
                         onValueChange={(v: any) => setActiveRole(v)}
-                        className="bg-muted/50 p-1 rounded-xl h-9"
+                        className="bg-muted/50 p-1 rounded-xl h-9 w-full sm:w-auto overflow-x-auto no-scrollbar"
                       >
-                        <TabsList className="bg-transparent border-none h-7">
+                        <TabsList className="bg-transparent border-none h-7 flex w-fit min-w-full">
                           <TabsTrigger
                             value="consumer"
                             className="text-[10px] font-black uppercase tracking-widest px-4 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
