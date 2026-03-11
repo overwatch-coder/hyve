@@ -63,6 +63,7 @@ import {
   ClaimNode,
   ThemeNode,
   SentimentNode,
+  QuoteNode,
 } from "@/components/graph-nodes";
 import { Link } from "react-router-dom";
 
@@ -72,6 +73,7 @@ const nodeTypes = {
   theme: ThemeNode,
   sentiment: SentimentNode,
   claim: ClaimNode,
+  quote: QuoteNode,
 };
 
 /* ──────────────────────────────────────────────
@@ -102,6 +104,10 @@ const getLayoutedElements = (nodes: any[], edges: any[], direction = "TB") => {
     if (node.type === "claim") {
       w = 210;
       h = 70;
+    }
+    if (node.type === "quote") {
+      w = 260;
+      h = 100;
     }
     g.setNode(node.id, { width: w, height: h });
   });
@@ -165,6 +171,7 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
 
       posClaims.forEach((claim: any) => {
         const claimId = `claim-${claim.id}`;
+        const quoteId = `quote-${claim.id}`;
         claimIds.push(claimId);
         nodes.push({
           id: claimId,
@@ -175,8 +182,33 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
                 ? claim.claim_text.substring(0, 70) + "..."
                 : claim.claim_text,
             fullClaim: claim,
+            expanded: false,
+            childIds: [quoteId],
+            childCount: 1,
           },
           position: { x: 0, y: 0 },
+          hidden: true,
+        });
+
+        nodes.push({
+          id: quoteId,
+          type: "quote",
+          data: {
+            quote: claim.evidence_text || claim.context_text || claim.claim_text,
+            author: "Verified User",
+            source: "Consumer Review",
+            rating: 5,
+          },
+          position: { x: 0, y: 0 },
+          hidden: true,
+        });
+
+        edges.push({
+          id: `e-${claimId}-${quoteId}`,
+          source: claimId,
+          target: quoteId,
+          type: "smoothstep",
+          style: { stroke: "hsl(220 15% 85%)", strokeWidth: 1.5, opacity: 0.6, strokeDasharray: "4 4" },
           hidden: true,
         });
 
@@ -221,6 +253,7 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
 
       negClaims.forEach((claim: any) => {
         const claimId = `claim-${claim.id}`;
+        const quoteId = `quote-${claim.id}`;
         claimIds.push(claimId);
         nodes.push({
           id: claimId,
@@ -231,8 +264,33 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
                 ? claim.claim_text.substring(0, 70) + "..."
                 : claim.claim_text,
             fullClaim: claim,
+            expanded: false,
+            childIds: [quoteId],
+            childCount: 1,
           },
           position: { x: 0, y: 0 },
+          hidden: true,
+        });
+
+        nodes.push({
+          id: quoteId,
+          type: "quote",
+          data: {
+            quote: claim.evidence_text || claim.context_text || claim.claim_text,
+            author: "Verified User",
+            source: "Consumer Review",
+            rating: 1,
+          },
+          position: { x: 0, y: 0 },
+          hidden: true,
+        });
+
+        edges.push({
+          id: `e-${claimId}-${quoteId}`,
+          source: claimId,
+          target: quoteId,
+          type: "smoothstep",
+          style: { stroke: "hsl(220 15% 85%)", strokeWidth: 1.5, opacity: 0.6, strokeDasharray: "4 4" },
           hidden: true,
         });
 

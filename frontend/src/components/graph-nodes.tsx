@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { Sparkles, RefreshCcw, Loader2, Star } from "lucide-react";
+import { Sparkles, RefreshCcw, Loader2, Star, Quote } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -308,6 +308,75 @@ function ClaimNodeRaw({
   );
 }
 export const ClaimNode = memo(ClaimNodeRaw);
+
+/* ══════════════════════════════════════════════
+   Quote Node (Sub-Leaf)
+   Real user quote evidence
+   ══════════════════════════════════════════════ */
+function QuoteNodeRaw({
+  data,
+}: {
+  data: ExpandableNodeData & {
+    quote: string;
+    author?: string;
+    source?: string;
+    rating?: number;
+  };
+}) {
+  const quote = data.quote || "No evidence provided.";
+  const author = data.author || "Verified User";
+  const source = data.source || "Review";
+  const rating = data.rating || 5;
+
+  return (
+    <div
+      className="flex flex-col rounded-xl p-4 transition-all duration-300 shadow-sm"
+      style={{
+        background: "hsl(40 50% 98%)",
+        border: `1px solid hsl(40 20% 90%)`,
+        minWidth: 260,
+        maxWidth: 320,
+      }}
+    >
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="bg-muted-foreground/30! border-none! w-1.5! h-1.5!"
+      />
+
+      <div className="relative mb-3 flex gap-2 items-start">
+        <Quote className="h-3 w-3 text-primary/40 shrink-0 mt-0.5" />
+        <p className="text-[11px] italic text-gray-800 leading-relaxed font-medium">
+          "{quote}"
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between border-t border-gray-200/50 pt-3 mt-auto">
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black text-gray-900">{author}</span>
+          <span className="text-[8px] text-muted-foreground uppercase tracking-widest">{source}</span>
+        </div>
+        {rating && (
+          <div className="flex gap-0.5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Star
+                key={i}
+                className={cn("h-2.5 w-2.5", i < rating ? "fill-amber-400 text-amber-400" : "fill-gray-200 text-gray-200")}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="opacity-0! w-0! h-0!"
+      />
+    </div>
+  );
+}
+export const QuoteNode = memo(QuoteNodeRaw);
 
 /* ══════════════════════════════════════════════
    Summary Node (Terminal)
