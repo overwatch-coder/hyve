@@ -56,4 +56,4 @@ RUN playwright install chromium
 EXPOSE 8000
 
 # Run initialization and then start the server
-CMD python reset_db.py && uvicorn index:app --host 0.0.0.0 --port 8000
+CMD uvicorn index:app --host 0.0.0.0 --port 8000
