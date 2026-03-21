@@ -49,7 +49,7 @@ function ExploreInner() {
   });
 
   // FETCH: Product Analytics
-  const { data: analyticsData } = useQuery({
+  const { data: analyticsData, refetch: refetchAnalytics } = useQuery({
     queryKey: ["product-analytics", productId],
     queryFn: async () => {
       const res = await api.get(`/products/${productId}/analytics`);
@@ -58,7 +58,9 @@ function ExploreInner() {
     enabled: !!productId,
   });
 
-  const [viewMode, setViewMode] = useState<"accordion" | "graph">("graph");
+  const [viewMode, setViewMode] = useState<
+    "accordion" | "graph" | "traditional"
+  >("graph");
   const [isExperimentMode, setIsExperimentMode] = useState(false);
   const [processingDone, setProcessingDone] = useState(false);
   // Only show modal when product transitions from processing → ready, not on initial load of ready products
@@ -85,6 +87,11 @@ function ExploreInner() {
       // Keep modal open so user sees the completion screen — they close it manually
     }
   }, [productData?.status, hasBeenProcessing, processingDone]);
+
+  const refetchAll = () => {
+    refetch();
+    refetchAnalytics();
+  };
 
   if (isLoading) {
     return (
@@ -218,6 +225,70 @@ function ExploreInner() {
           "knowledge",
           "metadata",
         ],
+      },
+      {
+        id: "claims",
+        label: "Distilling Insights",
+        icon: Zap,
+        keywords: [
+          "claims",
+          "distilling",
+          "extracting",
+          "sentiment",
+          "analysing",
+        ],
+      },
+      {
+        id: "clustering",
+        label: "Harmonizing Patterns",
+        icon: GitBranch,
+        keywords: ["clustering", "harmonizing", "thematic"],
+      },
+      {
+        id: "summary",
+        label: "Generating Analysis",
+        icon: Bot,
+        keywords: ["summary", "advice", "complete", "analysis complete"],
+      },
+    ],
+    canopy_amazon: [
+      {
+        id: "fetch",
+        label: "Fetching Amazon Reviews",
+        icon: Sparkles,
+        keywords: ["fetching", "amazon", "canopy", "reviews"],
+      },
+      {
+        id: "claims",
+        label: "Distilling Insights",
+        icon: Zap,
+        keywords: [
+          "claims",
+          "distilling",
+          "extracting",
+          "sentiment",
+          "analysing",
+        ],
+      },
+      {
+        id: "clustering",
+        label: "Harmonizing Patterns",
+        icon: GitBranch,
+        keywords: ["clustering", "harmonizing", "thematic"],
+      },
+      {
+        id: "summary",
+        label: "Generating Analysis",
+        icon: Bot,
+        keywords: ["summary", "advice", "complete", "analysis complete"],
+      },
+    ],
+    native: [
+      {
+        id: "ingest",
+        label: "Processing Native Reviews",
+        icon: Sparkles,
+        keywords: ["processing", "native", "community", "ingest", "cleaning"],
       },
       {
         id: "claims",
@@ -480,7 +551,10 @@ function ExploreInner() {
                       <Button
                         size="lg"
                         className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl h-14 font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 group"
-                        onClick={() => setShowModal(false)}
+                        onClick={() => {
+                          setShowModal(false);
+                          refetchAll();
+                        }}
                       >
                         View Interactive Insights
                         <ChevronRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />

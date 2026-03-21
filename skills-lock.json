@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "amazon-data": {
+      "source": "canopy-api/skills",
+      "sourceType": "github",
+      "computedHash": "15c73b4eb03910174ff47e52dc03fe45ea2c0dc417c5802c70ad54272a04d13c"
+    }
+  }
+}

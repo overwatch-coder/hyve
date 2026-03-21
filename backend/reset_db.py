@@ -9,13 +9,17 @@ def reset_db():
     print("HYVE — INTERNAL DATABASE INITIALIZATION")
     print("=" * 60)
     
-    print("\n-> Resetting tables...")
-    models.Base.metadata.drop_all(bind=engine)
+    print("\n-> Initializing tables...")
     models.Base.metadata.create_all(bind=engine)
-    print("  [OK] Tables recreated.")
+    print("  [OK] Tables initialized safely.")
     
     db = SessionLocal()
     try:
+        if db.query(models.Product).first():
+            print("\n  [SKIP] Existing data detected. Database is already initialized.")
+            print("  Aborting seed process to protect production records.")
+            return
+
         products_and_reviews = [
             ("ProBuds ANC 500", "Electronics", EARBUDS_REVIEWS),
             ("ErgoRise Standing Desk", "Furniture", DESK_REVIEWS),

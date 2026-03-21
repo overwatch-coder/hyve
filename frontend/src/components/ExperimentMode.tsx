@@ -69,7 +69,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   });
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [participantName, setParticipantName] = useState("");
-  const [viewMode, setViewMode] = useState<"accordion" | "graph">("graph");
+  const [viewMode, setViewMode] = useState<"accordion" | "graph" | "traditional">("graph");
   const [hudExpanded, setHudExpanded] = useState(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 

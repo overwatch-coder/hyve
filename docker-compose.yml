@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: hyve-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: hyve
+      POSTGRES_PASSWORD: hyvepass
+      POSTGRES_DB: hyve
+    ports:
+      - "5433:5432"
+    volumes:
+      - hyve-pgdata:/var/lib/postgresql/data
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+
+volumes:
+  hyve-pgdata:

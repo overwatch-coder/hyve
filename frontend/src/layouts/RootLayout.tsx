@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   BarChart2,
   Menu,
+  ShoppingBag,
 } from "lucide-react";
 import {
   Sheet,
@@ -74,6 +75,17 @@ export default function RootLayout() {
             }`}
           >
             Products
+          </Link>
+          <Link
+            to="/amazon"
+            className={`text-sm font-semibold transition-colors flex items-center gap-1.5 ${
+              location.pathname.startsWith("/amazon")
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <ShoppingBag className="h-3.5 w-3.5" />
+            Amazon
           </Link>
           <Link
             to="/admin"
@@ -141,6 +153,19 @@ export default function RootLayout() {
                   >
                     <Activity className="h-4 w-4" />
                     Products
+                  </Link>
+                  <Link
+                    to="/amazon"
+                    onClick={() => setSheetOpen(false)}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
+                      location.pathname.startsWith("/amazon")
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                    )}
+                  >
+                    <ShoppingBag className="h-4 w-4" />
+                    Amazon Search
                   </Link>
                   <Link
                     to="/admin"

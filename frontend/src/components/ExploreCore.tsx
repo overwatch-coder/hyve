@@ -17,6 +17,7 @@ import {
   Play,
   X,
   ChevronRight,
+  ChevronLeft,
   Maximize2,
   Minimize2,
   RefreshCcw,
@@ -40,7 +41,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -194,7 +195,8 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
           id: quoteId,
           type: "quote",
           data: {
-            quote: claim.evidence_text || claim.context_text || claim.claim_text,
+            quote:
+              claim.evidence_text || claim.context_text || claim.claim_text,
             author: "Verified User",
             source: "Consumer Review",
             rating: 5,
@@ -208,7 +210,12 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
           source: claimId,
           target: quoteId,
           type: "smoothstep",
-          style: { stroke: "hsl(220 15% 85%)", strokeWidth: 1.5, opacity: 0.6, strokeDasharray: "4 4" },
+          style: {
+            stroke: "hsl(220 15% 85%)",
+            strokeWidth: 1.5,
+            opacity: 0.6,
+            strokeDasharray: "4 4",
+          },
           hidden: true,
         });
 
@@ -222,6 +229,11 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
         });
       });
 
+      const totalPosMentions = posClaims.reduce(
+        (acc: number, c: any) => acc + (c.mention_count || 1),
+        0,
+      );
+
       nodes.push({
         id: posSentimentId,
         type: "sentiment",
@@ -231,6 +243,7 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
           expanded: false,
           childIds: claimIds,
           childCount: claimIds.length,
+          mentionCount: totalPosMentions,
         },
         position: { x: 0, y: 0 },
         hidden: true,
@@ -276,7 +289,8 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
           id: quoteId,
           type: "quote",
           data: {
-            quote: claim.evidence_text || claim.context_text || claim.claim_text,
+            quote:
+              claim.evidence_text || claim.context_text || claim.claim_text,
             author: "Verified User",
             source: "Consumer Review",
             rating: 1,
@@ -290,7 +304,12 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
           source: claimId,
           target: quoteId,
           type: "smoothstep",
-          style: { stroke: "hsl(220 15% 85%)", strokeWidth: 1.5, opacity: 0.6, strokeDasharray: "4 4" },
+          style: {
+            stroke: "hsl(220 15% 85%)",
+            strokeWidth: 1.5,
+            opacity: 0.6,
+            strokeDasharray: "4 4",
+          },
           hidden: true,
         });
 
@@ -304,6 +323,11 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
         });
       });
 
+      const totalNegMentions = negClaims.reduce(
+        (acc: number, c: any) => acc + (c.mention_count || 1),
+        0,
+      );
+
       nodes.push({
         id: negSentimentId,
         type: "sentiment",
@@ -313,6 +337,7 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
           expanded: false,
           childIds: claimIds,
           childCount: claimIds.length,
+          mentionCount: totalNegMentions,
         },
         position: { x: 0, y: 0 },
         hidden: true,
@@ -391,12 +416,147 @@ export interface ExploreContentProps {
   productData: any;
   productId: string;
   onRefresh: () => void;
-  viewMode: "accordion" | "graph";
-  setViewMode: (mode: "accordion" | "graph") => void;
+  viewMode: "accordion" | "graph" | "traditional";
+  setViewMode: (mode: "accordion" | "graph" | "traditional") => void;
   hideExperimentTrigger?: boolean;
   isExperiment?: boolean;
   onStartExperiment?: () => void;
 }
+
+// --- Traditional Reviews View Subcomponent ---
+
+function ExpandableText({
+  text,
+  limit = 200,
+}: {
+  text: string;
+  limit?: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text && text.length > limit;
+
+  return (
+    <div className="space-y-1 mt-1">
+      <p
+        className={cn(
+          "text-sm font-medium leading-relaxed text-foreground/80 whitespace-pre-wrap",
+          !expanded && isLong && "line-clamp-4",
+        )}
+      >
+        {text}
+      </p>
+      {isLong && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(!expanded);
+          }}
+          className="text-xs font-semibold text-primary hover:underline"
+        >
+          {expanded ? "Read Less" : "Read More"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function TraditionalReviewsView({ productId }: { productId: string }) {
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useQuery({
+    queryKey: ["product-traditional-reviews", productId, page],
+    queryFn: async () => {
+      const res = await api.get(
+        `/products/${productId}/reviews?page=${page}&size=20`,
+      );
+      return res.data;
+    },
+    enabled: !!productId,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const reviews = data?.items || [];
+  const totalPages = data?.pages || 1;
+
+  if (reviews.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-20 text-muted-foreground">
+        No raw feedback has been collected for this product yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-y-auto p-4 md:p-6 space-y-4">
+      {reviews.map((r: any) => (
+        <Card
+          key={r.id}
+          className="border-border/30 bg-card/40 rounded-xl shadow-sm"
+        >
+          <CardContent className="p-4 flex flex-col gap-2">
+            <div className="flex items-center justify-between pb-1 border-b border-border/10">
+              <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-1">
+                {r.source.includes("amazon")
+                  ? "Amazon Review"
+                  : r.source || "Consumer"}
+              </span>
+              <span className="text-[10px] text-muted-foreground font-medium">
+                {new Date(r.created_at).toLocaleDateString()}
+              </span>
+            </div>
+            {r.star_rating != null && (
+              <div className="flex gap-0.5 mt-1">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Sparkles
+                    key={s}
+                    className={cn(
+                      "h-3 w-3",
+                      s <= r.star_rating
+                        ? "text-amber-400 fill-amber-400"
+                        : "text-muted-foreground/20",
+                    )}
+                  />
+                ))}
+              </div>
+            )}
+            <ExpandableText text={r.original_text || ""} />
+          </CardContent>
+        </Card>
+      ))}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-4 pt-4 pb-8">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+          </Button>
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Page {page} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+          >
+            Next <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+// -------------------------------------------
 
 export function ExploreContentImpl({
   analyticsData,
@@ -743,7 +903,7 @@ export function ExploreContentImpl({
           </span>
           <ChevronRight className="h-3 w-3" />
           <span className="text-primary font-semibold text-[10px] uppercase tracking-widest">
-            {productData?.name || "Product"}
+            {productData?.name?.slice(0, 20) || "Product"}
           </span>
         </nav>
 
@@ -751,7 +911,7 @@ export function ExploreContentImpl({
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
             <div className="flex items-center gap-5">
               <div className="min-w-0">
-                <h1 className="text-2xl md:text-4xl font-black tracking-tighter text-foreground uppercase truncate">
+                <h1 className="text-xl md:text-3xl font-black text-foreground uppercase max-w-2xl">
                   {productData?.name || "Product Analysis"}
                 </h1>
                 <div className="flex items-center gap-3 mt-1.5 overflow-x-auto no-scrollbar pb-1">
@@ -807,6 +967,13 @@ export function ExploreContentImpl({
                     <ListTree className="h-3.5 w-3.5" />
                     Accordion
                   </TabsTrigger>
+                  {!hideExperimentTrigger && <TabsTrigger
+                    value="traditional"
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-4"
+                  >
+                    <Quote className="h-3.5 w-3.5" />
+                    Traditional
+                  </TabsTrigger>}
                 </TabsList>
               </Tabs>
 
@@ -890,7 +1057,9 @@ export function ExploreContentImpl({
           </div>
 
           <div className="h-[600px] rounded-2xl border border-border/40 bg-card/30 overflow-hidden shadow-sm">
-            {viewMode === "accordion" ? (
+            {viewMode === "traditional" ? (
+              <TraditionalReviewsView productId={productId} />
+            ) : viewMode === "accordion" ? (
               <div className="h-full overflow-y-auto p-6">
                 <HYVEAccordion
                   themes={productData?.themes || []}

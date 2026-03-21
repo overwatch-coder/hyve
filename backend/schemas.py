@@ -149,3 +149,53 @@ class BatchIngestResponse(BaseModel):
 Theme.model_rebuild()
 Product.model_rebuild()
 ExperimentResult.model_rebuild()
+
+# --- Amazon Catalog (Canopy API Cache) ---
+class AmazonReviewOut(BaseModel):
+    id: int
+    amazon_product_asin: str
+    canopy_id: str
+    title: Optional[str] = None
+    body: str
+    rating: float
+    reviewer_name: Optional[str] = None
+    verified_purchase: bool
+    helpful_votes: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class AmazonProductOut(BaseModel):
+    id: int
+    asin: str
+    title: str
+    brand: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    price: Optional[float] = None
+    rating: Optional[float] = None
+    review_count: Optional[int] = None
+    amazon_url: Optional[str] = None
+    cached_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+# --- Native Reviews ---
+class NativeReviewCreate(BaseModel):
+    device_id: Optional[str] = None
+    author_name: Optional[str] = "Anonymous"
+    star_rating: float  # 1-5
+    body: str
+
+class NativeReviewOut(BaseModel):
+    id: int
+    amazon_product_asin: str
+    author_name: Optional[str] = None
+    star_rating: float
+    body: str
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+# --- Canopy Fetch Reviews Request ---
+class CanopyFetchReviewsRequest(BaseModel):
+    asin: str
+    page: Optional[int] = 1

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { Link } from "react-router-dom";
-import { Eye, TrendingUp, Plus, Package, Search } from "lucide-react";
+import { TrendingUp, Plus, Package, Search, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,15 @@ export default function Products() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+          <Link to="/amazon" className="w-full sm:w-auto">
+            <Button
+              variant="outline"
+              className="w-full h-10 px-5 gap-2 font-bold rounded-xl hover:translate-y-[-2px] transition-all active:translate-y-0 border-primary/30 text-primary hover:bg-primary/5"
+            >
+              <ShoppingBag className="h-4 w-4" />
+              Search Amazon
+            </Button>
+          </Link>
           <Link to="/new" className="w-full sm:w-auto">
             <Button className="w-full h-10 px-6 gap-2 font-bold shadow-lg shadow-primary/20 rounded-xl hover:translate-y-[-2px] transition-all active:translate-y-0">
               <Plus className="h-4 w-4" />
@@ -84,12 +93,12 @@ export default function Products() {
                       {p.name}
                     </h3>
                   </div>
-                  <div className="h-10 w-10 rounded-xl bg-muted/50 flex flex-col items-center justify-center border border-border/40 group-hover:border-primary/30 transition-all shadow-inner">
-                    <p className="text-[9px] font-black text-muted-foreground uppercase leading-none mb-0.5">
-                      +Score
+                  <div className="px-3 py-1.5 rounded-xl bg-muted/20 flex flex-col items-center justify-center border border-border/40 group-hover:border-primary/30 transition-all shadow-inner">
+                    <p className="text-[9px] font-black text-muted-foreground uppercase leading-none mb-1 tracking-widest">
+                      Score
                     </p>
                     <p
-                      className={`text-sm font-black ${getSentimentColor(p.overall_sentiment_score)}`}
+                      className={`text-lg font-black leading-none ${getSentimentColor(p.overall_sentiment_score)}`}
                     >
                       {(p.overall_sentiment_score * 100).toFixed(0)}
                     </p>
@@ -155,27 +164,16 @@ export default function Products() {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-border/30 flex items-center justify-between">
-                  <Link to={`/products/${p.id}`} className="flex-1">
+                <div className="pt-4 border-t border-border/20">
+                  <Link to={`/products/${p.id}`} className="block w-full">
                     <Button
                       variant="ghost"
-                      className="w-full justify-start gap-2 text-xs font-bold hover:bg-primary/5 hover:text-primary rounded-lg h-9 transition-all"
+                      className="w-full justify-center gap-2 text-xs font-black uppercase tracking-widest hover:bg-primary/10 hover:text-primary rounded-xl h-10 transition-all text-muted-foreground group-hover:bg-primary/5 group-hover:text-primary"
                     >
-                      <TrendingUp className="h-3.5 w-3.5" />
-                      Analytics
+                      <TrendingUp className="h-4 w-4" />
+                      View Analytics
                     </Button>
                   </Link>
-                  <div className="flex gap-2">
-                    <Link to={`/products/${p.id}`}>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9 border-border/40 hover:border-primary/50 hover:text-primary rounded-lg transition-all shadow-sm"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </Link>
-                  </div>
                 </div>
               </CardContent>
             </Card>

@@ -13,6 +13,8 @@ import {
   Link as LinkIcon,
   FileText,
   Loader2,
+  Package,
+  ShoppingCart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,9 +23,105 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
+
+function FeaturedProducts() {
+  const { data: products, isLoading } = useQuery({
+    queryKey: ["products-list-home"],
+    queryFn: async () => {
+      const res = await api.get("/products");
+      return (res.data.items as any[]).slice(0, 3);
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-56 bg-muted animate-pulse rounded-2xl border border-border/40" />
+        ))}
+      </div>
+    );
+  }
+
+  if (!products || products.length === 0) {
+    return (
+      <div className="col-span-full h-56 border-2 border-dashed border-border/40 rounded-3xl flex flex-col items-center justify-center gap-4 bg-muted/5">
+        <Package className="h-10 w-10 text-muted-foreground/40" />
+        <div className="text-center">
+          <p className="font-bold text-muted-foreground text-sm">No analyses yet.</p>
+          <Link to="/new">
+            <button className="text-xs font-black text-primary uppercase tracking-widest mt-2 hover:underline underline-offset-4">
+              Start your first analysis
+            </button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      {products.map((prod: any) => {
+        const score = Math.round((prod.overall_sentiment_score ?? 0) * 100);
+        const isPositive = score >= 60;
+        return (
+          <motion.div key={prod.id} whileHover={{ y: -8 }}>
+            <Link to={`/products/${prod.id}`}>
+              <Card className="border-border/40 hover:border-primary/50 transition-all shadow-sm hover:shadow-2xl overflow-hidden group">
+                <CardContent className="p-0">
+                  <div className="h-28 bg-primary/5 flex items-center justify-center text-5xl group-hover:scale-110 transition-transform duration-500">
+                    📦
+                  </div>
+                  <div className="p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="min-w-0 pr-2">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60 mb-1 truncate">
+                          {prod.category || "General"}
+                        </p>
+                        <h3 className="text-lg font-bold group-hover:text-primary transition-colors line-clamp-1">
+                          {prod.name}
+                        </h3>
+                      </div>
+                      <div
+                        className={cn(
+                          "h-10 w-10 shrink-0 rounded-lg flex items-center justify-center font-black text-sm border-2",
+                          isPositive
+                            ? "border-emerald-500/20 text-emerald-500 bg-emerald-500/5"
+                            : "border-rose-500/20 text-rose-500 bg-rose-500/5",
+                        )}
+                      >
+                        {score}
+                      </div>
+                    </div>
+
+                    <div className="w-full h-1.5 bg-gray-200/50 rounded-full flex overflow-hidden mb-3">
+                      <div
+                        className="h-full bg-emerald-500 transition-all duration-700"
+                        style={{ width: `${score}%` }}
+                      />
+                      <div
+                        className="h-full bg-rose-500 transition-all duration-700"
+                        style={{ width: `${100 - score}%` }}
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary">
+                      Open Decision Map <ArrowRight className="h-3 w-3" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function Home() {
   const navigate = useNavigate();
@@ -189,24 +287,30 @@ export default function Home() {
                   onValueChange={setActiveTab}
                   className="w-full"
                 >
-                  <TabsList className="grid w-full grid-cols-3 h-10 p-1 bg-muted/30 rounded-lg mb-6">
+                  <TabsList className="grid w-full grid-cols-4 h-10 p-1 bg-muted/30 rounded-lg mb-6">
                     <TabsTrigger
                       value="paste"
-                      className="text-[10px] font-black uppercase tracking-widest gap-2"
+                      className="text-[10px] sm:text-xs font-black uppercase tracking-widest gap-2"
                     >
-                      <FileText className="h-3.5 w-3.5" /> Paste
+                      <FileText className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Paste</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="upload"
-                      className="text-[10px] font-black uppercase tracking-widest gap-2"
+                      className="text-[10px] sm:text-xs font-black uppercase tracking-widest gap-2"
                     >
-                      <UploadCloud className="h-3.5 w-3.5" /> File
+                      <UploadCloud className="h-3.5 w-3.5" /> <span className="hidden sm:inline">File</span>
                     </TabsTrigger>
                     <TabsTrigger
                       value="url"
-                      className="text-[10px] font-black uppercase tracking-widest gap-2"
+                      className="text-[10px] sm:text-xs font-black uppercase tracking-widest gap-2"
                     >
-                      <LinkIcon className="h-3.5 w-3.5" /> URL
+                      <LinkIcon className="h-3.5 w-3.5" /> <span className="hidden sm:inline">URL</span>
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="amazon"
+                      className="text-[10px] sm:text-xs font-black uppercase tracking-widest gap-2"
+                    >
+                      <ShoppingCart className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Amazon</span>
                     </TabsTrigger>
                   </TabsList>
 
@@ -276,19 +380,44 @@ export default function Home() {
                           </p>
                         </motion.div>
                       )}
+
+                      {activeTab === "amazon" && (
+                        <motion.div
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          key="amazon"
+                        >
+                          <div className="flex flex-col items-center justify-center h-32 text-center">
+                             <ShoppingCart className="h-8 w-8 text-primary/40 mb-2" />
+                             <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                               Browse Amazon Catalog
+                             </span>
+                             <p className="text-[10px] mt-2 text-muted-foreground/60 w-3/4">
+                               Discover, analyze, and leave reviews for products via Canopy.
+                             </p>
+                          </div>
+                        </motion.div>
+                      )}
                     </AnimatePresence>
                   </div>
 
                   <Button
                     className="w-full h-14 rounded-xl mt-6 font-black uppercase tracking-[0.2em] shadow-lg shadow-primary/20 group"
-                    onClick={() => ingestMutation.mutate()}
-                    disabled={ingestMutation.isPending}
+                    onClick={() => {
+                      if (activeTab === "amazon") {
+                        navigate("/amazon");
+                      } else {
+                        ingestMutation.mutate();
+                      }
+                    }}
+                    disabled={activeTab !== "amazon" && ingestMutation.isPending}
                   >
-                    {ingestMutation.isPending ? (
+                    {activeTab !== "amazon" && ingestMutation.isPending ? (
                       <Loader2 className="h-5 w-5 animate-spin" />
                     ) : (
                       <>
-                        Ignite Analysis
+                        {activeTab === "amazon" ? "Open Catalog" : "Ignite Analysis"}
                         <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
                       </>
                     )}
@@ -323,93 +452,7 @@ export default function Home() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              {
-                id: 1,
-                name: "Sony WH-1000XM5",
-                category: "Audio",
-                score: 88,
-                color: "emerald",
-                img: "🎧",
-              },
-              {
-                id: 2,
-                name: "Apple MacBook Pro M4",
-                category: "Computing",
-                score: 94,
-                color: "emerald",
-                img: "💻",
-              },
-              {
-                id: 3,
-                name: "Dyson V15 Detect",
-                category: "Home Appliances",
-                score: 62,
-                color: "amber",
-                img: "🧹",
-              },
-            ].map((prod) => (
-              <motion.div key={prod.id} whileHover={{ y: -8 }}>
-                <Link to={`/products/${prod.id}`}>
-                  <Card className="border-border/40 hover:border-primary/50 transition-all shadow-sm hover:shadow-2xl overflow-hidden group">
-                    <CardContent className="p-0">
-                      <div className="h-32 bg-primary/5 flex items-center justify-center text-4xl group-hover:scale-110 transition-transform duration-500">
-                        {prod.img}
-                      </div>
-                      <div className="p-6">
-                        <div className="flex justify-between items-start mb-4">
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-60 mb-1">
-                              {prod.category}
-                            </p>
-                            <h3 className="text-xl font-bold group-hover:text-primary transition-colors">
-                              {prod.name}
-                            </h3>
-                          </div>
-                          <div
-                            className={cn(
-                              "h-10 w-10 rounded-lg flex items-center justify-center font-black text-sm border-2",
-                              prod.color === "emerald"
-                                ? "border-emerald-500/20 text-emerald-500 bg-emerald-500/5"
-                                : "border-amber-500/20 text-amber-500 bg-amber-500/5",
-                            )}
-                          >
-                            {prod.score}
-                          </div>
-                        </div>
-
-                        {/* Progress bar */}
-                        <div className="w-full h-2 bg-gray-200/50 rounded-full flex overflow-hidden mb-3">
-                          <div
-                            className="h-full transition-all duration-700 ease-out"
-                            style={{
-                              width: `${prod.score}%`,
-                              background:
-                                prod.color === "emerald"
-                                  ? "hsl(142 71% 45%)"
-                                  : "hsl(36 89% 53%)",
-                            }}
-                          />
-                          <div
-                            className="h-full transition-all duration-700 ease-out"
-                            style={{
-                              width: `${100 - prod.score}%`,
-                              background: "hsl(0 72% 51%)",
-                            }}
-                          />
-                        </div>
-
-                        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary">
-                          Open Decision Map <ArrowRight className="h-3 w-3" />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              </motion.div>
-            ))}
-          </div>
+          <FeaturedProducts />
         </div>
       </section>
 

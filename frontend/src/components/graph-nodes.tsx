@@ -170,16 +170,17 @@ export const ThemeNode = memo(ThemeNodeRaw);
 function SentimentNodeRaw({
   data,
 }: {
-  data: { label: string; type: "pos" | "neg" };
+  data: { label: string; type: "pos" | "neg"; mentionCount?: number };
 }) {
   const isPos = data.type === "pos";
   const color = isPos ? "hsl(160 64% 43%)" : "hsl(0 72% 51%)";
   const bgColor = isPos ? "hsl(160 64% 96%)" : "hsl(0 72% 96%)";
   const borderColor = isPos ? "hsl(160 64% 85%)" : "hsl(0 72% 85%)";
+  const count = data.mentionCount || 0;
 
   return (
     <div
-      className="px-4 py-2 rounded-lg border-2 font-black uppercase tracking-[0.2em] text-[10px] select-none"
+      className="px-4 py-2 rounded-lg border-2 font-black uppercase tracking-[0.2em] text-[10px] select-none flex flex-col items-center justify-center gap-0.5"
       style={{
         background: bgColor,
         borderColor: borderColor,
@@ -193,7 +194,12 @@ function SentimentNodeRaw({
         position={Position.Top}
         className="rounded-full w-2! h-2! border-none! bg-muted-foreground/20!"
       />
-      {data.label}
+      <span>{data.label}</span>
+      {count > 0 && (
+        <span className="text-[8px] opacity-70 tracking-widest lowercase">
+          {count} mention{count !== 1 ? "s" : ""}
+        </span>
+      )}
       <Handle
         type="source"
         position={Position.Bottom}

@@ -11,6 +11,8 @@ import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
 import TestAnalytics from "./pages/TestAnalytics";
 import ExperimentPage from "./pages/ExperimentPage";
+import AmazonSearch from "@/pages/AmazonSearch";
+import AmazonProductPage from "@/pages/AmazonProductPage";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +53,10 @@ function App() {
               {/* Admin */}
               <Route path="admin/login" element={<AdminLogin />} />
               <Route path="admin" element={<AdminDashboard />} />
+
+              {/* Amazon Product Search & Native Reviews */}
+              <Route path="amazon" element={<AmazonSearch />} />
+              <Route path="amazon/:asin" element={<AmazonProductPage />} />
             </Route>
           </Routes>
         </BrowserRouter>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -9,8 +9,14 @@ import {
   Link as LinkIcon,
   FileText,
   Bot,
+  ShoppingBag,
+  Search,
+  Users,
+  Star,
+  ArrowRight,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +35,11 @@ export default function NewAnalysis() {
   const [reviewsRaw, setReviewsRaw] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
+
+  // Amazon tab state
+  const [amazonQuery, setAmazonQuery] = useState("");
+  const [amazonSearch, setAmazonSearch] = useState("");
+  const [fetchingAsin, setFetchingAsin] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -149,6 +160,33 @@ export default function NewAnalysis() {
     },
   });
 
+  // Amazon tab: search query
+  const { data: amazonProducts, isLoading: amazonLoading } = useQuery<any[]>({
+    queryKey: ["amazon-search", amazonSearch],
+    queryFn: async () => {
+      const res = await api.get("/amazon/search", { params: { q: amazonSearch } });
+      return res.data;
+    },
+    enabled: amazonSearch.length > 1,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // Amazon tab: fetch reviews for a specific ASIN and redirect to analysis
+  const fetchAmazonReviews = async (asin: string) => {
+    setFetchingAsin(asin);
+    try {
+      const res = await api.post(`/amazon/products/${asin}/fetch-reviews`);
+      toast.success(`Fetched ${res.data.reviews_ingested} Amazon reviews!`, {
+        description: "Redirecting to AI analysis...",
+      });
+      navigate(`/products/${res.data.product_id}`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Failed to fetch Amazon reviews.");
+    } finally {
+      setFetchingAsin(null);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!autoDetect && (!name || !category)) {
@@ -242,27 +280,41 @@ export default function NewAnalysis() {
               onValueChange={setActiveTab}
               className="w-full"
             >
-              <TabsList className="grid w-full grid-cols-3 h-12 p-1 bg-muted/50 rounded-lg">
+              <TabsList className="grid w-full grid-cols-5 h-12 p-1 bg-muted/50 rounded-lg">
                 <TabsTrigger
                   value="paste"
-                  className="gap-2 rounded-md transition-all"
+                  className="gap-1.5 rounded-md transition-all text-[11px]"
                 >
-                  <FileText className="h-4 w-4" />{" "}
-                  <span className="hidden sm:inline">Paste Text</span>
+                  <FileText className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Paste</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="upload"
-                  className="gap-2 rounded-md transition-all"
+                  className="gap-1.5 rounded-md transition-all text-[11px]"
                 >
-                  <UploadCloud className="h-4 w-4" />{" "}
-                  <span className="hidden sm:inline">Upload File</span>
+                  <UploadCloud className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Upload</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="url"
-                  className="gap-2 rounded-md transition-all"
+                  className="gap-1.5 rounded-md transition-all text-[11px]"
                 >
-                  <LinkIcon className="h-4 w-4" />{" "}
-                  <span className="hidden sm:inline">Crawl URL</span>
+                  <LinkIcon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Crawl</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="amazon"
+                  className="gap-1.5 rounded-md transition-all text-[11px]"
+                >
+                  <ShoppingBag className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Amazon</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="community"
+                  className="gap-1.5 rounded-md transition-all text-[11px]"
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Native</span>
                 </TabsTrigger>
               </TabsList>
 
@@ -349,37 +401,152 @@ export default function NewAnalysis() {
                   reviews automatically using Playwright & BeautifulSoup.
                 </p>
               </TabsContent>
+
+              {/* ── TAB 4: Amazon Reviews via Canopy ── */}
+              <TabsContent
+                value="amazon"
+                className="space-y-4 mt-6 animate-in fade-in"
+              >
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <input
+                      id="amazon-search-new-analysis"
+                      className="w-full pl-10 pr-4 h-11 rounded-lg border border-border/50 bg-background/50 text-sm focus:outline-none focus:ring-2 ring-primary/20"
+                      placeholder="Search Amazon product…"
+                      value={amazonQuery}
+                      onChange={(e) => setAmazonQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && setAmazonSearch(amazonQuery)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="h-11 px-5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
+                    onClick={() => setAmazonSearch(amazonQuery)}
+                    disabled={amazonLoading}
+                  >
+                    {amazonLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                    Search
+                  </button>
+                </div>
+
+                {amazonLoading && (
+                  <div className="flex justify-center py-6">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                )}
+
+                {amazonProducts && amazonProducts.length === 0 && (
+                  <p className="text-sm text-center text-muted-foreground py-6">
+                    No products found. Try a different search term.
+                  </p>
+                )}
+
+                <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                  {amazonProducts?.map((product: any) => (
+                    <div
+                      key={product.asin}
+                      className="flex items-center gap-3 p-3 rounded-lg border border-border/40 bg-card/20 hover:border-primary/30 transition-colors"
+                    >
+                      {product.image_url && (
+                        <img
+                          src={product.image_url}
+                          alt={product.title}
+                          className="h-12 w-12 object-contain shrink-0 rounded"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold line-clamp-1">{product.title}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {product.rating && (
+                            <span className="flex items-center gap-0.5 text-xs text-amber-400">
+                              <Star className="h-3 w-3 fill-amber-400" />
+                              {product.rating.toFixed(1)}
+                            </span>
+                          )}
+                          {product.price && (
+                            <span className="text-xs font-bold">${product.price.toFixed(2)}</span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="shrink-0 h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                        onClick={() => fetchAmazonReviews(product.asin)}
+                        disabled={fetchingAsin === product.asin}
+                      >
+                        {fetchingAsin === product.asin ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-3 w-3" />
+                        )}
+                        Analyze
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </TabsContent>
+
+              {/* ── TAB 5: Community / Native Reviews ── */}
+              <TabsContent
+                value="community"
+                className="mt-6 animate-in fade-in"
+              >
+                <div className="border border-border/50 bg-card/20 rounded-xl p-6 flex flex-col items-center text-center gap-5">
+                  <div className="h-14 w-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                    <Users className="h-7 w-7 text-emerald-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg">Native Community Reviews</h3>
+                    <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                      Find a product on the Amazon catalog, then leave your own star-rated review directly on HYVE. Native reviews can be analyzed independently from Amazon's review pool.
+                    </p>
+                  </div>
+                  <Link to="/amazon">
+                    <button
+                      type="button"
+                      className="h-10 px-6 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold transition-colors flex items-center gap-2"
+                    >
+                      Browse Amazon Catalog
+                      <ArrowRight className="h-4 w-4" />
+                    </button>
+                  </Link>
+                </div>
+              </TabsContent>
             </Tabs>
           </div>
 
-          <div className="pt-6 border-t border-border/30 flex justify-end gap-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate(-1)}
-              disabled={ingestMutation.isPending}
-              className="w-32"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              className="w-40"
-              disabled={ingestMutation.isPending}
-            >
-              {ingestMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Start Analysis
-                </>
-              )}
-            </Button>
-          </div>
+          {/* Submit button — hidden on Amazon/Community tabs (they have their own actions) */}
+          {activeTab !== "amazon" && activeTab !== "community" && (
+            <div className="pt-6 border-t border-border/30 flex justify-end gap-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate(-1)}
+                disabled={ingestMutation.isPending}
+                className="w-32"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="w-40"
+                disabled={ingestMutation.isPending}
+              >
+                {ingestMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Start Analysis
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </form>
       </div>
     </div>
