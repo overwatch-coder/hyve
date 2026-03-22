@@ -12,6 +12,7 @@ import {
   Loader2,
   Bot,
   Zap,
+  Loader,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ function ExploreInner() {
   const { productId } = useParams<{ productId: string }>();
   const [searchParams] = useSearchParams();
   const isBatch = searchParams.get("batch") === "true";
+  const [refreshing, setRefreshing] = useState(false);
 
   // FETCH: Deep Product Structure (Tree & Claims)
   const {
@@ -117,6 +119,7 @@ function ExploreInner() {
   const refetchAll = () => {
     refetch();
     refetchAnalytics();
+    setRefreshing(true);
   };
 
   if (isLoading) {
@@ -580,11 +583,20 @@ function ExploreInner() {
                         className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl h-14 font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 group"
                         onClick={() => {
                           refetchAll();
-                          setShowModal(false);
+                          setTimeout(() => {
+                            setRefreshing(false);
+                            setShowModal(false);
+                          }, 3000);
                         }}
                       >
-                        View Interactive Insights
-                        <ChevronRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                        {refreshing
+                          ? "Refreshing Insights..."
+                          : "View Interactive Insights"}
+                        {refreshing ? (
+                          <Loader className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                        ) : (
+                          <ChevronRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                        )}
                       </Button>
                       {isBatch && (
                         <p className="text-[10px] text-center text-muted-foreground font-bold uppercase tracking-tighter opacity-60 leading-relaxed px-4">
