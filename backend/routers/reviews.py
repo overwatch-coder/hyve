@@ -10,7 +10,7 @@ try:
     CELERY_AVAILABLE = True
 except Exception:
     CELERY_AVAILABLE = False
-from pipeline import process_review_sync
+from pipeline import batch_process_reviews
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
@@ -40,8 +40,8 @@ def create_review(review: schemas.ReviewCreate, db: Session = Depends(get_db)):
         try:
             process_review_ai_task.delay(db_review.id)
         except Exception:
-            process_review_sync(db_review.id, db)
+            batch_process_reviews([db_review.id], db)
     else:
-        process_review_sync(db_review.id, db)
+        batch_process_reviews([db_review.id], db)
     
     return db_review

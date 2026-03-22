@@ -13,7 +13,7 @@ import {
   Bot,
   Zap,
 } from "lucide-react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -44,8 +44,6 @@ function ExploreInner() {
       return res.data;
     },
     enabled: !!productId,
-    refetchInterval: (q) =>
-      q.state.data?.status === "processing" ? 2000 : false,
   });
 
   // FETCH: Product Analytics
@@ -66,19 +64,16 @@ function ExploreInner() {
   // Only show modal when product transitions from processing → ready, not on initial load of ready products
   const [showModal, setShowModal] = useState(false);
   const [hasBeenProcessing, setHasBeenProcessing] = useState(false);
+  const [prevStatus, setPrevStatus] = useState<string | undefined>(undefined);
 
-  // Track when product starts processing — only open modal then
-  useEffect(() => {
+  // Sync state during render according to React "You Might Not Need an Effect" guidelines
+  if (productData?.status !== prevStatus) {
+    setPrevStatus(productData?.status);
     if (productData?.status === "processing") {
       setHasBeenProcessing(true);
       setShowModal(true);
       setProcessingDone(false);
-    }
-  }, [productData?.status]);
-
-  // When product becomes ready AFTER having been processing → mark done
-  useEffect(() => {
-    if (
+    } else if (
       productData?.status === "ready" &&
       hasBeenProcessing &&
       !processingDone
@@ -86,7 +81,38 @@ function ExploreInner() {
       setProcessingDone(true);
       // Keep modal open so user sees the completion screen — they close it manually
     }
-  }, [productData?.status, hasBeenProcessing, processingDone]);
+  }
+
+  // SSE: Stream real-time processing status updates
+  useEffect(() => {
+    if (!productId || productData?.status !== "processing") return;
+
+    const apiUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+    const eventSource = new EventSource(
+      `${apiUrl}/products/${productId}/status/stream`,
+    );
+
+    eventSource.addEventListener("message", (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (
+          data.processing_step !== productData.processing_step ||
+          data.status !== productData.status
+        ) {
+          refetch(); // Trigger a re-fetch to get latest state in React Query
+        }
+        if (data.status === "ready" || data.status === "error") {
+          eventSource.close();
+        }
+      } catch (err) {
+        console.error("SSE parse error", err);
+      }
+    });
+
+    eventSource.addEventListener("error", () => eventSource.close());
+
+    return () => eventSource.close();
+  }, [productId, productData?.status, productData?.processing_step, refetch]);
 
   const refetchAll = () => {
     refetch();
@@ -333,7 +359,7 @@ function ExploreInner() {
   const effectiveStageIndex =
     !processingDone && currentStageIndex === -1 ? 0 : currentStageIndex;
 
-  const modalOpen = showModal && (isProcessing || processingDone);
+  const modalOpen = showModal;
 
   return (
     <div
@@ -364,19 +390,18 @@ function ExploreInner() {
       <Dialog
         open={modalOpen}
         onOpenChange={(open) => {
-          // Only allow closing when done, not while processing
-          if (!open && !isProcessing) setShowModal(false);
-          else if (!open && isProcessing) return; // Block close during processing
+          setShowModal(open);
         }}
       >
         <DialogContent className="max-w-2xl border-none bg-transparent shadow-none p-0 overflow-visible [&>button]:hidden">
+          <DialogTitle className="sr-only">Processing Reviews</DialogTitle>
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             className="w-full bg-card/60 backdrop-blur-3xl border border-white/10 rounded-4xl shadow-[0_0_100px_rgba(var(--primary),0.1)] overflow-hidden relative"
           >
-            {/* Manual Close Button — only shown when done */}
+            {/* Manual Close Button */}
             {processingDone && (
               <Button
                 variant="ghost"
@@ -426,12 +451,14 @@ function ExploreInner() {
                   <h2 className="text-2xl md:text-4xl font-black tracking-tight italic uppercase">
                     {processingDone ? "Extraction Complete" : "AI Ingestion"}
                   </h2>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col items-start gap-2">
                     <Badge
                       variant="outline"
-                      className="bg-primary/5 text-primary border-primary/20 font-black uppercase tracking-widest text-[10px] px-3 max-w-[150px] md:max-w-none truncate"
+                      className="bg-primary/5 text-primary border-primary/20 font-black uppercase tracking-widest text-[10px] px-3 max-w-37.5 md:max-w-none truncate"
                     >
-                      {productData.name}
+                      {productData.name?.length > 50
+                        ? productData?.name?.slice(0, 50) + "..."
+                        : productData?.name}
                     </Badge>
                     <p className="text-muted-foreground font-bold text-sm flex items-center gap-2">
                       {!processingDone && (
@@ -552,8 +579,8 @@ function ExploreInner() {
                         size="lg"
                         className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl h-14 font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 group"
                         onClick={() => {
-                          setShowModal(false);
                           refetchAll();
+                          setShowModal(false);
                         }}
                       >
                         View Interactive Insights

@@ -37,6 +37,45 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Product not found")
     return product
 
+@router.get("/{product_id}/status/stream")
+async def stream_product_status(product_id: int):
+    """Server-Sent Events endpoint to stream real-time product processing status."""
+    import asyncio
+    import json
+    from database import SessionLocal
+    import models
+    
+    async def event_generator():
+        last_step = None
+        last_status = None
+        while True:
+            db = SessionLocal()
+            try:
+                product = db.query(models.Product).filter(models.Product.id == product_id).first()
+                if not product:
+                    yield f"data: {json.dumps({'status': 'error', 'processing_step': 'Product not found'})}\n\n"
+                    break
+                
+                if product.processing_step != last_step or product.status != last_status:
+                    last_step = product.processing_step
+                    last_status = product.status
+                    yield f"data: {json.dumps({'status': product.status, 'processing_step': product.processing_step})}\n\n"
+                
+                if product.status in ["ready", "error"]:
+                    # Wait slightly so the frontend can catch the final 'ready' state nicely if we exit immediately
+                    yield f"data: {json.dumps({'status': product.status, 'processing_step': product.processing_step})}\n\n"
+                    break
+                    
+            except Exception as e:
+                yield f"data: {json.dumps({'status': 'error', 'processing_step': str(e)})}\n\n"
+                break
+            finally:
+                db.close()
+                
+            await asyncio.sleep(1.5)
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 @router.post("/{product_id}/summary/regenerate", response_model=schemas.Product)
 def regenerate_product_summary(product_id: int, req: schemas.RegenerateSummaryRequest, db: Session = Depends(get_db)):
     from pipeline import extract_and_update_summary

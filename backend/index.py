@@ -59,6 +59,44 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 def root():
     return {"message": "Welcome to the HYVE API", "docs": f"{BACKEND_URL}/docs"}
 
+from sqlalchemy.orm import Session
+from fastapi import Depends
+from database import get_db
+from sqlalchemy import func
+
+@app.get("/stats", tags=["Admin"])
+def get_global_stats(db: Session = Depends(get_db)):
+    total_products = db.query(models.Product).count()
+    total_claims = db.query(models.Claim).count()
+    total_themes = db.query(models.Theme).count()
+    avg_sentiment = db.query(func.avg(models.Product.overall_sentiment_score)).scalar() or 0.5
+    
+    return {
+        "total_products": total_products,
+        "total_claims": total_claims,
+        "total_themes": total_themes,
+        "avg_sentiment": avg_sentiment
+    }
+
+from sqlalchemy.orm import Session
+from fastapi import Depends
+from database import get_db
+from sqlalchemy import func
+
+@app.get("/stats", tags=["Admin"])
+def get_global_stats(db: Session = Depends(get_db)):
+    total_products = db.query(models.Product).count()
+    total_claims = db.query(models.Claim).count()
+    total_themes = db.query(models.Theme).count()
+    avg_sentiment = db.query(func.avg(models.Product.overall_sentiment_score)).scalar() or 0.5
+    
+    return {
+        "total_products": total_products,
+        "total_claims": total_claims,
+        "total_themes": total_themes,
+        "avg_sentiment": avg_sentiment
+    }
+
 # Import routers
 from routers import admin, products, reviews, themes, claims, analytics, ingestion, experiments, amazon
 

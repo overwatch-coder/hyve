@@ -5,7 +5,8 @@ Used by the batch ingestion endpoint and for testing.
 import os
 from sqlalchemy.orm import Session
 import models
-from ai_engine import extract_claims_from_llm, cluster_claims
+from ai_engine import extract_claims_from_llm, cluster_claims, extract_claims_from_llm_async
+import asyncio
 
 
 
@@ -90,6 +91,57 @@ def process_review_sync(review_id: int, db: Session) -> dict:
         "review_id": review_id,
         "claims_extracted": len(saved_claims),
     }
+
+
+async def _batch_extract_claims_async(reviews: list, provider: str):
+    async def extract_and_format(review):
+        try:
+             result = await extract_claims_from_llm_async(review.original_text, provider)
+             return (review.id, result.get("claims", []))
+        except Exception as e:
+             print(f"Error extracting claims for review {review.id}: {e}")
+             return (review.id, [])
+    
+    results = []
+    chunk_size = 20
+    for i in range(0, len(reviews), chunk_size):
+        chunk = reviews[i:i + chunk_size]
+        tasks = [extract_and_format(r) for r in chunk]
+        results.extend(await asyncio.gather(*tasks))
+    return results
+
+def batch_process_reviews(review_ids: list[int], db):
+    import models
+    from sqlalchemy.orm import Session
+    reviews = db.query(models.Review).filter(models.Review.id.in_(review_ids)).all()
+    if not reviews: return
+     
+    provider = os.getenv("LLM_PROVIDER", "openai")
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        results = loop.run_until_complete(_batch_extract_claims_async(reviews, provider))
+    finally:
+        loop.close()
+        
+    for review_id, claims_data in results:
+        for claim_dict in claims_data:
+            claim_text = claim_dict.get("claim_text") or claim_dict.get("core_claim", "")
+            if not claim_text: continue
+            
+            new_claim = models.Claim(
+                review_id=review_id,
+                claim_text=claim_text,
+                evidence_text=claim_dict.get("evidence_text") or claim_dict.get("supporting_evidence", ""),
+                context_text=claim_dict.get("context_text") or claim_dict.get("context", ""),
+                sentiment_polarity=claim_dict.get("sentiment_polarity", "neutral"),
+                severity=float(claim_dict.get("severity", 0.0) or 0.0),
+            )
+            db.add(new_claim)
+    
+    db.commit()
+
 
 def _generate_theme_names(cluster_texts_map: dict[int, list[str]]) -> dict[int, str]:
     """Use LLM to generate concise 2-3 word theme labels from clusters of claims."""
@@ -276,7 +328,7 @@ Return JSON with this exact structure:
             import openai
             client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a data deduplication expert. Output valid JSON only."},
                     {"role": "user", "content": prompt}
@@ -320,6 +372,104 @@ Return JSON with this exact structure:
         } for c in claims_list]
 
 
+
+async def deduplicate_claims_ai_async(claims_list: list, theme_name: str) -> list[dict]:
+    import json as _json
+
+    if len(claims_list) <= 1:
+        return [{"representative_text": c.claim_text, "sentiment": c.sentiment_polarity, "severity": c.severity, "mention_count": 1, "original_ids": [c.id]} for c in claims_list]
+
+    claims_data = [{"id": i, "text": c.claim_text, "sentiment": c.sentiment_polarity or "neutral", "severity": float(c.severity or 0)} for i, c in enumerate(claims_list)]
+
+    prompt = f"""You are analyzing consumer review claims under the theme "{theme_name}".
+Group the following claims that express the same core idea using similar or different words.
+
+RULES:
+- Claims with DIFFERENT sentiments (positive vs negative) must NEVER be grouped together.
+- Claims discussing the same topic but with completely different contexts should stay separate.
+- For each group, write ONE clear representative claim that captures the shared meaning.
+- Return the severity as the average severity of the grouped claims.
+
+Claims:
+{_json.dumps(claims_data, indent=2)}
+
+Return JSON with this exact structure:
+{{
+  "groups": [
+    {{
+      "representative_text": "Clear single claim summarizing the group",
+      "sentiment": "positive|negative|neutral",
+      "severity": 0.7,
+      "member_ids": [0, 2, 5]
+    }}
+  ]
+}}"""
+
+    provider = os.getenv("LLM_PROVIDER", "openai")
+    try:
+        if provider == "openai":
+            import openai
+            client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a data deduplication expert. Output valid JSON only."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                timeout=30.0
+            )
+            result = _json.loads(response.choices[0].message.content)
+        elif provider == "gemini":
+            import google.generativeai as genai
+            import asyncio
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel('gemini-1.5-pro')
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, lambda: model.generate_content(prompt + "\nOutput raw JSON."))
+            result = _json.loads(response.text.strip('```json').strip('```'))
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
+
+        groups = result.get("groups", [])
+        deduped = []
+        for group in groups:
+            member_ids = group.get("member_ids", [])
+            original_claim_ids = [claims_list[mid].id for mid in member_ids if mid < len(claims_list)]
+            deduped.append({
+                "representative_text": group.get("representative_text", ""),
+                "sentiment": group.get("sentiment", "neutral"),
+                "severity": float(group.get("severity", 0.5)),
+                "mention_count": len(member_ids),
+                "original_ids": original_claim_ids,
+            })
+        return deduped
+
+    except Exception as e:
+        print(f"WARNING: Claim dedup failed for theme '{theme_name}': {e}")
+        return [{"representative_text": c.claim_text, "sentiment": c.sentiment_polarity, "severity": c.severity, "mention_count": 1, "original_ids": [c.id]} for c in claims_list]
+
+def deduplicate_themes_parallel(theme_mapping: dict, claims: list):
+    async def run_all():
+        tasks = []
+        theme_keys = []
+        for cid, theme in theme_mapping.items():
+            theme_claims = [c for c in claims if c.theme_id == theme.id]
+            if theme_claims:
+                tasks.append(deduplicate_claims_ai_async(theme_claims, theme.name))
+                theme_keys.append((cid, theme))
+        
+        results = await asyncio.gather(*tasks)
+        return list(zip(theme_keys, results))
+        
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(run_all())
+    finally:
+        loop.close()
+
+
 def cluster_product_claims(product_id: int, db: Session) -> dict:
     """
     Re-cluster all claims for a product into themes.
@@ -338,7 +488,14 @@ def cluster_product_claims(product_id: int, db: Session) -> dict:
         return {"status": "success", "themes_created": 0}
 
     # Delete old themes for this product
-    db.query(models.Theme).filter(models.Theme.product_id == product_id).delete()
+    # Detach claims before deleting themes to avoid foreign key violation
+    db.query(models.Claim).filter(
+        models.Claim.review_id.in_(
+            db.query(models.Review.id).filter(models.Review.product_id == product_id)
+        )
+    ).update({models.Claim.theme_id: None}, synchronize_session=False)
+
+    db.query(models.Theme).filter(models.Theme.product_id == product_id).delete(synchronize_session=False)
     db.flush()
 
     # Clear theme_id on all claims first
@@ -416,12 +573,11 @@ def cluster_product_claims(product_id: int, db: Session) -> dict:
 
     # ── AI Deduplication: group similar claims within each theme ──
     print(f"DEBUG: Starting AI deduplication for product {product_id}...")
-    for cid, theme in theme_mapping.items():
+    results = deduplicate_themes_parallel(theme_mapping, claims)
+    for (cid, theme), deduped_groups in results:
         theme_claims = [c for c in claims if c.theme_id == theme.id]
         if not theme_claims:
             continue
-
-        deduped_groups = deduplicate_claims_ai(theme_claims, theme.name)
 
         # Delete old individual claims, replace with deduplicated representatives
         old_claim_ids = [c.id for c in theme_claims]
@@ -763,9 +919,10 @@ def run_csv_ingestion_background(product_ids: list[int], csv_data_json: str, map
             product.processing_step = f"Distilling Insights (1/{len(p_df)})"
             db.commit()
             
+            review_ids_to_process = []
             for idx, (_, row) in enumerate(p_df.iterrows()):
-                if idx % 10 == 0:
-                    product.processing_step = f"Distilling Insights ({idx+1}/{len(p_df)})"
+                if idx % 100 == 0:
+                    product.processing_step = f"Preparing Reviews ({idx+1}/{len(p_df)})"
                     db.commit()
 
                 text = str(row[review_col]).strip()
@@ -784,9 +941,15 @@ def run_csv_ingestion_background(product_ids: list[int], csv_data_json: str, map
                 )
                 db.add(review)
                 db.flush()
+                review_ids_to_process.append(review.id)
                 
-                # Process AI extractions
-                process_review_sync(review.id, db)
+            db.commit()
+            
+            # Batch process AI extractions
+            if review_ids_to_process:
+                product.processing_step = f"Distilling Insights for {len(review_ids_to_process)} reviews..."
+                db.commit()
+                batch_process_reviews(review_ids_to_process, db)
             
             # 5. Finalize product
             product.processing_step = "Harmonizing Patterns"
@@ -1071,11 +1234,8 @@ def run_raw_ingestion_background(raw_text: str, source_url: str = None, db = Non
                 print(f"DEBUG: ERROR - reviews_list is not a list: {type(reviews_list)}")
                 continue
 
+            review_ids_to_process = []
             for r_idx, r_text in enumerate(reviews_list):
-                if r_idx % 5 == 0:
-                    product.processing_step = f"Distilling Claims ({r_idx+1}/{len(reviews_list)})"
-                    db.commit()
-                    
                 text = str(r_text).strip()
                 if len(text) > 10:
                     review = models.Review(
@@ -1086,10 +1246,14 @@ def run_raw_ingestion_background(raw_text: str, source_url: str = None, db = Non
                     )
                     db.add(review)
                     db.flush()
-                    
-                    # Extract claims immediately
-                    process_review_sync(review.id, db)
+                    review_ids_to_process.append(review.id)
                     added_reviews += 1
+            db.commit()
+            
+            if review_ids_to_process:
+                product.processing_step = f"Distilling Claims ({len(review_ids_to_process)} reviews)..."
+                db.commit()
+                batch_process_reviews(review_ids_to_process, db)
                     
             # 3. Re-cluster and mark ready
             if added_reviews > 0:

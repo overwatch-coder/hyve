@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   ArrowRight,
   TrendingUp,
@@ -6,26 +6,24 @@ import {
   Sparkles,
   GitBranch,
   ShieldCheck,
-  UploadCloud,
   Layers,
   Zap,
   Bot,
-  Link as LinkIcon,
-  FileText,
-  Loader2,
   Package,
-  ShoppingCart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
-import { toast } from "sonner";
+import { HeroProcessVisualization } from "@/components/HeroProcessVisualization";
 
 function FeaturedProducts() {
   const { data: products, isLoading } = useQuery({
@@ -124,80 +122,6 @@ function FeaturedProducts() {
 }
 
 export default function Home() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("paste");
-  const [reviewsRaw, setReviewsRaw] = useState("");
-  const [url, setUrl] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-
-  const ingestMutation = useMutation({
-    mutationFn: async () => {
-      if (activeTab === "url") {
-        if (!url) throw new Error("Provide a URL to crawl.");
-        const res = await api.post("/ingest/url", {
-          url,
-          name: null,
-          category: "Technology",
-        });
-        return { type: "url", productId: res.data.product_id };
-      }
-      if (activeTab === "paste") {
-        if (!reviewsRaw.trim()) throw new Error("Paste some reviews first.");
-        const res = await api.post(`/ingest/raw`, { text: reviewsRaw });
-        return { type: "raw_batch", results: res.data };
-      }
-      if (activeTab === "upload") {
-        if (!file) throw new Error("Select a CSV file.");
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("fallback_category", "Technology");
-        const res = await api.post("/ingest/csv", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        return { type: "batch", results: res.data };
-      }
-      return null;
-    },
-    onSuccess: (data: any) => {
-      const productIds = data?.results?.product_ids || [];
-      const firstId = productIds[0];
-      const isMultiple = productIds.length > 1;
-      const batchTag = isMultiple ? "?batch=true" : "";
-
-      if (data?.type === "batch") {
-        toast.success("Analysis Started", {
-          description: "Hyve is processing your dataset in the background.",
-        });
-        if (firstId) {
-          navigate(`/products/${firstId}${batchTag}`);
-        } else {
-          navigate("/products");
-        }
-      } else if (data?.type === "raw_batch") {
-        toast.success("AI Synthesis Started", {
-          description: "Extracting products and insights from your text...",
-        });
-        if (firstId) {
-          navigate(`/products/${firstId}${batchTag}`);
-        } else {
-          navigate("/products");
-        }
-      } else if (data?.type === "url") {
-        toast.success("AI Crawl Started", {
-          description: "Fetching reviews and analyzing sentiment...",
-        });
-        navigate(`/products/${data.productId}`);
-      }
-      queryClient.invalidateQueries({ queryKey: ["products-list"] });
-    },
-    onError: (error: any) => {
-      toast.error("Analysis Failed", {
-        description: error.message || "Unauthorized or invalid input.",
-      });
-    },
-  });
-
   return (
     <div className="flex flex-col min-h-screen bg-background -mt-8 overflow-x-hidden">
       {/* ── HERO SECTION ── */}
@@ -271,159 +195,33 @@ export default function Home() {
             className="lg:col-span-5 w-full max-w-md mx-auto lg:max-w-none"
           >
             <Card className="border-primary/20 bg-card/60 backdrop-blur-3xl shadow-[0_32px_64px_-16px_rgba(var(--primary),0.1)] overflow-hidden">
-              <div className="p-4 md:p-6 border-b border-border/30 bg-primary/5">
-                <h2 className="text-base md:text-lg font-black uppercase tracking-widest flex items-center gap-2">
-                  <UploadCloud className="h-4 w-4 md:h-5 md:w-5 text-primary" />
-                  Quick Analyze
-                </h2>
-                <p className="text-xs md:text-sm text-muted-foreground font-medium mt-1">
-                  Upload reviews to generate your map
-                </p>
-              </div>
+              <CardHeader className="p-4 md:p-6 border-b border-border/30 bg-primary/5">
+                <CardTitle className="text-base md:text-lg font-black uppercase tracking-widest flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+                  New Analysis
+                </CardTitle>
+                <CardDescription className="text-xs md:text-sm text-muted-foreground font-medium mt-1">
+                  Upload and analyze product reviews in a guided flow.
+                </CardDescription>
+              </CardHeader>
 
-              <div className="p-4 md:p-6">
-                <Tabs
-                  value={activeTab}
-                  onValueChange={setActiveTab}
-                  className="w-full"
-                >
-                  <TabsList className="grid w-full grid-cols-4 h-10 p-1 bg-muted/30 rounded-lg mb-6">
-                    <TabsTrigger
-                      value="paste"
-                      className="text-[10px] sm:text-xs font-black uppercase tracking-widest gap-2"
-                    >
-                      <FileText className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Paste</span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="upload"
-                      className="text-[10px] sm:text-xs font-black uppercase tracking-widest gap-2"
-                    >
-                      <UploadCloud className="h-3.5 w-3.5" /> <span className="hidden sm:inline">File</span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="url"
-                      className="text-[10px] sm:text-xs font-black uppercase tracking-widest gap-2"
-                    >
-                      <LinkIcon className="h-3.5 w-3.5" /> <span className="hidden sm:inline">URL</span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="amazon"
-                      className="text-[10px] sm:text-xs font-black uppercase tracking-widest gap-2"
-                    >
-                      <ShoppingCart className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Amazon</span>
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <div className="min-h-[160px]">
-                    <AnimatePresence mode="wait">
-                      {activeTab === "paste" && (
-                        <motion.div
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
-                          key="paste"
-                        >
-                          <textarea
-                            className="w-full h-32 p-4 rounded-xl bg-background/50 border border-border/50 text-sm font-medium focus:ring-2 ring-primary/20 outline-none resize-none transition-all"
-                            placeholder="Paste unstructured feedback here..."
-                            value={reviewsRaw}
-                            onChange={(e) => setReviewsRaw(e.target.value)}
-                          />
-                        </motion.div>
-                      )}
-
-                      {activeTab === "upload" && (
-                        <motion.div
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
-                          key="upload"
-                        >
-                          <div
-                            className="w-full h-32 border-2 border-dashed border-primary/20 rounded-xl flex flex-col items-center justify-center bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer"
-                            onClick={() =>
-                              document.getElementById("file-hero")?.click()
-                            }
-                          >
-                            <UploadCloud className="h-8 w-8 text-primary/40 mb-2" />
-                            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                              {file ? file.name : "Choose CSV or Excel"}
-                            </span>
-                            <input
-                              id="file-hero"
-                              type="file"
-                              className="hidden"
-                              onChange={(e) =>
-                                setFile(e.target.files?.[0] || null)
-                              }
-                            />
-                          </div>
-                        </motion.div>
-                      )}
-
-                      {activeTab === "url" && (
-                        <motion.div
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
-                          key="url"
-                        >
-                          <Input
-                            className="h-14 rounded-xl bg-background/50 border border-border/50 font-medium"
-                            placeholder="https://amazon.com/product-link"
-                            value={url}
-                            onChange={(e) => setUrl(e.target.value)}
-                          />
-                          <p className="text-[10px] font-bold text-muted-foreground mt-3 uppercase tracking-widest flex items-center gap-1.5 opacity-60">
-                            <Bot className="h-3 w-3 text-primary" /> Multi-Agent
-                            Scraping Enabled
-                          </p>
-                        </motion.div>
-                      )}
-
-                      {activeTab === "amazon" && (
-                        <motion.div
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10 }}
-                          key="amazon"
-                        >
-                          <div className="flex flex-col items-center justify-center h-32 text-center">
-                             <ShoppingCart className="h-8 w-8 text-primary/40 mb-2" />
-                             <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                               Browse Amazon Catalog
-                             </span>
-                             <p className="text-[10px] mt-2 text-muted-foreground/60 w-3/4">
-                               Discover, analyze, and leave reviews for products via Canopy.
-                             </p>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
+              <CardContent className="p-4 md:p-6">
+                <div className="flex flex-col gap-6">
+                  <HeroProcessVisualization />
                   <Button
-                    className="w-full h-14 rounded-xl mt-6 font-black uppercase tracking-[0.2em] shadow-lg shadow-primary/20 group"
-                    onClick={() => {
-                      if (activeTab === "amazon") {
-                        navigate("/amazon");
-                      } else {
-                        ingestMutation.mutate();
-                      }
-                    }}
-                    disabled={activeTab !== "amazon" && ingestMutation.isPending}
+                    asChild
+                    className="w-full h-14 rounded-xl font-black uppercase tracking-[0.2em] shadow-lg shadow-primary/20 group"
                   >
-                    {activeTab !== "amazon" && ingestMutation.isPending ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <>
-                        {activeTab === "amazon" ? "Open Catalog" : "Ignite Analysis"}
-                        <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                      </>
-                    )}
+                    <Link to="/new">
+                      New Analysis
+                      <ArrowRight
+                        data-icon="inline-end"
+                        className="transition-transform group-hover:translate-x-1"
+                      />
+                    </Link>
                   </Button>
-                </Tabs>
-              </div>
+                </div>
+              </CardContent>
             </Card>
           </motion.div>
         </div>

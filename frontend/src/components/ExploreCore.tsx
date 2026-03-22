@@ -384,7 +384,10 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
     id: productNodeId,
     type: "product",
     data: {
-      label: product.name,
+      label:
+        product.name?.length > 30
+          ? product?.name?.slice(0, 30) + "..."
+          : product?.name,
       score,
       reviewCount,
       category,
@@ -710,7 +713,7 @@ export function ExploreContentImpl({
             ),
           );
           const directChildIds = new Set(clickedNode.data.childIds as string[]);
-          let nextNodes = prevNodes.map((node) => {
+          const nextNodes = prevNodes.map((node) => {
             if (node.id === nodeId)
               return { ...node, data: { ...node.data, expanded: true } };
             if (siblingsToCollapse.some((s) => s.id === node.id))
@@ -740,7 +743,7 @@ export function ExploreContentImpl({
           const allDescendantIds = new Set(
             getAllDescendantIds(nodeId, prevNodes),
           );
-          let nextNodes = prevNodes.map((node) => {
+          const nextNodes = prevNodes.map((node) => {
             if (node.id === nodeId)
               return { ...node, data: { ...node.data, expanded: false } };
             if (allDescendantIds.has(node.id))
@@ -870,7 +873,7 @@ export function ExploreContentImpl({
       setEdges(graph.edges);
       fitViewCalled.current = false;
     }
-  }, [productData, analyticsData, setNodes, setEdges]);
+  }, [productData, analyticsData, setNodes, setEdges, nodes.length]);
 
   useEffect(() => {
     if (nodes.length > 0 && !fitViewCalled.current) {
@@ -967,13 +970,15 @@ export function ExploreContentImpl({
                     <ListTree className="h-3.5 w-3.5" />
                     Accordion
                   </TabsTrigger>
-                  {!hideExperimentTrigger && <TabsTrigger
-                    value="traditional"
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-4"
-                  >
-                    <Quote className="h-3.5 w-3.5" />
-                    Traditional
-                  </TabsTrigger>}
+                  {!hideExperimentTrigger && (
+                    <TabsTrigger
+                      value="traditional"
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-4"
+                    >
+                      <Quote className="h-3.5 w-3.5" />
+                      Traditional
+                    </TabsTrigger>
+                  )}
                 </TabsList>
               </Tabs>
 
@@ -1372,7 +1377,9 @@ export function ExploreContentImpl({
                         ? productData?.advices_seller
                         : productData?.advices;
                     advices = rawAdvices ? JSON.parse(rawAdvices) : [];
-                  } catch {}
+                  } catch {
+                    // do nothing
+                  }
                   if (!advices.length) return null;
                   return (
                     <Card className="border-border/30 bg-card/40 rounded-2xl shadow-sm">
@@ -1657,7 +1664,7 @@ export function ExploreContentImpl({
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="w-80 md:w-96 h-[500px] -mb-12"
+              className="w-80 md:w-96 h-125 -mb-12"
             >
               <Card className="h-full border-border/40 shadow-2xl flex flex-col overflow-hidden bg-background">
                 <div className="p-4 border-b border-border/20 flex items-center justify-between bg-card/60 shrink-0">
