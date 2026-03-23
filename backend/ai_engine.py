@@ -29,6 +29,15 @@ class ExtractionResult(BaseModel):
         description="A list of distinct claims extracted from the review. Each object should have 'claim_text', 'evidence_text', 'context_text', 'sentiment_polarity' (positive/negative/neutral), and 'severity' (0.0 to 1.0).")
 
 
+
+def _clean_json_text(text: str) -> str:
+    t = text.strip()
+    if t.startswith("```"):
+        t = t.split("\n", 1)[-1]
+    if t.endswith("```"):
+        t = t.rsplit("\n", 1)[0]
+    return t.strip()
+
 def extract_claims_from_llm(review_text: str, provider: str = "openai") -> dict:
     """
     Extracts structured claims from raw review text using an LLM. 
@@ -71,8 +80,9 @@ def extract_claims_from_llm(review_text: str, provider: str = "openai") -> dict:
         import google.generativeai as genai
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
         model = genai.GenerativeModel('gemini-1.5-pro')
-        response = model.generate_content(prompt + "\nOutput raw JSON.")
-        return json.loads(response.text.strip('```json').strip('```'))
+        sys_msg = "You are a senior data analyst extracting precise structured arguments from consumer reviews. Output JSON."
+        response = model.generate_content(f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.")
+        return json.loads(_clean_json_text(response.text))
 
     else:
         raise ValueError(f"Unsupported LLM provider: {provider}")
@@ -118,12 +128,13 @@ async def extract_claims_from_llm_async(review_text: str, provider: str = "opena
 
         # Gemini Python SDK doesn't natively support async properly across all systems,
         # so we run the synchronous call in a thread pool for true concurrency.
+        sys_msg = "You are a senior data analyst extracting precise structured arguments from consumer reviews. Output JSON."
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
-            lambda: model.generate_content(prompt + "\nOutput raw JSON.")
+            lambda: model.generate_content(f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.")
         )
-        return json.loads(response.text.strip('```json').strip('```'))
+        return json.loads(_clean_json_text(response.text))
 
     else:
         raise ValueError(f"Unsupported LLM provider: {provider}")
@@ -413,8 +424,9 @@ Return ONLY valid JSON with this structure:
 
             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
             model = genai.GenerativeModel(os.getenv("LLM_CLUSTER_MODEL", "gemini-1.5-flash"))
-            resp = model.generate_content(define_prompt + "\nOutput raw JSON.")
-            themes_obj = _json.loads(resp.text.strip("```json").strip("```").strip())
+            sys_msg = "You are a careful clustering assistant. Output JSON only."
+            resp = model.generate_content(f"System: {sys_msg}\n\nUser: {define_prompt}\n\nOutput raw JSON.")
+            themes_obj = _json.loads(_clean_json_text(resp.text))
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -483,8 +495,9 @@ Return ONLY JSON:
 
                 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
                 model = genai.GenerativeModel(os.getenv("LLM_CLUSTER_MODEL", "gemini-1.5-flash"))
-                resp = model.generate_content(assign_prompt + "\nOutput raw JSON.")
-                assign_obj = _json.loads(resp.text.strip("```json").strip("```").strip())
+                sys_msg = "You classify items into provided categories. Output JSON only."
+                resp = model.generate_content(f"System: {sys_msg}\n\nUser: {assign_prompt}\n\nOutput raw JSON.")
+                assign_obj = _json.loads(_clean_json_text(resp.text))
 
             assignments = assign_obj.get("assignments", [])
             for a in assignments:

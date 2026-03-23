@@ -16,6 +16,15 @@ import time
 
 
 
+
+def _clean_json_text(text: str) -> str:
+    t = text.strip()
+    if t.startswith("```"):
+        t = t.split("\n", 1)[-1]
+    if t.endswith("```"):
+        t = t.rsplit("\n", 1)[0]
+    return t.strip()
+
 def predict_product_category(product_name: str) -> str:
     """Use AI to predict a product's category from its name."""
     import json
@@ -188,8 +197,9 @@ Return ONLY valid JSON like: {{"0": {{"name": "Battery Life", "recommendation": 
             import google.generativeai as genai
             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
             model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(prompt + "\nOutput raw JSON.")
-            result = json.loads(response.text.strip("```json").strip("```"))
+            sys_msg = "You generate concise thematic labels and actionable recommendations for consumer claims. Output JSON only."
+            response = model.generate_content(f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.")
+            result = json.loads(_clean_json_text(response.text))
             return {int(k): v for k, v in result.items()}
     except Exception as e:
         print(f"DEBUG: Theme naming LLM call failed, using fallback: {e}")
@@ -347,8 +357,9 @@ Return JSON with this exact structure:
             import google.generativeai as genai
             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
             model = genai.GenerativeModel('gemini-1.5-pro')
-            response = model.generate_content(prompt + "\nOutput raw JSON.")
-            result = _json.loads(response.text.strip('```json').strip('```'))
+            sys_msg = "You are a data deduplication expert. Output valid JSON only."
+            response = model.generate_content(f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.")
+            result = _json.loads(_clean_json_text(response.text))
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -432,8 +443,9 @@ Return JSON with this exact structure:
             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
             model = genai.GenerativeModel('gemini-1.5-pro')
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(None, lambda: model.generate_content(prompt + "\nOutput raw JSON."))
-            result = _json.loads(response.text.strip('```json').strip('```'))
+            sys_msg = "You are a data deduplication expert. Output valid JSON only."
+            response = await loop.run_in_executor(None, lambda: model.generate_content(f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON."))
+            result = _json.loads(_clean_json_text(response.text))
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -962,13 +974,9 @@ Return ONLY valid JSON in this exact format, with no markdown formatting:
             import google.generativeai as genai
             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
             model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(prompt + "\nOutput raw JSON without markdown.")
-            text = response.text.strip()
-            if text.startswith("```json"):
-                text = text[7:]
-            if text.endswith("```"):
-                text = text[:-3]
-            return json.loads(text.strip())
+            sys_msg = "You map dataset columns for consumer reviews. Output JSON only."
+            response = model.generate_content(f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON without markdown.")
+            return json.loads(_clean_json_text(response.text))
             
     except Exception as e:
         print(f"DEBUG: CSV column detection LLM call failed: {e}")
