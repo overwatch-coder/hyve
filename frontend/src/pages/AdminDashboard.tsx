@@ -118,14 +118,21 @@ export default function AdminDashboard() {
           </p>
         </div>
 
-        <Button
-          variant="outline"
-          className="gap-2 border-border/40 h-10"
-          onClick={handleLogout}
-        >
-          <LogOut className="h-4 w-4" />
-          Sign Out
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="default" asChild className="gap-2 h-10">
+            <Link to="/admin/experiments/review">
+              <ShieldCheck className="h-4 w-4" /> Experiment QC
+            </Link>
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2 border-border/40 h-10"
+            onClick={handleLogout}
+          >
+            <LogOut className="h-4 w-4" />
+            Sign Out
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}

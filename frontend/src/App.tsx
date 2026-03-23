@@ -8,7 +8,8 @@ import Explore from "@/pages/Explore";
 import NewAnalysis from "@/pages/NewAnalysis";
 import ThemeDetails from "@/pages/ThemeDetails";
 import AdminLogin from "@/pages/AdminLogin";
-import AdminDashboard from "@/pages/AdminDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
+import AdminExperimentReview from "./pages/AdminExperimentReview";
 import TestAnalytics from "./pages/TestAnalytics";
 import ExperimentPage from "./pages/ExperimentPage";
 import AmazonSearch from "@/pages/AmazonSearch";
@@ -53,6 +54,7 @@ function App() {
               {/* Admin */}
               <Route path="admin/login" element={<AdminLogin />} />
               <Route path="admin" element={<AdminDashboard />} />
+              <Route path="admin/experiments/review" element={<AdminExperimentReview />} />
 
               {/* Amazon Product Search & Native Reviews */}
               <Route path="amazon" element={<AmazonSearch />} />
