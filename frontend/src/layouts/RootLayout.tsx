@@ -74,7 +74,7 @@ export default function RootLayout() {
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Products
+            Analysis
           </Link>
           <Link
             to="/amazon"
@@ -152,7 +152,7 @@ export default function RootLayout() {
                     )}
                   >
                     <Activity className="h-4 w-4" />
-                    Products
+                    Analysis
                   </Link>
                   <Link
                     to="/amazon"

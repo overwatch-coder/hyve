@@ -31,7 +31,7 @@ export default function Products() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1">
           <h2 className="text-2xl md:text-3xl font-black tracking-tight underline decoration-primary/30 underline-offset-8">
-            Products
+            Analysis
           </h2>
           <p className="text-sm text-muted-foreground font-medium pt-2">
             Explore your product catalog and analyzed datasets.

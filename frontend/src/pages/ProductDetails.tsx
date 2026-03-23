@@ -93,7 +93,7 @@ export default function ProductDetails() {
             to="/products"
             className="hover:text-foreground transition-colors"
           >
-            Products
+            Analysis
           </Link>
           <ChevronRight className="h-3 w-3" />
           <span className="text-foreground font-medium truncate max-w-[200px]">
