@@ -4,6 +4,7 @@ import sys
 import os
 import logging
 from dotenv import load_dotenv
+import time
 
 # Suppress Windows asyncio ProactorEventLoop ConnectionResetError
 if sys.platform == "win32":
@@ -42,6 +43,31 @@ app = FastAPI(
     description="Backend API for structured consumer reviews and AI analysis.",
     version="1.0.0",
 )
+
+
+@app.on_event("startup")
+def _warm_embedding_model_startup() -> None:
+    """Optional warmup to avoid cold-start latency during first clustering."""
+    if os.getenv("WARM_EMBEDDING_MODEL", "1") != "1":
+        return
+    try:
+        from ai_engine import _get_embedding_model
+
+        t0 = time.perf_counter()
+        model = _get_embedding_model()
+        # Force lazy init paths (tokenizer/torch) to run once.
+        model.encode(
+            ["warmup"],
+            batch_size=1,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+        )
+        if os.getenv("HYVE_TIMING", "1") == "1":
+            print(
+                f"TIMING: embedding warmup complete in {time.perf_counter() - t0:.2f}s"
+            )
+    except Exception as e:
+        print(f"WARNING: embedding warmup failed: {e}")
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 

@@ -424,6 +424,7 @@ export interface ExploreContentProps {
   hideExperimentTrigger?: boolean;
   isExperiment?: boolean;
   onStartExperiment?: () => void;
+  resetTrigger?: number;
 }
 
 // --- Traditional Reviews View Subcomponent ---
@@ -571,6 +572,7 @@ export function ExploreContentImpl({
   hideExperimentTrigger = false,
   isExperiment = false,
   onStartExperiment,
+  resetTrigger,
 }: ExploreContentProps) {
   const queryClient = useQueryClient();
   const [showRegenModal, setShowRegenModal] = useState(false);
@@ -865,6 +867,12 @@ export function ExploreContentImpl({
       setTimeout(() => fitView({ padding: 0.25, duration: 600 }), 50);
     }
   }, [productData, analyticsData, setNodes, setEdges, fitView]);
+
+  useEffect(() => {
+    if (resetTrigger && resetTrigger > 0) {
+      resetLayout();
+    }
+  }, [resetTrigger, resetLayout]);
 
   useEffect(() => {
     if (productData && analyticsData && nodes.length === 0) {

@@ -32,6 +32,7 @@ function ExploreInner() {
   const [searchParams] = useSearchParams();
   const isBatch = searchParams.get("batch") === "true";
   const [refreshing, setRefreshing] = useState(false);
+  const [resetTrigger, setResetTrigger] = useState(0);
 
   // FETCH: Deep Product Structure (Tree & Claims)
   const {
@@ -116,10 +117,10 @@ function ExploreInner() {
     return () => eventSource.close();
   }, [productId, productData?.status, productData?.processing_step, refetch]);
 
-  const refetchAll = () => {
-    refetch();
-    refetchAnalytics();
+  const refetchAll = async () => {
     setRefreshing(true);
+    await Promise.all([refetch(), refetchAnalytics()]);
+    setRefreshing(false);
   };
 
   if (isLoading) {
@@ -386,6 +387,7 @@ function ExploreInner() {
           setViewMode={setViewMode}
           onRefresh={refetch}
           onStartExperiment={() => setIsExperimentMode(true)}
+          resetTrigger={resetTrigger}
         />
       </div>
 
@@ -581,12 +583,11 @@ function ExploreInner() {
                       <Button
                         size="lg"
                         className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl h-14 font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 group"
-                        onClick={() => {
-                          refetchAll();
-                          setTimeout(() => {
-                            setRefreshing(false);
-                            setShowModal(false);
-                          }, 3000);
+                        onClick={async () => {
+                          await refetchAll();
+                          await new Promise((r) => setTimeout(r, 1000));
+                          setShowModal(false);
+                          setResetTrigger((prev) => prev + 1);
                         }}
                       >
                         {refreshing

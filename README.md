@@ -80,6 +80,25 @@ DATABASE_URL=sqlite:///./hyvedb.sqlite3     # or a PostgreSQL URL
 REDIS_URL=redis://localhost:6379/0
 ADMIN_PASSWORD=your_admin_password
 JWT_SECRET="your_jwt_secret"
+
+# Optional clustering performance flags
+# - Keep SentenceTransformers clustering (default): CLUSTERING_BACKEND=embedding
+# - Force LLM-only clustering: CLUSTERING_BACKEND=llm
+# - Auto-fallback to LLM if embeddings fail: CLUSTERING_FALLBACK=llm
+# - Enable embedding cache in Redis/Upstash (recommended):
+#   EMBEDDING_CACHE_REDIS_URL=rediss://<user>:<pass>@<host>:<port>/<db>
+# - Warm the embedding model at API startup (avoids cold-start latency on first clustering):
+#   WARM_EMBEDDING_MODEL=1
+# - Tune encode / KMeans behavior:
+#   EMBEDDING_MODEL_NAME=all-MiniLM-L6-v2
+#   EMBEDDING_BATCH_SIZE=64
+#   KMEANS_MINIBATCH_THRESHOLD=800
+#   KMEANS_BATCH_SIZE=1024
+# - LLM clustering knobs (only used when CLUSTERING_BACKEND=llm):
+#   LLM_CLUSTER_SAMPLE_SIZE=60
+#   LLM_CLUSTER_CHUNK_SIZE=50
+# - AI dedup optimization (deduplicate all themes in one call; falls back automatically if it fails):
+#   AI_DEDUP_SINGLE_CALL=1
 ```
 
 > If using Gemini, set `LLM_PROVIDER="gemini"` and add `GEMINI_API_KEY` to your `.env`.

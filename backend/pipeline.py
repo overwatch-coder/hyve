@@ -5,8 +5,14 @@ Used by the batch ingestion endpoint and for testing.
 import os
 from sqlalchemy.orm import Session
 import models
-from ai_engine import extract_claims_from_llm, cluster_claims, extract_claims_from_llm_async
+from ai_engine import (
+    extract_claims_from_llm,
+    cluster_claims,
+    cluster_claims_llm,
+    extract_claims_from_llm_async,
+)
 import asyncio
+import time
 
 
 
@@ -470,18 +476,183 @@ def deduplicate_themes_parallel(theme_mapping: dict, claims: list):
         loop.close()
 
 
+def deduplicate_themes_single_call(theme_mapping: dict, claims: list):
+    """Deduplicate claims within each theme using a single LLM call.
+
+    Returns the same structure as `deduplicate_themes_parallel`:
+      [((cid, theme_obj), deduped_groups), ...]
+
+    Raises on any failure so caller can fall back.
+    """
+    import json as _json
+
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    if provider != "openai":
+        raise ValueError("single-call dedup currently only supports openai provider")
+
+    # Build payload grouped by theme
+    themes_payload = []
+    theme_claims_by_cid = {}
+    total_claims = 0
+
+    for cid, theme in theme_mapping.items():
+        theme_claims = [c for c in claims if c.theme_id == theme.id]
+        if not theme_claims:
+            continue
+        theme_claims_by_cid[int(cid)] = theme_claims
+        total_claims += len(theme_claims)
+
+        claims_data = []
+        for i, c in enumerate(theme_claims):
+            claims_data.append(
+                {
+                    "local_id": i,
+                    "claim_db_id": int(c.id),
+                    "text": c.claim_text,
+                    "sentiment": (c.sentiment_polarity or "neutral"),
+                    "severity": float(c.severity or 0),
+                }
+            )
+
+        themes_payload.append(
+            {
+                "cid": int(cid),
+                "theme_name": theme.name,
+                "claims": claims_data,
+            }
+        )
+
+    if not themes_payload:
+        return []
+
+    prompt = f"""You are deduplicating consumer review claims within multiple themes.
+
+For EACH theme, group claims that express the same core idea.
+
+RULES (must follow strictly):
+- Claims with DIFFERENT sentiments (positive vs negative vs neutral) must NEVER be grouped together.
+- Claims discussing the same topic but with completely different contexts should stay separate.
+- For each group, write ONE clear representative claim that captures the shared meaning.
+- Return the severity as the average severity of the grouped claims.
+
+Input themes:
+{_json.dumps(themes_payload, ensure_ascii=False)}
+
+Return ONLY valid JSON with this exact structure:
+{{
+  \"themes\": [
+    {{
+      \"cid\": 0,
+      \"groups\": [
+        {{
+          \"representative_text\": \"...\",
+          \"sentiment\": \"positive|negative|neutral\",
+          \"severity\": 0.7,
+          \"member_local_ids\": [0, 2, 5]
+        }}
+      ]
+    }}
+  ]
+}}
+"""
+
+    t0 = time.perf_counter()
+    import openai
+
+    client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    response = client.chat.completions.create(
+        model=os.getenv("AI_DEDUP_MODEL", "gpt-4o-mini"),
+        messages=[
+            {"role": "system", "content": "You are a data deduplication expert. Output valid JSON only."},
+            {"role": "user", "content": prompt},
+        ],
+        response_format={"type": "json_object"},
+        timeout=float(os.getenv("AI_DEDUP_TIMEOUT", "60")),
+    )
+
+    try:
+        result = _json.loads(response.choices[0].message.content)
+    except Exception as e:
+        raise ValueError(f"single-call dedup: invalid JSON: {e}")
+
+    themes_out = result.get("themes")
+    if not isinstance(themes_out, list) or not themes_out:
+        raise ValueError("single-call dedup: missing themes")
+
+    # Convert response to existing deduped_groups format
+    results = []
+    for theme_obj in themes_out:
+        try:
+            cid = int(theme_obj.get("cid"))
+        except Exception:
+            continue
+        if cid not in theme_mapping or cid not in theme_claims_by_cid:
+            continue
+
+        theme_claims = theme_claims_by_cid[cid]
+        groups = theme_obj.get("groups", [])
+        if not isinstance(groups, list):
+            raise ValueError(f"single-call dedup: invalid groups for cid={cid}")
+
+        deduped_groups = []
+        for g in groups:
+            member_local_ids = g.get("member_local_ids", [])
+            if not isinstance(member_local_ids, list) or not member_local_ids:
+                continue
+
+            original_ids = []
+            for mid in member_local_ids:
+                try:
+                    mi = int(mid)
+                except Exception:
+                    continue
+                if 0 <= mi < len(theme_claims):
+                    original_ids.append(int(theme_claims[mi].id))
+
+            if not original_ids:
+                continue
+
+            deduped_groups.append(
+                {
+                    "representative_text": str(g.get("representative_text", "")),
+                    "sentiment": str(g.get("sentiment", "neutral")),
+                    "severity": float(g.get("severity", 0.5)),
+                    "mention_count": len(original_ids),
+                    "original_ids": original_ids,
+                }
+            )
+
+        results.append(((cid, theme_mapping[cid]), deduped_groups))
+
+    if not results:
+        raise ValueError("single-call dedup: produced no results")
+
+    if os.getenv("HYVE_TIMING", "1") == "1":
+        print(
+            f"TIMING: AI deduplication single-call themes={len(results)} claims={total_claims} in {time.perf_counter() - t0:.2f}s"
+        )
+
+    return results
+
+
 def cluster_product_claims(product_id: int, db: Session) -> dict:
     """
     Re-cluster all claims for a product into themes.
     Deletes old themes and creates new ones from clustering.
     Then deduplicates claims within each theme using AI.
     """
+    t0 = time.perf_counter()
+
     # Get all claims for this product through reviews
     claims = (
         db.query(models.Claim)
         .join(models.Review, models.Claim.review_id == models.Review.id)
         .filter(models.Review.product_id == product_id)
         .all()
+    )
+
+    print(
+        f"TIMING: cluster_product_claims(product_id={product_id}) fetched claims={len(claims)} in {time.perf_counter() - t0:.2f}s"
     )
 
     if not claims:
@@ -504,8 +675,39 @@ def cluster_product_claims(product_id: int, db: Session) -> dict:
     db.flush()
 
     # Cluster
-    claims_texts = [c.claim_text for c in claims if c.claim_text]
-    cluster_labels = cluster_claims(claims_texts)
+    t_cluster_start = time.perf_counter()
+    claims_for_clustering = [c for c in claims if (c.claim_text and str(c.claim_text).strip())]
+    claims_texts = [c.claim_text for c in claims_for_clustering]
+    print(
+        f"TIMING: clustering input size={len(claims_texts)} (non-empty) out of {len(claims)} total claims"
+    )
+
+    clustering_backend = os.getenv("CLUSTERING_BACKEND", "embedding").lower()
+    clustering_fallback = os.getenv("CLUSTERING_FALLBACK", "").lower()
+    theme_names = {}
+
+    try:
+        if clustering_backend == "llm":
+            cluster_labels, theme_names = cluster_claims_llm(
+                claims_texts,
+                provider=os.getenv("LLM_PROVIDER", "openai"),
+            )
+        else:
+            cluster_labels = cluster_claims(claims_texts)
+    except Exception as e:
+        print(f"WARNING: clustering backend '{clustering_backend}' failed: {e}")
+        if clustering_fallback == "llm":
+            clustering_backend = "llm"
+            cluster_labels, theme_names = cluster_claims_llm(
+                claims_texts,
+                provider=os.getenv("LLM_PROVIDER", "openai"),
+            )
+        else:
+            raise
+
+    print(
+        f"TIMING: clustering backend={clustering_backend} produced labels={len(cluster_labels)} in {time.perf_counter() - t_cluster_start:.2f}s"
+    )
 
     # Build theme names using LLM or fallback heuristic
     unique_clusters = sorted(set(cluster_labels))
@@ -515,15 +717,26 @@ def cluster_product_claims(product_id: int, db: Session) -> dict:
     cluster_texts_map = {}
     for cid in unique_clusters:
         cluster_texts_map[cid] = [
-            claims[i].claim_text for i, label in enumerate(cluster_labels) if label == cid
+            claims_for_clustering[i].claim_text
+            for i, label in enumerate(cluster_labels)
+            if label == cid
         ]
 
-    # Try LLM theme naming
-    theme_names = _generate_theme_names(cluster_texts_map)
+    # Try LLM theme naming (unless LLM clustering already returned names)
+    if not theme_names:
+        t_naming_start = time.perf_counter()
+        theme_names = _generate_theme_names(cluster_texts_map)
+        print(
+            f"TIMING: theme naming clusters={len(unique_clusters)} in {time.perf_counter() - t_naming_start:.2f}s"
+        )
+    else:
+        print(f"TIMING: theme naming skipped (provided by LLM clustering)")
 
     for cid in unique_clusters:
         cluster_claims_list = [
-            claims[i] for i, label in enumerate(cluster_labels) if label == cid
+            claims_for_clustering[i]
+            for i, label in enumerate(cluster_labels)
+            if label == cid
         ]
 
         # Use LLM name/recommendation if available, else fallback
@@ -568,12 +781,24 @@ def cluster_product_claims(product_id: int, db: Session) -> dict:
         product.processing_step = "Harmonizing Patterns & Thematic Clusters"
         db.commit()
 
-    for claim, cluster_id in zip(claims, cluster_labels):
+    for claim, cluster_id in zip(claims_for_clustering, cluster_labels):
         claim.theme_id = theme_mapping[cluster_id].id
 
     # ── AI Deduplication: group similar claims within each theme ──
     print(f"DEBUG: Starting AI deduplication for product {product_id}...")
-    results = deduplicate_themes_parallel(theme_mapping, claims)
+    t_dedup_start = time.perf_counter()
+    results = None
+    if os.getenv("AI_DEDUP_SINGLE_CALL", "1") == "1":
+        try:
+            results = deduplicate_themes_single_call(theme_mapping, claims)
+        except Exception as e:
+            print(f"WARNING: single-call AI dedup failed, falling back to per-theme: {e}")
+
+    if results is None:
+        results = deduplicate_themes_parallel(theme_mapping, claims)
+    print(
+        f"TIMING: AI deduplication gather in {time.perf_counter() - t_dedup_start:.2f}s"
+    )
     for (cid, theme), deduped_groups in results:
         theme_claims = [c for c in claims if c.theme_id == theme.id]
         if not theme_claims:
