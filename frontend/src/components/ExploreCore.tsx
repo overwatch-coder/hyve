@@ -809,6 +809,17 @@ export function ExploreContentImpl({
     (_: any, node: any) => toggleNodeExpansion(node.id),
     [toggleNodeExpansion],
   );
+
+  const handleNodeClick = useCallback(
+    (event: React.MouseEvent, node: any) => {
+      // Check if the click happened on the toggle button
+      if ((event.target as HTMLElement).closest(".expand-toggle-btn")) {
+        toggleNodeExpansion(node.id);
+      }
+    },
+    [toggleNodeExpansion],
+  );
+
   const expandAll = useCallback(() => {
     setNodes((nds) => {
       const expanded = nds.map((n) => ({
@@ -1036,7 +1047,7 @@ export function ExploreContentImpl({
               <p className="text-xs text-muted-foreground mt-0.5">
                 {viewMode === "accordion"
                   ? "Expand each theme to explore underlying consumer claims."
-                  : "Double-click theme nodes to expand. Scroll to zoom, drag to pan."}
+                  : "Double-click nodes or click the bottom chevron icon to expand/collapse. Scroll to zoom, drag to pan."}
               </p>
             </div>
             {viewMode === "graph" && (
@@ -1088,6 +1099,7 @@ export function ExploreContentImpl({
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onNodeDoubleClick={handleNodeDoubleClick}
+                    onNodeClick={handleNodeClick}
                     nodeTypes={nodeTypes}
                     fitView
                     fitViewOptions={{ padding: 0.25 }}

@@ -1,6 +1,14 @@
 import { memo, useState } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { Sparkles, RefreshCcw, Loader2, Star, Quote } from "lucide-react";
+import {
+  Sparkles,
+  RefreshCcw,
+  Loader2,
+  Star,
+  Quote,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -39,13 +47,23 @@ function ProductNodeRaw({
 
   return (
     <div
-      className="flex flex-col items-center gap-1 px-6 py-4 rounded-xl font-bold text-white select-none cursor-pointer"
+      className="flex flex-col items-center gap-1 px-6 py-4 rounded-xl font-bold text-white select-none cursor-pointer relative"
       style={{
         background: "hsl(170 45% 32%)",
         boxShadow: "0 4px 20px hsl(170 45% 32% / 0.3)",
         minWidth: 180,
       }}
     >
+      {data.childIds && data.childIds.length > 0 && (
+        <button className="expand-toggle-btn absolute -bottom-3 bg-white text-[hsl(170,45%,32%)] rounded-full p-0.5 border border-[hsl(170,45%,32%)] shadow-md hover:bg-gray-100 transition-colors z-10">
+          {data.expanded ? (
+            <ChevronUp className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+        </button>
+      )}
+
       {category && (
         <span className="text-[10px] font-medium uppercase tracking-widest opacity-70">
           {category}
@@ -103,7 +121,7 @@ function ThemeNodeRaw({
 
   return (
     <div
-      className="flex flex-col rounded-xl select-none cursor-pointer transition-all duration-200 hover:shadow-xl group"
+      className="flex flex-col rounded-xl select-none cursor-pointer transition-all duration-200 hover:shadow-xl group relative"
       style={{
         background: "hsl(170 40% 98%)",
         border: `2px solid hsl(170 35% 88%)`,
@@ -112,6 +130,16 @@ function ThemeNodeRaw({
         padding: "2px",
       }}
     >
+      {data.childIds && data.childIds.length > 0 && (
+        <button className="expand-toggle-btn absolute -bottom-3 left-1/2 -translate-x-1/2 bg-white text-primary rounded-full p-0.5 border border-primary/20 shadow-sm hover:bg-primary/5 transition-colors z-10">
+          {data.expanded ? (
+            <ChevronUp className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+        </button>
+      )}
+
       <Handle
         type="target"
         position={Position.Top}
@@ -170,7 +198,7 @@ export const ThemeNode = memo(ThemeNodeRaw);
 function SentimentNodeRaw({
   data,
 }: {
-  data: { label: string; type: "pos" | "neg"; mentionCount?: number };
+  data: ExpandableNodeData & { type: "pos" | "neg"; mentionCount?: number };
 }) {
   const isPos = data.type === "pos";
   const color = isPos ? "hsl(160 64% 43%)" : "hsl(0 72% 51%)";
@@ -180,7 +208,7 @@ function SentimentNodeRaw({
 
   return (
     <div
-      className="px-4 py-2 rounded-lg border-2 font-black uppercase tracking-[0.2em] text-[10px] select-none flex flex-col items-center justify-center gap-0.5"
+      className="px-4 py-2 rounded-lg border-2 font-black uppercase tracking-[0.2em] text-[10px] select-none flex flex-col items-center justify-center gap-0.5 relative"
       style={{
         background: bgColor,
         borderColor: borderColor,
@@ -189,6 +217,20 @@ function SentimentNodeRaw({
         textAlign: "center",
       }}
     >
+      {(data as ExpandableNodeData).childIds &&
+        (data as ExpandableNodeData).childIds!.length > 0 && (
+          <button
+            className="expand-toggle-btn absolute -bottom-2.5 bg-white text-current rounded-full p-0 border shadow-sm hover:bg-black/5 transition-colors z-10"
+            style={{ borderColor: borderColor }}
+          >
+            {(data as ExpandableNodeData).expanded ? (
+              <ChevronUp className="h-3 w-3" />
+            ) : (
+              <ChevronDown className="h-3 w-3" />
+            )}
+          </button>
+        )}
+
       <Handle
         type="target"
         position={Position.Top}
@@ -243,7 +285,7 @@ function ClaimNodeRaw({
 
   return (
     <div
-      className="flex flex-col rounded-xl select-none cursor-pointer transition-all duration-300 hover:shadow-lg group p-3 shadow-sm"
+      className="flex flex-col rounded-xl select-none cursor-pointer transition-all duration-300 hover:shadow-lg group p-3 shadow-sm relative"
       onDoubleClick={() => {
         // Prevent double click from triggering parent if we want to handle expansion differently
         // but for now let's use the Read More button
@@ -258,6 +300,16 @@ function ClaimNodeRaw({
           : undefined,
       }}
     >
+      {data.childIds && data.childIds.length > 0 && (
+        <button className="expand-toggle-btn absolute -bottom-2.5 left-1/2 -translate-x-1/2 bg-white text-muted-foreground rounded-full p-0 border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors z-10">
+          {data.expanded ? (
+            <ChevronUp className="h-3 w-3" />
+          ) : (
+            <ChevronDown className="h-3 w-3" />
+          )}
+        </button>
+      )}
+
       <Handle
         type="target"
         position={Position.Top}
@@ -360,14 +412,21 @@ function QuoteNodeRaw({
       <div className="flex items-center justify-between border-t border-gray-200/50 pt-3 mt-auto">
         <div className="flex flex-col">
           <span className="text-[10px] font-black text-gray-900">{author}</span>
-          <span className="text-[8px] text-muted-foreground uppercase tracking-widest">{source}</span>
+          <span className="text-[8px] text-muted-foreground uppercase tracking-widest">
+            {source}
+          </span>
         </div>
         {rating && (
           <div className="flex gap-0.5">
             {Array.from({ length: 5 }).map((_, i) => (
               <Star
                 key={i}
-                className={cn("h-2.5 w-2.5", i < rating ? "fill-amber-400 text-amber-400" : "fill-gray-200 text-gray-200")}
+                className={cn(
+                  "h-2.5 w-2.5",
+                  i < rating
+                    ? "fill-amber-400 text-amber-400"
+                    : "fill-gray-200 text-gray-200",
+                )}
               />
             ))}
           </div>
