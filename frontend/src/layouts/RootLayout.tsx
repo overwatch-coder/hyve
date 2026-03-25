@@ -206,10 +206,6 @@ export default function RootLayout() {
               </SheetContent>
             </Sheet>
           </div>
-
-          <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-[10px] font-black text-primary">
-            SCI
-          </div>
         </div>
       </header>
 

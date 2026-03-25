@@ -39,7 +39,10 @@ function FeaturedProducts() {
     return (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-56 bg-muted animate-pulse rounded-2xl border border-border/40" />
+          <div
+            key={i}
+            className="h-56 bg-muted animate-pulse rounded-2xl border border-border/40"
+          />
         ))}
       </div>
     );
@@ -50,7 +53,9 @@ function FeaturedProducts() {
       <div className="col-span-full h-56 border-2 border-dashed border-border/40 rounded-3xl flex flex-col items-center justify-center gap-4 bg-muted/5">
         <Package className="h-10 w-10 text-muted-foreground/40" />
         <div className="text-center">
-          <p className="font-bold text-muted-foreground text-sm">No analyses yet.</p>
+          <p className="font-bold text-muted-foreground text-sm">
+            No analyses yet.
+          </p>
           <Link to="/new">
             <button className="text-xs font-black text-primary uppercase tracking-widest mt-2 hover:underline underline-offset-4">
               Start your first analysis
@@ -133,15 +138,6 @@ export default function Home() {
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
           {/* Left: Content */}
           <div className="lg:col-span-7 space-y-8">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-xs font-black text-primary uppercase tracking-[0.2em]"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Collective Intelligence Engine</span>
-            </motion.div>
-
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -236,7 +232,7 @@ export default function Home() {
                 Live Examples
               </p>
               <h2 className="text-3xl md:text-4xl font-black tracking-tighter">
-                Community Hyped Products
+                Community Analyzed Products
               </h2>
             </div>
             <Link to="/products" className="w-full md:w-auto">
@@ -244,8 +240,7 @@ export default function Home() {
                 variant="ghost"
                 className="w-full md:w-auto font-bold uppercase tracking-widest text-[10px] justify-between md:justify-center"
               >
-                Explore All Intelligence{" "}
-                <ArrowRight className="ml-2 h-3.5 w-3.5" />
+                Explore All <ArrowRight className="ml-2 h-3.5 w-3.5" />
               </Button>
             </Link>
           </div>

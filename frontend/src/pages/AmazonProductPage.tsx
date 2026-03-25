@@ -65,18 +65,32 @@ interface PaginatedResponse<T> {
   pages: number;
 }
 
-function ExpandableText({ text, limit = 200 }: { text: string; limit?: number }) {
+function ExpandableText({
+  text,
+  limit = 200,
+}: {
+  text: string;
+  limit?: number;
+}) {
   const [expanded, setExpanded] = useState(false);
   const isLong = text.length > limit;
 
   return (
     <div className="space-y-1">
-      <p className={cn("text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap", !expanded && isLong && "line-clamp-4")}>
+      <p
+        className={cn(
+          "text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap",
+          !expanded && isLong && "line-clamp-4",
+        )}
+      >
         {text}
       </p>
       {isLong && (
-        <button 
-          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(!expanded);
+          }}
           className="text-xs font-semibold text-primary hover:underline"
         >
           {expanded ? "Read Less" : "Read More"}
@@ -117,7 +131,9 @@ function NativeReviewCard({ review }: { review: NativeReview }) {
   return (
     <div className="border border-border/50 bg-card/20 rounded-lg p-4 space-y-2">
       <div className="flex items-center justify-between">
-        <span className="font-medium text-sm">{review.author_name || "Anonymous"}</span>
+        <span className="font-medium text-sm">
+          {review.author_name || "Anonymous"}
+        </span>
         <span className="text-xs text-muted-foreground">
           {new Date(review.created_at).toLocaleDateString()}
         </span>
@@ -146,11 +162,15 @@ function AmazonReviewCard({ review }: { review: AmazonReview }) {
         <span className="font-medium text-sm flex items-center gap-2">
           {review.reviewer_name || "Amazon Customer"}
           {review.verified_purchase && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">Verified</Badge>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+              Verified
+            </Badge>
           )}
         </span>
         <span className="text-xs text-muted-foreground flex items-center gap-1">
-          {review.helpful_votes > 0 && <span>{review.helpful_votes} helpful</span>}
+          {review.helpful_votes > 0 && (
+            <span>{review.helpful_votes} helpful</span>
+          )}
         </span>
       </div>
       <div className="flex items-center gap-2">
@@ -166,7 +186,9 @@ function AmazonReviewCard({ review }: { review: AmazonReview }) {
             />
           ))}
         </div>
-        {review.title && <span className="text-sm font-semibold truncate">{review.title}</span>}
+        {review.title && (
+          <span className="text-sm font-semibold truncate">{review.title}</span>
+        )}
       </div>
       <ExpandableText text={review.body} />
     </div>
@@ -182,7 +204,7 @@ export default function AmazonProductPage() {
   const [authorName, setAuthorName] = useState("");
   const [rating, setRating] = useState(0);
   const [body, setBody] = useState("");
-  
+
   // Pagination states
   const [nativePage, setNativePage] = useState(1);
   const [amazonPage, setAmazonPage] = useState(1);
@@ -198,14 +220,18 @@ export default function AmazonProductPage() {
   });
 
   // Fetch native reviews
-  const { data: nativeReviewsData } = useQuery<PaginatedResponse<NativeReview>>({
-    queryKey: ["native-reviews", asin, nativePage],
-    queryFn: async () => {
-      const res = await api.get(`/amazon/products/${asin}/native-reviews`, { params: { page: nativePage } });
-      return res.data;
+  const { data: nativeReviewsData } = useQuery<PaginatedResponse<NativeReview>>(
+    {
+      queryKey: ["native-reviews", asin, nativePage],
+      queryFn: async () => {
+        const res = await api.get(`/amazon/products/${asin}/native-reviews`, {
+          params: { page: nativePage },
+        });
+        return res.data;
+      },
+      enabled: !!asin,
     },
-    enabled: !!asin,
-  });
+  );
 
   // Submit native review
   const submitReviewMutation = useMutation({
@@ -213,11 +239,13 @@ export default function AmazonProductPage() {
       if (!rating) throw new Error("Please select a star rating.");
       if (!body.trim() || body.trim().length < 10)
         throw new Error("Please write at least 10 characters in your review.");
-        
+
       // Ensure local device ID for duplicate checking
       let deviceId = localStorage.getItem("hyve_device_id");
       if (!deviceId) {
-        deviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
+        deviceId = crypto.randomUUID
+          ? crypto.randomUUID()
+          : Math.random().toString(36).substring(2) + Date.now().toString(36);
         localStorage.setItem("hyve_device_id", deviceId);
       }
 
@@ -238,7 +266,13 @@ export default function AmazonProductPage() {
       queryClient.invalidateQueries({ queryKey: ["native-reviews", asin] });
     },
     onError: (err: any) => {
-      toast.error(err.message || err.response?.data?.detail || "Submission failed.");
+      toast.error(
+        err?.response?.data?.detail?.includes(
+          "You have already submitted a review",
+        )
+          ? "You have already submitted a review"
+          : err.message || err.response?.data?.detail || "Submission failed.",
+      );
     },
   });
 
@@ -250,20 +284,28 @@ export default function AmazonProductPage() {
     },
     onSuccess: (data) => {
       toast.success(`Analysis Started`, {
-        description: data.message || "Amazon reviews are being processed in the background.",
+        description:
+          data.message ||
+          "Amazon reviews are being processed in the background.",
       });
       navigate(`/products/${data.product_id}`);
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.detail || "Failed to analyze Amazon reviews.");
+      toast.error(
+        err.response?.data?.detail || "Failed to analyze Amazon reviews.",
+      );
     },
   });
 
   // Auto-fetch raw Amazon reviews on mount
-  const { data: amazonReviewsData, isLoading: amazonReviewsLoading } = useQuery<PaginatedResponse<AmazonReview>>({
+  const { data: amazonReviewsData, isLoading: amazonReviewsLoading } = useQuery<
+    PaginatedResponse<AmazonReview>
+  >({
     queryKey: ["amazon-reviews", asin, amazonPage],
     queryFn: async () => {
-      const res = await api.get(`/amazon/products/${asin}/reviews`, { params: { page: amazonPage } });
+      const res = await api.get(`/amazon/products/${asin}/reviews`, {
+        params: { page: amazonPage },
+      });
       return res.data;
     },
     enabled: !!asin,
@@ -279,12 +321,16 @@ export default function AmazonProductPage() {
     },
     onSuccess: (data) => {
       toast.success("Analysis Started", {
-        description: data.message || "Native reviews are being processed in the background.",
+        description:
+          data.message ||
+          "Native reviews are being processed in the background.",
       });
       navigate(`/products/${data.product_id}`);
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.detail || "Failed to analyze native reviews.");
+      toast.error(
+        err.response?.data?.detail || "Failed to analyze native reviews.",
+      );
     },
   });
 
@@ -300,7 +346,10 @@ export default function AmazonProductPage() {
     return (
       <div className="text-center py-20 text-muted-foreground">
         Product not found.{" "}
-        <button className="text-primary underline" onClick={() => navigate("/amazon")}>
+        <button
+          className="text-primary underline"
+          onClick={() => navigate("/amazon")}
+        >
           Go back to search
         </button>
       </div>
@@ -350,7 +399,9 @@ export default function AmazonProductPage() {
             {product.rating && (
               <div className="flex items-center gap-1">
                 <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
-                <span className="text-sm font-medium">{product.rating.toFixed(1)}</span>
+                <span className="text-sm font-medium">
+                  {product.rating.toFixed(1)}
+                </span>
                 {product.review_count && (
                   <span className="text-xs text-muted-foreground">
                     ({product.review_count.toLocaleString()} reviews on Amazon)
@@ -359,10 +410,14 @@ export default function AmazonProductPage() {
               </div>
             )}
             {product.category && (
-              <Badge variant="secondary">{product.category.split(">").pop()?.trim()}</Badge>
+              <Badge variant="secondary">
+                {product.category.split(">").pop()?.trim()}
+              </Badge>
             )}
             {product.price && (
-              <span className="font-bold text-lg">${product.price.toFixed(2)}</span>
+              <span className="font-bold text-lg">
+                ${product.price.toFixed(2)}
+              </span>
             )}
           </div>
           {product.description && (
@@ -392,13 +447,15 @@ export default function AmazonProductPage() {
             <h2 className="font-semibold">Analyze Amazon Reviews</h2>
           </div>
           <p className="text-sm text-muted-foreground">
-            Run HYVE's full AI analysis (claims extraction, themes, decision trees) on the Amazon
-            reviews listed below.
+            Run HYVE's full AI analysis (claims extraction, themes, decision
+            trees) on the Amazon reviews listed below.
           </p>
           <Button
             className="w-full"
             onClick={() => analyzeAmazonReviewsMutation.mutate()}
-            disabled={analyzeAmazonReviewsMutation.isPending || amazonReviewsLoading}
+            disabled={
+              analyzeAmazonReviewsMutation.isPending || amazonReviewsLoading
+            }
           >
             {analyzeAmazonReviewsMutation.isPending ? (
               <>
@@ -427,8 +484,8 @@ export default function AmazonProductPage() {
             </h2>
           </div>
           <p className="text-sm text-muted-foreground">
-            Run AI analysis exclusively on reviews left by the HYVE community directly on
-            this page.
+            Run AI analysis exclusively on reviews left by the HYVE community
+            directly on this page.
           </p>
           <Button
             className="w-full"
@@ -444,7 +501,9 @@ export default function AmazonProductPage() {
             ) : (
               <>
                 <Sparkles className="mr-2 h-4 w-4" />
-                {nativeTotal === 0 ? "No native reviews yet" : "Analyze Native Reviews"}
+                {nativeTotal === 0
+                  ? "No native reviews yet"
+                  : "Analyze Native Reviews"}
               </>
             )}
           </Button>
@@ -486,13 +545,13 @@ export default function AmazonProductPage() {
                   <AmazonReviewCard key={review.id} review={review} />
                 ))}
               </div>
-              
+
               {amazonReviewsData.pages > 1 && (
                 <div className="flex items-center justify-center gap-4 pt-4 pb-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setAmazonPage(p => Math.max(1, p - 1))}
+                    onClick={() => setAmazonPage((p) => Math.max(1, p - 1))}
                     disabled={amazonPage === 1}
                   >
                     <ChevronLeft className="h-4 w-4 mr-1" /> Previous
@@ -503,7 +562,11 @@ export default function AmazonProductPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setAmazonPage(p => Math.min(amazonReviewsData.pages, p + 1))}
+                    onClick={() =>
+                      setAmazonPage((p) =>
+                        Math.min(amazonReviewsData.pages, p + 1),
+                      )
+                    }
                     disabled={amazonPage === amazonReviewsData.pages}
                   >
                     Next <ChevronRight className="h-4 w-4 ml-1" />
@@ -517,10 +580,12 @@ export default function AmazonProductPage() {
         {/* Leave a Review Tab */}
         <TabsContent value="leave-review" className="mt-6 space-y-5">
           <div>
-            <h3 className="font-semibold text-base">Review this product on HYVE</h3>
+            <h3 className="font-semibold text-base">
+              Review this product on HYVE
+            </h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Your review will be stored on the HYVE platform and can be used for AI analysis
-              independently from Amazon's reviews.
+              Your review will be stored on the HYVE platform and can be used
+              for AI analysis independently from Amazon's reviews.
             </p>
           </div>
 
@@ -549,7 +614,9 @@ export default function AmazonProductPage() {
               value={body}
               onChange={(e) => setBody(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground text-right">{body.length} characters</p>
+            <p className="text-xs text-muted-foreground text-right">
+              {body.length} characters
+            </p>
           </div>
 
           <Button
@@ -585,13 +652,13 @@ export default function AmazonProductPage() {
                   <NativeReviewCard key={review.id} review={review} />
                 ))}
               </div>
-              
+
               {nativeReviewsData && nativeReviewsData.pages > 1 && (
                 <div className="flex items-center justify-center gap-4 pt-4 pb-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setNativePage(p => Math.max(1, p - 1))}
+                    onClick={() => setNativePage((p) => Math.max(1, p - 1))}
                     disabled={nativePage === 1}
                   >
                     <ChevronLeft className="h-4 w-4 mr-1" /> Previous
@@ -602,7 +669,11 @@ export default function AmazonProductPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setNativePage(p => Math.min(nativeReviewsData.pages, p + 1))}
+                    onClick={() =>
+                      setNativePage((p) =>
+                        Math.min(nativeReviewsData.pages, p + 1),
+                      )
+                    }
                     disabled={nativePage === nativeReviewsData.pages}
                   >
                     Next <ChevronRight className="h-4 w-4 ml-1" />
