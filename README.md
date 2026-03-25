@@ -253,4 +253,4 @@ npm run dev
 
 ## License
 
-Developed with ❤️ by **TEAM SPIDEER - COMPUTER SCIENCE MODULE 2 IN SCI**.
+Developed with ❤️ by **TEAM SPIDER - COMPUTER SCIENCE MODULE 2 IN SCI**.
