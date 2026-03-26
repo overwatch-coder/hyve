@@ -1,15 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { Link } from "react-router-dom";
-import { TrendingUp, Plus, Package, Search, ShoppingBag } from "lucide-react";
+import { TrendingUp, Plus, Package, Search, ShoppingBag, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { getSentimentVerdict, getSentimentColor } from "@/lib/sentiment";
 
+const PAGE_SIZE = 9;
+
 export default function Products() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [gridPage, setGridPage] = useState(1);
 
   const { data: productsData, isLoading: isProductsLoading } = useQuery({
     queryKey: ["products-list"],
@@ -23,6 +26,12 @@ export default function Products() {
     (p: any) =>
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.category?.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
+  const totalGridPages = Math.ceil((filteredProducts?.length ?? 0) / PAGE_SIZE);
+  const pagedProducts = filteredProducts?.slice(
+    (gridPage - 1) * PAGE_SIZE,
+    gridPage * PAGE_SIZE,
   );
 
   return (
@@ -45,7 +54,7 @@ export default function Products() {
               placeholder="Search products..."
               className="pl-10 bg-card text-xs h-10 border-border/40 focus:border-primary/40 focus:ring-primary/10 rounded-xl transition-all shadow-sm w-full"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setGridPage(1); }}
             />
           </div>
           <Link to="/amazon" className="w-full sm:w-auto">
@@ -77,8 +86,9 @@ export default function Products() {
           ))}
         </div>
       ) : (
+        <>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProducts?.map((p: any) => (
+          {pagedProducts?.map((p: any) => (
             <Card
               key={p.id}
               className="group border-border/40 bg-card/40 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-300 hover:border-primary/40 hover:md:translate-y-[-4px] hover:shadow-2xl hover:shadow-primary/5"
@@ -197,6 +207,31 @@ export default function Products() {
             </div>
           )}
         </div>
+
+        {totalGridPages > 1 && (
+          <div className="flex items-center justify-center gap-4 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setGridPage((p) => Math.max(1, p - 1))}
+              disabled={gridPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+            </Button>
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Page {gridPage} of {totalGridPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setGridPage((p) => Math.min(totalGridPages, p + 1))}
+              disabled={gridPage >= totalGridPages}
+            >
+              Next <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        )}
+        </>
       )}
     </div>
   );

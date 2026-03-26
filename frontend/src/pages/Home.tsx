@@ -6,9 +6,6 @@ import {
   Sparkles,
   GitBranch,
   ShieldCheck,
-  Layers,
-  Zap,
-  Bot,
   Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -161,26 +158,6 @@ export default function Home() {
               HYVE clusters thousands of raw reviews into a visual decision
               tree. Drill down from themes to specific claims in seconds.
             </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="flex flex-wrap gap-4 pt-4 font-mono uppercase tracking-widest text-[10px] font-bold text-muted-foreground/60"
-            >
-              <div className="flex items-center gap-2">
-                <Zap className="h-3 w-3 text-primary" />
-                D3.js Visualization
-              </div>
-              <div className="flex items-center gap-2">
-                <Bot className="h-3 w-3 text-primary" />
-                Gemini 1.5 Pro AI
-              </div>
-              <div className="flex items-center gap-2">
-                <Layers className="h-3 w-3 text-primary" />
-                Sentiment Layering
-              </div>
-            </motion.div>
           </div>
 
           {/* Right: Ingestion UI (Glassmorphism) */}

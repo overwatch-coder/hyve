@@ -63,7 +63,7 @@ class Claim(Base):
     evidence_text = Column(String, nullable=True)
     context_text = Column(String, nullable=True)
 
-    sentiment_polarity = Column(String)  # positive, neutral, negative
+    sentiment_polarity = Column(String, index=True)  # positive, neutral, negative
     severity = Column(Float, default=0.0)
     # How many raw reviews express this same insight
     mention_count = Column(Integer, default=1)

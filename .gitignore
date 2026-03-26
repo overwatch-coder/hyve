@@ -35,3 +35,4 @@ nul
 /backend/hyvedb.sqlite3
 /fixes
 /docs
+*.local.json

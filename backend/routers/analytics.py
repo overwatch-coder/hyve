@@ -1,5 +1,6 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 import schemas
 import models
@@ -54,21 +55,45 @@ def get_product_analytics(product_id: int, db: Session = Depends(get_db)):
     review_count = db.query(models.Review).filter(models.Review.product_id == product_id).count()
     themes = db.query(models.Theme).filter(models.Theme.product_id == product_id).all()
 
+    # Single aggregation query instead of 1 query per theme
+    claim_stats = (
+        db.query(
+            models.Claim.theme_id,
+            models.Claim.sentiment_polarity,
+            func.count(models.Claim.id).label("cnt"),
+            func.avg(models.Claim.severity).label("avg_sev"),
+        )
+        .join(models.Theme, models.Claim.theme_id == models.Theme.id)
+        .filter(models.Theme.product_id == product_id)
+        .group_by(models.Claim.theme_id, models.Claim.sentiment_polarity)
+        .all()
+    )
+
+    stats_by_theme: dict[int, dict] = {}
+    for row in claim_stats:
+        if row.theme_id not in stats_by_theme:
+            stats_by_theme[row.theme_id] = {"positive": 0, "negative": 0, "neutral": 0, "sev_sum": 0.0, "total": 0}
+        polarity = row.sentiment_polarity or "neutral"
+        stats_by_theme[row.theme_id][polarity] = stats_by_theme[row.theme_id].get(polarity, 0) + row.cnt
+        stats_by_theme[row.theme_id]["sev_sum"] += (row.avg_sev or 0.0) * row.cnt
+        stats_by_theme[row.theme_id]["total"] += row.cnt
+
     theme_analytics = []
     for theme in themes:
-        claims = db.query(models.Claim).filter(models.Claim.theme_id == theme.id).all()
-        pos = sum(1 for c in claims if c.sentiment_polarity == "positive")
-        neg = sum(1 for c in claims if c.sentiment_polarity == "negative")
-        neu = sum(1 for c in claims if c.sentiment_polarity == "neutral")
-        avg_sev = round(sum(c.severity for c in claims) / max(len(claims), 1), 2)
-
+        s = stats_by_theme.get(theme.id, {})
+        total = s.get("total", 0)
+        avg_sev = round(s.get("sev_sum", 0.0) / max(total, 1), 2)
         theme_analytics.append(ThemeAnalytics(
             id=theme.id,
             name=theme.name,
             claim_count=theme.claim_count,
             positive_ratio=theme.positive_ratio,
             avg_severity=avg_sev,
-            sentiment_counts=SentimentCounts(positive=pos, negative=neg, neutral=neu),
+            sentiment_counts=SentimentCounts(
+                positive=s.get("positive", 0),
+                negative=s.get("negative", 0),
+                neutral=s.get("neutral", 0),
+            ),
         ))
 
     total_claims = sum(t.claim_count for t in theme_analytics)

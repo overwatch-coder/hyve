@@ -10,6 +10,7 @@ import {
   ListTree,
   X,
   ArrowLeft,
+  ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,14 @@ interface AmazonCategory {
   id: string;
   name: string;
   categoryId: string;
+}
+
+interface PaginatedProducts {
+  items: AmazonProduct[];
+  total: number;
+  page: number;
+  size: number;
+  pages: number;
 }
 
 function StarRating({ rating }: { rating: number }) {
@@ -79,10 +88,10 @@ export default function AmazonSearch() {
 
   // 2. Fetch Search Results OR Category Products
   const {
-    data: products,
+    data: productsData,
     isLoading: productsLoading,
     isError,
-  } = useQuery<AmazonProduct[]>({
+  } = useQuery<PaginatedProducts>({
     queryKey: [
       "amazon-products",
       query,
@@ -102,11 +111,14 @@ export default function AmazonSearch() {
         );
         return res.data;
       }
-      return [];
+      return { items: [], total: 0, page: 1, size: 20, pages: 0 };
     },
     enabled: !!(query || selectedCategory),
     staleTime: 1000 * 60 * 5,
   });
+
+  const products = productsData?.items ?? [];
+  const totalPages = productsData?.pages ?? 0;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -254,12 +266,12 @@ export default function AmazonSearch() {
               >
                 {productsLoading
                   ? "Loading..."
-                  : `${products?.length || 0} products`}
+                  : `${productsData?.total || 0} products`}
               </Badge>
             </div>
 
             {/* No Results */}
-            {!productsLoading && products && products.length === 0 && (
+            {!productsLoading && products.length === 0 && (
               <div className="text-center py-20 text-muted-foreground border border-dashed rounded-xl border-border/50 bg-muted/10">
                 <ShoppingCart className="h-10 w-10 mx-auto mb-4 opacity-20" />
                 <p>No products found in this view.</p>
@@ -282,7 +294,7 @@ export default function AmazonSearch() {
             )}
 
             {/* Product Grid */}
-            {!productsLoading && products && products.length > 0 && (
+            {!productsLoading && products.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {products.map((product) => (
                   <div
@@ -355,6 +367,31 @@ export default function AmazonSearch() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {!productsLoading && totalPages > 1 && (
+              <div className="flex items-center justify-center gap-4 pt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                </Button>
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                >
+                  Next <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
               </div>
             )}
           </div>

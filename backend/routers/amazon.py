@@ -1,7 +1,9 @@
 import os
 import requests as http_requests
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 import schemas
 import models
@@ -48,36 +50,44 @@ def _parse_canopy_product(item: dict, search_query: str | None = None) -> dict:
         "search_index": search_query,
     }
 
-@router.get("/search", response_model=list[schemas.AmazonProductOut])
+@router.get("/search", response_model=schemas.PaginatedResponse[schemas.AmazonProductOut])
 def amazon_search(
     q: Optional[str] = Query(None, description="Search term"),
     page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
     if not q or not q.strip():
-        # Return 20 most recently saved Amazon products
-        return db.query(models.AmazonProduct).order_by(models.AmazonProduct.id.desc()).limit(20).all()
+        # Return recently saved Amazon products, paginated
+        query = db.query(models.AmazonProduct).order_by(models.AmazonProduct.id.desc())
+        return paginate(query, page, size)
 
     cache_key = q.strip().lower()
 
-    # Two-tier: search local DB broadly first
-    from sqlalchemy import or_
-    cached = db.query(models.AmazonProduct).filter(
+    cached_query = db.query(models.AmazonProduct).filter(
         or_(
             models.AmazonProduct.search_index == cache_key,
             models.AmazonProduct.title.ilike(f"%{cache_key}%"),
             models.AmazonProduct.brand.ilike(f"%{cache_key}%")
         )
-    ).limit(20).all()
-    
-    if cached:
-        return cached
+    )
+    total_cached = cached_query.count()
+    offset = (page - 1) * size
+
+    if total_cached > offset:
+        # Enough cached results to serve this page without hitting Canopy
+        result = paginate(cached_query, page, size)
+        # If the page is full there may be more pages (either cached or on Canopy)
+        if len(result["items"]) >= size and result["pages"] <= page:
+            result["pages"] = page + 1
+            result["total"] = max(result["total"], page * size + 1)
+        return result
 
     try:
         resp = http_requests.get(
             f"{CANOPY_BASE}/api/amazon/search",
             headers=_canopy_headers(),
-            params={"searchTerm": q, "page": page, "limit": 20},
+            params={"searchTerm": q, "page": page, "limit": size},
             timeout=15,
         )
         resp.raise_for_status()
@@ -86,7 +96,7 @@ def amazon_search(
 
     json_data = resp.json()
     items_to_parse = []
-    
+
     # Try the newer GraphQL-like Canopy wrapper first (data -> amazonProductSearchResults -> productResults -> results)
     if "data" in json_data and "amazonProductSearchResults" in json_data["data"]:
         product_results = json_data["data"]["amazonProductSearchResults"].get("productResults", {})
@@ -101,30 +111,48 @@ def amazon_search(
             items_to_parse = search_data
     elif "organic" in json_data:
         items_to_parse = json_data.get("organic", [])
-    
-    saved = []
+
+    parsed_items = []
     for item in items_to_parse:
         data = _parse_canopy_product(item, cache_key)
-        if not data.get("asin"):
-            continue
+        if data.get("asin"):
+            parsed_items.append(data)
 
-        existing = db.query(models.AmazonProduct).filter(
-            models.AmazonProduct.asin == data["asin"]
-        ).first()
-        if existing:
+    if not parsed_items:
+        return {"items": [], "total": 0, "page": page, "size": size, "pages": 0}
+
+    all_asins = [d["asin"] for d in parsed_items]
+    existing_by_asin = {
+        p.asin: p
+        for p in db.query(models.AmazonProduct).filter(
+            models.AmazonProduct.asin.in_(all_asins)
+        ).all()
+    }
+
+    new_products = []
+    for data in parsed_items:
+        asin = data["asin"]
+        if asin in existing_by_asin:
+            existing = existing_by_asin[asin]
             if existing.search_index != cache_key:
                 existing.search_index = cache_key
-                db.commit()
-                db.refresh(existing)
-            saved.append(existing)
         else:
             new_product = models.AmazonProduct(**data)
             db.add(new_product)
-            db.commit()
-            db.refresh(new_product)
-            saved.append(new_product)
+            new_products.append(new_product)
 
-    return saved
+    if new_products or any(db.is_modified(p) for p in existing_by_asin.values()):
+        db.commit()
+        for p in new_products:
+            db.refresh(p)
+
+    result = paginate(cached_query, page, size)
+    # If Canopy returned a full page, there are likely more pages available
+    has_more = len(parsed_items) >= size
+    if has_more and result["pages"] <= page:
+        result["pages"] = page + 1
+        result["total"] = max(result["total"], page * size + 1)
+    return result
 
 @router.get("/categories")
 def get_amazon_categories(db: Session = Depends(get_db)):
@@ -173,13 +201,14 @@ def get_amazon_categories(db: Session = Depends(get_db)):
     except http_requests.RequestException as e:
         raise HTTPException(status_code=502, detail=f"Canopy API error: {e}")
 
-@router.get("/category/{category_id}", response_model=list[schemas.AmazonProductOut])
+@router.get("/category/{category_id}", response_model=schemas.PaginatedResponse[schemas.AmazonProductOut])
 def get_amazon_category_products(
     category_id: str,
     page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
-    """Fetch products for a specific category."""
+    """Fetch products for a specific category, paginated."""
     try:
         resp = http_requests.get(
             f"{CANOPY_BASE}/api/amazon/category",
@@ -193,7 +222,7 @@ def get_amazon_category_products(
 
     json_data = resp.json()
     data_node = []
-    
+
     if "data" in json_data and "amazonProductCategory" in json_data["data"]:
         product_results = json_data["data"]["amazonProductCategory"].get("productResults", {})
         data_node = product_results.get("results", [])
@@ -205,25 +234,49 @@ def get_amazon_category_products(
         data_node = json_data.get("results", [])
 
     cache_key = f"category_{category_id}"
-    saved = []
+    parsed_items = []
     for item in data_node:
         data = _parse_canopy_product(item, cache_key)
-        if not data.get("asin"):
-            continue
+        if data.get("asin"):
+            parsed_items.append(data)
 
-        existing = db.query(models.AmazonProduct).filter(
-            models.AmazonProduct.asin == data["asin"]
-        ).first()
-        if existing:
-            saved.append(existing)
+    if not parsed_items:
+        return {"items": [], "total": 0, "page": page, "size": size, "pages": 0}
+
+    all_asins = [d["asin"] for d in parsed_items]
+    existing_by_asin = {
+        p.asin: p
+        for p in db.query(models.AmazonProduct).filter(
+            models.AmazonProduct.asin.in_(all_asins)
+        ).all()
+    }
+
+    saved = []
+    for data in parsed_items:
+        asin = data["asin"]
+        if asin in existing_by_asin:
+            saved.append(existing_by_asin[asin])
         else:
             new_product = models.AmazonProduct(**data)
             db.add(new_product)
-            db.commit()
-            db.refresh(new_product)
             saved.append(new_product)
 
-    return saved
+    db.commit()
+    for p in saved:
+        if p.id is None:
+            db.refresh(p)
+
+    # Canopy doesn't expose total count; if we got a full page assume there's more
+    has_more = len(saved) >= size
+    estimated_total = page * size + (1 if has_more else 0)
+    estimated_pages = page + (1 if has_more else 0)
+    return {
+        "items": saved,
+        "total": estimated_total,
+        "page": page,
+        "size": size,
+        "pages": estimated_pages,
+    }
 
 @router.get("/products/{asin}", response_model=schemas.AmazonProductOut)
 def amazon_product_detail(asin: str, db: Session = Depends(get_db)):
@@ -256,6 +309,26 @@ def amazon_product_detail(asin: str, db: Session = Depends(get_db)):
     return new_product
 
 
+def _fetch_review_page(asin: str, page_num: int, headers: dict) -> list:
+    """Fetch a single page of reviews from Canopy. Returns a list of raw review dicts."""
+    try:
+        resp = http_requests.get(
+            f"{CANOPY_BASE}/api/amazon/product/reviews",
+            headers=headers,
+            params={"asin": asin, "page": page_num},
+            timeout=20,
+        )
+        if resp.status_code != 200:
+            return []
+        json_data = resp.json()
+        if "data" in json_data and "amazonProduct" in json_data["data"]:
+            return json_data["data"]["amazonProduct"].get("topReviews", [])
+        return json_data.get("reviews", [])
+    except Exception as e:
+        print(f"Canopy silent fail page {page_num}: {e}")
+        return []
+
+
 @router.get(
     "/products/{asin}/reviews",
     response_model=schemas.PaginatedResponse[schemas.AmazonReviewOut],
@@ -279,52 +352,47 @@ def get_amazon_reviews(
     # Check cache first
     cached_count = db.query(models.AmazonReview).filter(models.AmazonReview.amazon_product_asin == asin).count()
     if cached_count == 0:
-        # Fetch up to 2 pages of reviews to seed the cache quickly
-        for canopy_page in [1, 2]:
-            try:
-                resp = http_requests.get(
-                    f"{CANOPY_BASE}/api/amazon/product/reviews",
-                    headers=_canopy_headers(),
-                    params={"asin": asin, "page": canopy_page},
-                    timeout=20,
-                )
-                if resp.status_code == 200:
-                    json_data = resp.json()
-                    # Parse from data.amazonProduct.topReviews
-                    reviews_raw = []
-                    if "data" in json_data and "amazonProduct" in json_data["data"]:
-                        reviews_raw = json_data["data"]["amazonProduct"].get("topReviews", [])
-                    elif "reviews" in json_data:
-                        reviews_raw = json_data.get("reviews", [])
-                    
-                    if not reviews_raw:
-                        break # no more reviews
-                        
-                    for r in reviews_raw:
-                        canopy_id = r.get("id")
-                        if not canopy_id:
-                            continue
-                        
-                        existing = db.query(models.AmazonReview).filter(models.AmazonReview.canopy_id == canopy_id).first()
-                        if not existing:
-                            reviewer = r.get("reviewer", {})
-                            reviewer_name = reviewer.get("name") if isinstance(reviewer, dict) else r.get("author")
-                            
-                            new_rev = models.AmazonReview(
-                                amazon_product_asin=asin,
-                                canopy_id=canopy_id,
-                                title=r.get("title"),
-                                body=r.get("body") or r.get("review_text") or r.get("text", ""),
-                                rating=float(r.get("rating") or r.get("stars") or 0.0),
-                                reviewer_name=reviewer_name,
-                                verified_purchase=bool(r.get("verifiedPurchase") or r.get("verified_purchase")),
-                                helpful_votes=int(r.get("helpfulVotes") or r.get("helpful_votes") or 0)
-                            )
-                            db.add(new_rev)
-                    db.commit()
-            except Exception as e:
-                print(f"Canopy silent fail during cache phase: {e}")
-                pass 
+        # Fetch pages 1 and 2 in parallel to halve cold-cache latency
+        headers = _canopy_headers()
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(_fetch_review_page, asin, p, headers) for p in [1, 2]]
+            all_reviews_raw = []
+            for f in futures:
+                all_reviews_raw.extend(f.result())
+
+        # Deduplicate by canopy_id (same review may appear on multiple pages)
+        seen_ids: set[str] = set()
+        unique_reviews = []
+        for r in all_reviews_raw:
+            cid = r.get("id")
+            if cid and cid not in seen_ids:
+                seen_ids.add(cid)
+                unique_reviews.append(r)
+
+        if unique_reviews:
+            existing_ids = {
+                row.canopy_id
+                for row in db.query(models.AmazonReview.canopy_id).filter(
+                    models.AmazonReview.canopy_id.in_(seen_ids)
+                ).all()
+            }
+            for r in unique_reviews:
+                cid = r.get("id")
+                if cid in existing_ids:
+                    continue
+                reviewer = r.get("reviewer", {})
+                reviewer_name = reviewer.get("name") if isinstance(reviewer, dict) else r.get("author")
+                db.add(models.AmazonReview(
+                    amazon_product_asin=asin,
+                    canopy_id=cid,
+                    title=r.get("title"),
+                    body=r.get("body") or r.get("review_text") or r.get("text", ""),
+                    rating=float(r.get("rating") or r.get("stars") or 0.0),
+                    reviewer_name=reviewer_name,
+                    verified_purchase=bool(r.get("verifiedPurchase") or r.get("verified_purchase")),
+                    helpful_votes=int(r.get("helpfulVotes") or r.get("helpful_votes") or 0),
+                ))
+            db.commit()
 
     query = db.query(models.AmazonReview).filter(
         models.AmazonReview.amazon_product_asin == asin

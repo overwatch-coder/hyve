@@ -13,6 +13,8 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,8 +22,11 @@ import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { getSentimentVerdict, getSentimentColor } from "@/lib/sentiment";
 
+const PAGE_SIZE = 10;
+
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [tablePage, setTablePage] = useState(1);
 
   const { data: productsData, isLoading: isProductsLoading } = useQuery({
     queryKey: ["products-list"],
@@ -35,6 +40,12 @@ export default function Dashboard() {
     (p: any) =>
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.category?.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
+  const totalTablePages = Math.ceil((filteredProducts?.length ?? 0) / PAGE_SIZE);
+  const pagedProducts = filteredProducts?.slice(
+    (tablePage - 1) * PAGE_SIZE,
+    tablePage * PAGE_SIZE,
   );
 
   const stats = [
@@ -118,7 +129,7 @@ export default function Dashboard() {
               placeholder="Search projects..."
               className="pl-10 bg-card text-xs h-10 border-border/40 focus:border-primary/40 focus:ring-primary/10 rounded-xl transition-all shadow-sm"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setTablePage(1); }}
             />
           </div>
           <Link to="/new">
@@ -172,7 +183,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/20">
-                {filteredProducts?.map((p: any) => (
+                {pagedProducts?.map((p: any) => (
                   <tr
                     key={p.id}
                     className="group hover:bg-primary/5 transition-colors"
@@ -306,6 +317,30 @@ export default function Dashboard() {
                   </Button>
                 </Link>
               </div>
+            </div>
+          )}
+
+          {totalTablePages > 1 && (
+            <div className="flex items-center justify-center gap-4 px-6 py-4 border-t border-border/20">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+                disabled={tablePage === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+              </Button>
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Page {tablePage} of {totalTablePages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setTablePage((p) => Math.min(totalTablePages, p + 1))}
+                disabled={tablePage >= totalTablePages}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
             </div>
           )}
         </div>
