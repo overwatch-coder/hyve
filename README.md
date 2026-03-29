@@ -6,17 +6,17 @@ HYVE is an AI-powered platform that transforms unstructured consumer reviews int
 
 ## Tech Stack
 
-| Layer             | Technology                                              |
-| ----------------- | ------------------------------------------------------- |
-| Frontend          | React 19, Vite, TypeScript, Tailwind CSS v4, shadcn/ui  |
-| Visualization     | React Flow, Dagre, Framer Motion                        |
-| Data Fetching     | React Query, Axios                                      |
-| Backend           | FastAPI (Python), Uvicorn                               |
-| Database          | PostgreSQL (Neon), SQLAlchemy                           |
-| AI Engine         | OpenAI GPT-4o / Google Gemini                           |
-| Clustering        | Sentence-Transformers (`all-MiniLM-L6-v2`), K-Means     |
-| Task Queue        | Background Threads (default) / Celery + Redis (optional) |
-| Deployment        | Vercel (frontend), Render.com (backend)                   |
+| Layer         | Technology                                               |
+| ------------- | -------------------------------------------------------- |
+| Frontend      | React 19, Vite, TypeScript, Tailwind CSS v4, shadcn/ui   |
+| Visualization | React Flow, Dagre, Framer Motion                         |
+| Data Fetching | React Query, Axios                                       |
+| Backend       | FastAPI (Python), Uvicorn                                |
+| Database      | PostgreSQL (Neon), SQLAlchemy                            |
+| AI Engine     | OpenAI GPT-4o / Google Gemini                            |
+| Clustering    | Sentence-Transformers (`all-MiniLM-L6-v2`), K-Means      |
+| Task Queue    | Background Threads (default) / Celery + Redis (optional) |
+| Deployment    | Vercel (frontend), Render.com (backend)                  |
 
 ---
 
@@ -172,9 +172,9 @@ npm run dev
 
 | URL                          | Description      |
 | ---------------------------- | ---------------- |
-| <http://localhost:5173>       | Frontend (Vite)  |
-| <http://localhost:8000>       | Backend API      |
-| <http://localhost:8000/docs>  | Swagger API docs |
+| <http://localhost:5173>      | Frontend (Vite)  |
+| <http://localhost:8000>      | Backend API      |
+| <http://localhost:8000/docs> | Swagger API docs |
 
 ---
 
@@ -228,13 +228,13 @@ HYVE uses a smart task dispatcher (`core/tasks.py`) for all heavy AI processing.
 
 Here's what runs as a background task:
 
-| Task                             | Trigger                                       | What it does                                            |
-| -------------------------------- | --------------------------------------------- | ------------------------------------------------------- |
-| `run_url_ingestion_background`   | POST `/ingest/url`                            | Scrapes a URL, extracts reviews, runs AI claim pipeline |
-| `run_csv_ingestion_background`   | POST `/ingest/csv`                            | Parses CSV/Excel, groups by product, runs AI pipeline   |
-| `run_amazon_ingestion_background`| POST `/amazon/products/{asin}/analyze-amazon` | Pipes cached Amazon reviews through AI engine           |
-| `run_native_ingestion_background`| POST `/amazon/products/{asin}/analyze-native` | Pipes HYVE native reviews through AI engine             |
-| `run_raw_ingestion_background`   | Raw text ingestion                            | AI-extracts products/reviews from unstructured text     |
+| Task                              | Trigger                                       | What it does                                            |
+| --------------------------------- | --------------------------------------------- | ------------------------------------------------------- |
+| `run_url_ingestion_background`    | POST `/ingest/url`                            | Scrapes a URL, extracts reviews, runs AI claim pipeline |
+| `run_csv_ingestion_background`    | POST `/ingest/csv`                            | Parses CSV/Excel, groups by product, runs AI pipeline   |
+| `run_amazon_ingestion_background` | POST `/amazon/products/{asin}/analyze-amazon` | Pipes cached Amazon reviews through AI engine           |
+| `run_native_ingestion_background` | POST `/amazon/products/{asin}/analyze-native` | Pipes HYVE native reviews through AI engine             |
+| `run_raw_ingestion_background`    | Raw text ingestion                            | AI-extracts products/reviews from unstructured text     |
 
 All tasks are dispatched via `enqueue()` from the API routers.
 
@@ -244,22 +244,22 @@ All tasks are dispatched via `enqueue()` from the API routers.
 
 ### Backend (`backend/.env`)
 
-| Variable               | Required | Description                                    |
-| ---------------------- | -------- | ---------------------------------------------- |
-| `OPENAI_API_KEY`       | Yes*     | OpenAI API key for GPT-4o                      |
+| Variable               | Required | Description                                     |
+| ---------------------- | -------- | ----------------------------------------------- |
+| `OPENAI_API_KEY`       | Yes*     | OpenAI API key for GPT-4o                       |
 | `GEMINI_API_KEY`       | Yes*     | Google Gemini API key (if using Gemini)         |
 | `LLM_PROVIDER`         | Yes      | `"openai"` or `"gemini"`                        |
-| `DATABASE_URL`         | Yes      | PostgreSQL connection string                   |
-| `REDIS_URL`            | Yes      | Upstash Redis URL (`rediss://...`)             |
-| `ADMIN_PASSWORD`       | Yes      | Password for admin endpoints                   |
-| `JWT_SECRET`           | Yes      | Secret key for JWT token signing               |
-| `FRONTEND_URL`         | Yes      | Frontend URL for CORS                          |
-| `BACKEND_URL`          | Yes      | Backend URL (used in API docs)                 |
-| `CANOPY_API_KEY`       | Yes      | Canopy API key for Amazon product data         |
-| `HF_TOKEN`             | No       | Hugging Face token for embedding models        |
-| `CLUSTERING_BACKEND`   | No       | `"embedding"` (default) or `"llm"`             |
-| `CLUSTERING_FALLBACK`  | No       | Set to `"llm"` for auto-fallback               |
-| `WARM_EMBEDDING_MODEL` | No       | Set to `"1"` to warm model at startup          |
+| `DATABASE_URL`         | Yes      | PostgreSQL connection string                    |
+| `REDIS_URL`            | Yes      | Upstash Redis URL (`rediss://...`)              |
+| `ADMIN_PASSWORD`       | Yes      | Password for admin endpoints                    |
+| `JWT_SECRET`           | Yes      | Secret key for JWT token signing                |
+| `FRONTEND_URL`         | Yes      | Frontend URL for CORS                           |
+| `BACKEND_URL`          | Yes      | Backend URL (used in API docs)                  |
+| `CANOPY_API_KEY`       | Yes      | Canopy API key for Amazon product data          |
+| `HF_TOKEN`             | No       | Hugging Face token for embedding models         |
+| `CLUSTERING_BACKEND`   | No       | `"embedding"` (default) or `"llm"`              |
+| `CLUSTERING_FALLBACK`  | No       | Set to `"llm"` for auto-fallback                |
+| `WARM_EMBEDDING_MODEL` | No       | Set to `"1"` to warm model at startup           |
 | `AI_DEDUP_SINGLE_CALL` | No       | Set to `"1"` for optimized deduplication        |
 
 _*One of `OPENAI_API_KEY` or `GEMINI_API_KEY` is required depending on `LLM_PROVIDER`._
