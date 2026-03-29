@@ -17,6 +17,8 @@ celery_app = Celery(
 )
 
 celery_app.conf.update(
+    broker_use_ssl={'ssl_cert_reqs': 'none'},
+    redis_backend_use_ssl={'ssl_cert_reqs': 'none'},
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
@@ -107,3 +109,30 @@ def process_review_ai_task(review_id: int):
         
     finally:
         db.close()
+
+
+@celery_app.task
+def task_run_url_ingestion(product_id: int, url: str):
+    from pipeline import run_url_ingestion_background
+    run_url_ingestion_background(product_id, url)
+
+@celery_app.task
+def task_run_csv_ingestion(product_ids: list, csv_data_json: str, mapping: dict):
+    from pipeline import run_csv_ingestion_background
+    run_csv_ingestion_background(product_ids, csv_data_json, mapping)
+
+@celery_app.task
+def task_run_raw_ingestion(raw_text: str, source_url: str):
+    from pipeline import run_raw_ingestion_background
+    run_raw_ingestion_background(raw_text, source_url)
+
+@celery_app.task
+def task_run_amazon_ingestion(hyve_product_id: int, asin: str):
+    from routers.amazon import run_amazon_ingestion_background
+    run_amazon_ingestion_background(hyve_product_id, asin)
+
+@celery_app.task
+def task_run_native_ingestion(hyve_product_id: int, asin: str):
+    from routers.amazon import run_native_ingestion_background
+    run_native_ingestion_background(hyve_product_id, asin)
+

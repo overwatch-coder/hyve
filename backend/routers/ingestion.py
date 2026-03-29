@@ -10,12 +10,10 @@ from pipeline import (
     process_review_sync, 
     cluster_product_claims, 
     detect_csv_columns,
-    run_raw_ingestion_background,
     extract_products_and_reviews_ai,
-    predict_product_category,
-    run_url_ingestion_background,
-    run_csv_ingestion_background
+    predict_product_category
 )
+from worker import task_run_url_ingestion, task_run_csv_ingestion
 
 router = APIRouter(tags=["Ingestion"])
 
@@ -112,7 +110,7 @@ def global_ingest_url(
         db.commit()
         db.refresh(product)
 
-    background_tasks.add_task(run_url_ingestion_background, product.id, payload.url)
+    task_run_url_ingestion.delay(product.id, payload.url)
 
     return {"product_id": product.id, "status": "processing", "message": "Scraping started in the background."}
 
@@ -139,7 +137,7 @@ async def global_ingest_csv(
     if df.empty:
         raise HTTPException(status_code=400, detail="File is empty")
 
-    from pipeline import detect_csv_columns, run_csv_ingestion_background
+    from pipeline import detect_csv_columns
     mapping = detect_csv_columns(df.columns.tolist(), df.head(5).to_dict(orient="records"))
     
     review_col = mapping.get("review_column")
@@ -178,7 +176,7 @@ async def global_ingest_csv(
 
     # 2. Trigger background task
     csv_json = df.to_json()
-    background_tasks.add_task(run_csv_ingestion_background, product_ids, csv_json, mapping)
+    task_run_csv_ingestion.delay(product_ids, csv_json, mapping)
 
     return {
         "status": "processing", 

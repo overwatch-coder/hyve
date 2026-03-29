@@ -9,6 +9,7 @@ import schemas
 import models
 from database import get_db
 from core.pagination import paginate
+from worker import task_run_amazon_ingestion, task_run_native_ingestion
 
 router = APIRouter(prefix="/amazon", tags=["Amazon Catalog", "Native Reviews"])
 
@@ -479,7 +480,7 @@ def analyze_amazon_reviews(
         hyve_product.processing_step = "Queueing AI Pipeline"
         db.commit()
 
-    background_tasks.add_task(run_amazon_ingestion_background, hyve_product.id, asin)
+    task_run_amazon_ingestion.delay(hyve_product.id, asin)
 
     return {
         "product_id": hyve_product.id,
@@ -616,7 +617,7 @@ def analyze_native_reviews(
         hyve_product.processing_step = "Queueing AI Pipeline"
         db.commit()
 
-    background_tasks.add_task(run_native_ingestion_background, hyve_product.id, asin)
+    task_run_native_ingestion.delay(hyve_product.id, asin)
 
     return {
         "product_id": hyve_product.id,
