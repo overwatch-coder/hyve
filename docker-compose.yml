@@ -20,15 +20,5 @@ services:
     ports:
       - 8080:8080
 
-  celery-worker:
-    build: 
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: hyve-celery-worker
-    command: celery -A worker.celery_app worker --loglevel=info
-    env_file:
-      - ./backend/.env
-    restart: always
-
 volumes:
   hyve-pgdata:

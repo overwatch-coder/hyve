@@ -15,8 +15,8 @@ HYVE is an AI-powered platform that transforms unstructured consumer reviews int
 | Database          | PostgreSQL (Neon), SQLAlchemy                           |
 | AI Engine         | OpenAI GPT-4o / Google Gemini                           |
 | Clustering        | Sentence-Transformers (`all-MiniLM-L6-v2`), K-Means     |
-| Task Queue        | Celery + Upstash Redis                                  |
-| Deployment        | Vercel (frontend), Render.com (backend + worker)        |
+| Task Queue        | Background Threads (default) / Celery + Redis (optional) |
+| Deployment        | Vercel (frontend), Render.com (backend)                   |
 
 ---
 
@@ -25,23 +25,21 @@ HYVE is an AI-powered platform that transforms unstructured consumer reviews int
 ```text
 ┌────────────┐       ┌──────────────────┐       ┌──────────────────┐
 │  Frontend  │──────▶│  FastAPI Server   │──────▶│  PostgreSQL DB   │
-│  (Vercel)  │       │  (Render - Web)   │       │  (Neon)          │
+│  (Vercel)  │       │  (Render.com)     │       │  (Neon)          │
 └────────────┘       └───────┬──────────┘       └──────────────────┘
-                             │ .delay()                    ▲
-                             ▼                             │
-                     ┌──────────────────┐                  │
-                     │  Upstash Redis   │                  │
-                     │  (Message Queue) │                  │
-                     └───────┬──────────┘                  │
-                             │                             │
-                             ▼                             │
-                     ┌──────────────────┐                  │
-                     │  Celery Worker   │──────────────────┘
-                     │ (Render - Worker)│
+                             │ enqueue()
+                             ▼
+                     ┌──────────────────┐
+                     │ Background Thread │
+                     │ (same process)    │
                      └──────────────────┘
+                       AI Processing:
+                       • Claim Extraction
+                       • Clustering
+                       • Deduplication
 ```
 
-**How it works:** When a user submits reviews (via CSV, URL, or Amazon), the API instantly pushes the heavy AI processing (claim extraction, clustering, deduplication) into a Redis-backed Celery queue and returns immediately. A separate Celery worker process picks up the job and runs it independently, keeping the web server fast and responsive.
+**How it works:** When a user submits reviews (via CSV, URL, or Amazon), the API instantly dispatches the heavy AI processing into a background thread and returns immediately. The processing runs in the same server process — no extra services or costs required. When you're ready to scale, set `USE_CELERY=true` to upgrade to a dedicated Celery worker without changing any code.
 
 ---
 
@@ -51,7 +49,6 @@ HYVE is an AI-powered platform that transforms unstructured consumer reviews int
 - **Node.js 18+**
 - **Git**
 - An **OpenAI API key** (or Google Gemini API key)
-- An **Upstash Redis** URL (free tier at [upstash.com](https://upstash.com))
 - A **PostgreSQL** database URL (free tier at [neon.tech](https://neon.tech))
 
 ---
@@ -128,45 +125,17 @@ python reset_db.py
 python seed.py
 ```
 
-**Start the API server (Terminal 1):**
+**Start the API server:**
 
 ```bash
 uvicorn index:app --reload --port 8000
 ```
 
----
-
-### Step 3 — Start the Celery Worker
-
-> **This is required for any ingestion (CSV, URL, Amazon) to work.** Without the worker, tasks will be queued but never executed.
-
-Open a **second terminal**, navigate to `backend/`, activate the venv, and run:
-
-```bash
-cd backend
-venv\Scripts\activate          # Windows
-# source venv/bin/activate     # macOS / Linux
-
-celery -A worker.celery_app worker --pool=solo --loglevel=info
-```
-
-> ⚠️ The `--pool=solo` flag is **required on Windows**. On macOS/Linux you can omit it.
-
-You should see output like:
-
-```text
- -------------- celery@yourpc v5.6.2 (emerald-rush)
---- ***** -----
--- ******* ---- [config]
-- *** --- * --- .> app:         hyve_worker
-- ** ---------- .> transport:   rediss://...upstash.io:6379//
-...
-[*] Ready.
-```
+That's it for the backend — background tasks run automatically inside the same process.
 
 ---
 
-### Step 4 — Frontend Setup
+### Step 3 — Frontend Setup
 
 Open a **third terminal**:
 
@@ -221,7 +190,6 @@ This starts:
 
 - **PostgreSQL** on port `5433`
 - **Adminer** (DB GUI) on port `8080`
-- **Celery Worker** connected to your Upstash Redis
 
 > **Note:** You still need to start the backend API server and frontend separately, or add them to the compose file.
 
@@ -239,28 +207,7 @@ This starts:
 
 ### Backend → Render.com
 
-On Render, you need **two separate services** built from the same `backend/` code:
-
-| Render Service       | Type                  | Command                                                      |
-| -------------------- | --------------------- | ------------------------------------------------------------ |
-| `hyve-api`           | **Web Service**       | `uvicorn index:app --host 0.0.0.0 --port 8000` (Dockerfile) |
-| `hyve-celery-worker` | **Background Worker** | `celery -A worker.celery_app worker --loglevel=info`         |
-
-Both services share the **same Dockerfile**, the **same environment variables**, and communicate through **Upstash Redis**.
-
-#### Option A — Render Blueprint (Recommended)
-
-A `render.yaml` is provided in the project root. To use it:
-
-1. Push the repo to GitHub (make sure `render.yaml` is in the root)
-2. Go to Render Dashboard → **Blueprints** → Connect your repo
-3. Render auto-detects both services
-4. Add your environment variables in the dashboard (they're marked `sync: false` for security)
-5. Deploy
-
-#### Option B — Manual Setup
-
-**Web Service:**
+Deploy a single **Web Service** — no separate worker needed:
 
 1. Render Dashboard → **New** → **Web Service**
 2. Connect your repo
@@ -269,33 +216,27 @@ A `render.yaml` is provided in the project root. To use it:
 5. Add all env vars from your `.env`
 6. Deploy
 
-**Background Worker:**
+Background AI tasks run inside the same server process using background threads, so you don't need a separate paid worker service.
 
-1. Render Dashboard → **New** → **Background Worker**
-2. Connect the same repo
-3. Set **Root Directory**: `backend`
-4. Set **Environment**: `Docker`
-5. Set **Docker Command**: `celery -A worker.celery_app worker --loglevel=info`
-6. Copy in the **same env vars** as the web service
-7. Deploy
-
-> **Important:** Both services **must** have the same `REDIS_URL` (your Upstash URL). This is how they communicate — the API pushes tasks to the queue, and the worker pulls and executes them.
+> **Scaling up later:** When traffic grows and you can afford a dedicated worker, simply add `USE_CELERY=true` to your env vars and create a Background Worker service on Render with the command `celery -A worker.celery_app worker --loglevel=info`. No code changes needed.
 
 ---
 
-## Background Tasks & Celery
+## Background Tasks
 
-HYVE uses Celery for all heavy AI processing. Here's what runs as a background task:
+HYVE uses a smart task dispatcher (`core/tasks.py`) for all heavy AI processing. By default, tasks run in **background threads** within the same server process — zero extra cost. When `USE_CELERY=true` is set, tasks are dispatched to a dedicated Celery worker via Redis instead.
 
-| Task                         | Trigger                                        | What it does                                            |
-| ---------------------------- | ---------------------------------------------- | ------------------------------------------------------- |
-| `task_run_url_ingestion`     | POST `/ingest/url`                             | Scrapes a URL, extracts reviews, runs AI claim pipeline |
-| `task_run_csv_ingestion`     | POST `/ingest/csv`                             | Parses CSV/Excel, groups by product, runs AI pipeline   |
-| `task_run_amazon_ingestion`  | POST `/amazon/products/{asin}/analyze-amazon`  | Pipes cached Amazon reviews through AI engine           |
-| `task_run_native_ingestion`  | POST `/amazon/products/{asin}/analyze-native`  | Pipes HYVE native reviews through AI engine             |
-| `task_run_raw_ingestion`     | Raw text ingestion                             | AI-extracts products/reviews from unstructured text     |
+Here's what runs as a background task:
 
-All tasks are defined in `backend/worker.py` and dispatched via `.delay()` from the API routers.
+| Task                             | Trigger                                       | What it does                                            |
+| -------------------------------- | --------------------------------------------- | ------------------------------------------------------- |
+| `run_url_ingestion_background`   | POST `/ingest/url`                            | Scrapes a URL, extracts reviews, runs AI claim pipeline |
+| `run_csv_ingestion_background`   | POST `/ingest/csv`                            | Parses CSV/Excel, groups by product, runs AI pipeline   |
+| `run_amazon_ingestion_background`| POST `/amazon/products/{asin}/analyze-amazon` | Pipes cached Amazon reviews through AI engine           |
+| `run_native_ingestion_background`| POST `/amazon/products/{asin}/analyze-native` | Pipes HYVE native reviews through AI engine             |
+| `run_raw_ingestion_background`   | Raw text ingestion                            | AI-extracts products/reviews from unstructured text     |
+
+All tasks are dispatched via `enqueue()` from the API routers.
 
 ---
 
@@ -374,7 +315,7 @@ hyve/
 │   ├── ingest_reviews.py    # Review ingestion script
 │   ├── seed.py              # Sample data seeder
 │   ├── reset_db.py          # DB reset utility
-│   ├── Dockerfile           # Docker image for API & worker
+│   ├── Dockerfile           # Docker image for backend
 │   ├── requirements.txt
 │   └── .env.example
 │
@@ -389,8 +330,7 @@ hyve/
 │   ├── vite.config.ts
 │   └── .env.example
 │
-├── docker-compose.yml       # Local dev: Postgres + Adminer + Celery Worker
-├── render.yaml              # Production: Render.com Blueprint (API + Worker)
+├── docker-compose.yml       # Local dev: Postgres + Adminer
 └── README.md
 ```
 
@@ -410,11 +350,7 @@ copy .env.example .env          # edit with your values
 python reset_db.py
 uvicorn index:app --reload --port 8000
 
-# ── Terminal 2: Celery Worker ──
-cd backend && venv\Scripts\activate
-celery -A worker.celery_app worker --pool=solo --loglevel=info
-
-# ── Terminal 3: Frontend ──
+# ── Terminal 2: Frontend ──
 cd frontend
 npm install
 copy .env.example .env          # set VITE_API_BASE_URL=http://localhost:8000

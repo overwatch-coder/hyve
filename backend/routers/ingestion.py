@@ -11,9 +11,11 @@ from pipeline import (
     cluster_product_claims, 
     detect_csv_columns,
     extract_products_and_reviews_ai,
-    predict_product_category
+    predict_product_category,
+    run_url_ingestion_background,
+    run_csv_ingestion_background
 )
-from worker import task_run_url_ingestion, task_run_csv_ingestion
+from core.tasks import enqueue
 
 router = APIRouter(tags=["Ingestion"])
 
@@ -110,7 +112,7 @@ def global_ingest_url(
         db.commit()
         db.refresh(product)
 
-    task_run_url_ingestion.delay(product.id, payload.url)
+    enqueue(run_url_ingestion_background, product.id, payload.url)
 
     return {"product_id": product.id, "status": "processing", "message": "Scraping started in the background."}
 
@@ -176,7 +178,7 @@ async def global_ingest_csv(
 
     # 2. Trigger background task
     csv_json = df.to_json()
-    task_run_csv_ingestion.delay(product_ids, csv_json, mapping)
+    enqueue(run_csv_ingestion_background, product_ids, csv_json, mapping)
 
     return {
         "status": "processing", 
