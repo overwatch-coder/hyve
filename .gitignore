@@ -36,3 +36,6 @@ nul
 /fixes
 /docs
 *.local.json
+
+# Git worktrees
+.worktrees
