@@ -145,7 +145,9 @@ Fill in every `<placeholder>`:
 |---|---|
 | `POSTGRES_PASSWORD` | Choose a strong password |
 | `DATABASE_URL` | Replace `<same-as-POSTGRES_PASSWORD>` with that same password |
-| `OPENAI_API_KEY` | [platform.openai.com](https://platform.openai.com) |
+| `LLM_PROVIDER` | `openai` or `gemini` — controls both LLM calls and embeddings |
+| `OPENAI_API_KEY` | [platform.openai.com](https://platform.openai.com) — required if `LLM_PROVIDER=openai` |
+| `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com) — required if `LLM_PROVIDER=gemini` |
 | `CANOPY_API_KEY` | [canopyapi.co](https://canopyapi.co) |
 | `ADMIN_PASSWORD` | Choose a strong password |
 | `JWT_SECRET` | Run: `openssl rand -hex 32` |

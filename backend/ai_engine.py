@@ -178,8 +178,8 @@ def _decode_vector_bytes(blob: bytes):
 
 def cluster_claims(claims_texts: list[str]) -> list[int]:
     """
-    Groups claims into thematic clusters using OpenAI embeddings and K-Means.
-    Returns a list of cluster IDs corresponding to the input claims.
+    Groups claims into thematic clusters using embeddings (OpenAI or Gemini,
+    selected via LLM_PROVIDER) and K-Means. Returns a list of cluster IDs.
     """
     from sklearn.cluster import KMeans, MiniBatchKMeans
     import numpy as np
@@ -187,7 +187,9 @@ def cluster_claims(claims_texts: list[str]) -> list[int]:
     if not claims_texts:
         return []
 
-    model_name = os.getenv("EMBEDDING_MODEL_NAME", "text-embedding-3-small")
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    _default_model = "gemini-embedding-001" if provider == "gemini" else "text-embedding-3-small"
+    model_name = os.getenv("EMBEDDING_MODEL_NAME", _default_model)
 
     # Determine number of clusters (Roadmap requires 4-6 themes)
     total_n = len(claims_texts)
@@ -251,20 +253,32 @@ def cluster_claims(claims_texts: list[str]) -> list[int]:
         except Exception:
             pass
 
-    # Compute missing vectors via OpenAI Embeddings API
+    # Compute missing vectors via embedding API (provider selected by LLM_PROVIDER)
     t_encode = time.perf_counter()
     if missing:
-        import openai
         batch_size = int(os.getenv("EMBEDDING_BATCH_SIZE", "64"))
         missing_texts = [unique_texts[i] for i in missing]
-        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         all_vecs = []
-        for i in range(0, len(missing_texts), batch_size):
-            response = client.embeddings.create(
-                model=model_name,
-                input=missing_texts[i:i + batch_size],
-            )
-            all_vecs.append(np.array([e.embedding for e in response.data], dtype=np.float32))
+        if provider == "gemini":
+            from google import genai as _ggenai
+            from google.genai import types as _gtypes
+            _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            for i in range(0, len(missing_texts), batch_size):
+                result = _gclient.models.embed_content(
+                    model=model_name,
+                    contents=missing_texts[i:i + batch_size],
+                    config=_gtypes.EmbedContentConfig(task_type="CLUSTERING"),
+                )
+                all_vecs.append(np.array([e.values for e in result.embeddings], dtype=np.float32))
+        else:
+            import openai
+            _oclient = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            for i in range(0, len(missing_texts), batch_size):
+                response = _oclient.embeddings.create(
+                    model=model_name,
+                    input=missing_texts[i:i + batch_size],
+                )
+                all_vecs.append(np.array([e.embedding for e in response.data], dtype=np.float32))
         new_vecs = np.vstack(all_vecs) if len(all_vecs) > 1 else all_vecs[0]
         for local_idx, original_i in enumerate(missing):
             vec = new_vecs[local_idx]
