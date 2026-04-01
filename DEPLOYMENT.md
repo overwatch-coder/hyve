@@ -164,7 +164,7 @@ Save and exit: `Ctrl+X`, `Y`, `Enter`
 docker compose up -d --build
 ```
 
-> The first build takes **15–25 minutes** — it downloads PyTorch (~700 MB), Playwright/Chromium, and the SentenceTransformer model (~90 MB).
+> The first build takes **8–12 minutes** — it downloads Python dependencies and Playwright/Chromium.
 
 Watch build output:
 
@@ -192,7 +192,7 @@ hyve-backend-1          Up (healthy)
 hyve-frontend-1         Up
 ```
 
-The backend has a 120-second `start-period` for the embedding model to warm up. Once it turns `healthy`, the frontend starts (~30 more seconds).
+The backend has a 30-second `start-period`. Once it's `healthy`, the frontend starts (~30 more seconds).
 
 Press `Ctrl+C` to exit `watch`.
 

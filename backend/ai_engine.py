@@ -1,25 +1,9 @@
 import json
 import os
-import warnings
-import logging
 import hashlib
 import struct
 import time
 from pydantic import BaseModel, Field
-
-# Suppress HuggingFace Hub unauthenticated request warnings
-os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-os.environ["TRANSFORMERS_VERBOSITY"] = "error"
-
-# Silence transformer/HF warnings
-logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
-logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
-warnings.filterwarnings("ignore", category=UserWarning,
-                        module="huggingface_hub")
-warnings.filterwarnings("ignore", message=".*position_ids.*")
-warnings.filterwarnings("ignore", message=".*unauthenticated.*")
 
 # Using groq/openai as an example.
 
@@ -140,25 +124,8 @@ async def extract_claims_from_llm_async(review_text: str, provider: str = "opena
         raise ValueError(f"Unsupported LLM provider: {provider}")
 
 
-# Global cache for the embedding model to avoid reloading on every call
-_EMBEDDING_MODEL = None
+# In-process vector cache (shared across requests for the lifetime of the process)
 _EMBEDDING_VECTOR_CACHE = {}
-
-
-def _get_embedding_model():
-    global _EMBEDDING_MODEL
-    if _EMBEDDING_MODEL is None:
-        from sentence_transformers import SentenceTransformer
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            model_name = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
-            t0 = time.perf_counter()
-            _EMBEDDING_MODEL = SentenceTransformer(model_name)
-            if os.getenv("HYVE_TIMING", "1") == "1":
-                print(
-                    f"TIMING: embedding model load name={model_name} in {time.perf_counter() - t0:.2f}s"
-                )
-    return _EMBEDDING_MODEL
 
 
 def _normalize_claim_text(text: str) -> str:
@@ -211,7 +178,7 @@ def _decode_vector_bytes(blob: bytes):
 
 def cluster_claims(claims_texts: list[str]) -> list[int]:
     """
-    Groups claims into thematic clusters using SentenceTransformers and K-Means/HDBSCAN.
+    Groups claims into thematic clusters using OpenAI embeddings and K-Means.
     Returns a list of cluster IDs corresponding to the input claims.
     """
     from sklearn.cluster import KMeans, MiniBatchKMeans
@@ -220,10 +187,7 @@ def cluster_claims(claims_texts: list[str]) -> list[int]:
     if not claims_texts:
         return []
 
-    model_name = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
-
-    # Load embedding model (fast and efficient)
-    model = _get_embedding_model()
+    model_name = os.getenv("EMBEDDING_MODEL_NAME", "text-embedding-3-small")
 
     # Determine number of clusters (Roadmap requires 4-6 themes)
     total_n = len(claims_texts)
@@ -287,19 +251,23 @@ def cluster_claims(claims_texts: list[str]) -> list[int]:
         except Exception:
             pass
 
-    # Compute missing vectors in a single encode call
+    # Compute missing vectors via OpenAI Embeddings API
     t_encode = time.perf_counter()
     if missing:
+        import openai
         batch_size = int(os.getenv("EMBEDDING_BATCH_SIZE", "64"))
         missing_texts = [unique_texts[i] for i in missing]
-        new_vecs = model.encode(
-            missing_texts,
-            batch_size=batch_size,
-            show_progress_bar=False,
-            convert_to_numpy=True,
-        )
+        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        all_vecs = []
+        for i in range(0, len(missing_texts), batch_size):
+            response = client.embeddings.create(
+                model=model_name,
+                input=missing_texts[i:i + batch_size],
+            )
+            all_vecs.append(np.array([e.embedding for e in response.data], dtype=np.float32))
+        new_vecs = np.vstack(all_vecs) if len(all_vecs) > 1 else all_vecs[0]
         for local_idx, original_i in enumerate(missing):
-            vec = np.asarray(new_vecs[local_idx], dtype=np.float32)
+            vec = new_vecs[local_idx]
             cached_vectors[original_i] = vec
             _EMBEDDING_VECTOR_CACHE[keys[original_i]] = vec
         if redis_client:
