@@ -9,6 +9,7 @@ import { useState } from "react";
 import { getSentimentVerdict, getSentimentColor } from "@/lib/sentiment";
 
 const PAGE_SIZE = 9;
+const FALLBACK_IMAGE = "/logo.png";
 
 export default function Products() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,14 +61,14 @@ export default function Products() {
           <Link to="/amazon" className="w-full sm:w-auto">
             <Button
               variant="outline"
-              className="w-full h-10 px-5 gap-2 font-bold rounded-xl hover:translate-y-[-2px] transition-all active:translate-y-0 border-primary/30 text-primary hover:bg-primary/5"
+              className="w-full h-10 px-5 gap-2 font-bold rounded-xl hover:-translate-y-0.5 transition-all active:translate-y-0 border-primary/30 text-primary hover:bg-primary/5"
             >
               <ShoppingBag className="h-4 w-4" />
               Search Amazon
             </Button>
           </Link>
           <Link to="/new" className="w-full sm:w-auto">
-            <Button className="w-full h-10 px-6 gap-2 font-bold shadow-lg shadow-primary/20 rounded-xl hover:translate-y-[-2px] transition-all active:translate-y-0">
+            <Button className="w-full h-10 px-6 gap-2 font-bold shadow-lg shadow-primary/20 rounded-xl hover:-translate-y-0.5 transition-all active:translate-y-0">
               <Plus className="h-4 w-4" />
               New Analysis
             </Button>
@@ -91,11 +92,20 @@ export default function Products() {
           {pagedProducts?.map((p: any) => (
             <Card
               key={p.id}
-              className="group border-border/40 bg-card/40 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-300 hover:border-primary/40 hover:md:translate-y-[-4px] hover:shadow-2xl hover:shadow-primary/5"
+              className="group border-border/40 bg-card/40 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-300 hover:border-primary/40 hover:md:-translate-y-1 hover:shadow-2xl hover:shadow-primary/5"
             >
               <CardContent className="p-4 md:p-6 flex-1 flex flex-col gap-6">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1.5">
+                <div className="flex items-start justify-between gap-3">
+                  {/* Product image thumbnail */}
+                  <div className="shrink-0 h-14 w-14 rounded-xl overflow-hidden border border-border/30 bg-muted/20 flex items-center justify-center">
+                    <img
+                      src={p.image_url || FALLBACK_IMAGE}
+                      alt={p.name}
+                      className="h-full w-full object-contain p-1"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_IMAGE; }}
+                    />
+                  </div>
+                  <div className="space-y-1.5 flex-1 min-w-0">
                     <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[9px] font-black uppercase tracking-wider border border-primary/20">
                       {p.category || "General"}
                     </span>
@@ -103,7 +113,7 @@ export default function Products() {
                       {p.name}
                     </h3>
                   </div>
-                  <div className="px-3 py-1.5 rounded-xl bg-muted/20 flex flex-col items-center justify-center border border-border/40 group-hover:border-primary/30 transition-all shadow-inner">
+                  <div className="px-3 py-1.5 rounded-xl bg-muted/20 flex flex-col items-center justify-center border border-border/40 group-hover:border-primary/30 transition-all shadow-inner shrink-0">
                     <p className="text-[9px] font-black text-muted-foreground uppercase leading-none mb-1 tracking-widest">
                       Score
                     </p>

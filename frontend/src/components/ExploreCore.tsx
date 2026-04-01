@@ -391,6 +391,7 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
       score,
       reviewCount,
       category,
+      imageUrl: analyticsData?.image_url ?? product?.image_url ?? null,
       expanded: false,
       childIds: themeChildIds,
       childCount: themeChildIds.length,
@@ -920,7 +921,7 @@ export function ExploreContentImpl({
             Analysis
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-foreground/60 truncate max-w-[200px]">
+          <span className="text-foreground/60 truncate max-w-50">
             {analyticsData?.category || productData?.category || "Category"}
           </span>
           <ChevronRight className="h-3 w-3" />
@@ -1080,7 +1081,7 @@ export function ExploreContentImpl({
             )}
           </div>
 
-          <div className="h-[600px] rounded-2xl border border-border/40 bg-card/30 overflow-hidden shadow-sm">
+          <div className="h-150 rounded-2xl border border-border/40 bg-card/30 overflow-hidden shadow-sm">
             {viewMode === "traditional" ? (
               <TraditionalReviewsView productId={productId} />
             ) : viewMode === "accordion" ? (
@@ -1619,7 +1620,7 @@ export function ExploreContentImpl({
 
       {/* Regeneration Modal */}
       <Dialog open={showRegenModal} onOpenChange={setShowRegenModal}>
-        <DialogContent className="sm:max-w-[560px] border-border/40 bg-card rounded-2xl p-8 shadow-2xl">
+        <DialogContent className="sm:max-w-140 border-border/40 bg-card rounded-2xl p-8 shadow-2xl">
           <DialogHeader className="items-center text-center pb-5 border-b border-border/20">
             <div className="h-12 w-12 bg-primary/10 rounded-xl flex items-center justify-center mb-4">
               <Sparkles className="h-6 w-6 text-primary" />
@@ -1643,7 +1644,7 @@ export function ExploreContentImpl({
               <Textarea
                 id="regen-focus"
                 placeholder="e.g. Prioritize battery life feedback and build quality friction points..."
-                className="min-h-[120px] bg-muted/40 border-border/40 focus:border-primary/50 transition-all rounded-xl p-4 text-sm font-medium resize-none"
+                className="min-h-30 bg-muted/40 border-border/40 focus:border-primary/50 transition-all rounded-xl p-4 text-sm font-medium resize-none"
                 value={regenFocus}
                 onChange={(e) => setRegenFocus(e.target.value)}
               />

@@ -29,6 +29,8 @@ export default function NewAnalysis() {
   const [autoDetect, setAutoDetect] = useState(true);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("Technology");
+  const [imageUrl, setImageUrl] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   // Ingestion Sources State
   const [activeTab, setActiveTab] = useState("paste");
@@ -55,6 +57,7 @@ export default function NewAnalysis() {
           name: autoDetect ? null : name,
           category: autoDetect ? "Uncategorized" : category,
           product_id: null,
+          image_url: !autoDetect && imageUrl ? imageUrl : undefined,
         });
         return { type: "url", productId: res.data.product_id };
       }
@@ -81,8 +84,18 @@ export default function NewAnalysis() {
           const prodRes = await api.post("/products", {
             name,
             category,
+            image_url: imageUrl || undefined,
           });
           const productId = prodRes.data.id;
+
+          // Upload a local image file if one was chosen
+          if (imageFile) {
+            const imgForm = new FormData();
+            imgForm.append("file", imageFile);
+            await api.post(`/products/${productId}/image`, imgForm, {
+              headers: { "Content-Type": "multipart/form-data" },
+            });
+          }
 
           const reviewsPayload = reviewLines.map((text) => ({
             text,
@@ -268,6 +281,51 @@ export default function NewAnalysis() {
                   disabled={ingestMutation.isPending}
                   className="bg-background/50"
                 />
+              </div>
+
+              {/* Product image: URL or local file */}
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Product Image <span className="text-muted-foreground font-normal text-xs">(optional — helps identify this product)</span></Label>
+                <div className="flex gap-3 items-center">
+                  <Input
+                    id="image-url"
+                    type="url"
+                    placeholder="https://example.com/product.jpg"
+                    value={imageUrl}
+                    onChange={(e) => { setImageUrl(e.target.value); setImageFile(null); }}
+                    disabled={ingestMutation.isPending || !!imageFile}
+                    className="bg-background/50 flex-1"
+                  />
+                  <span className="text-xs text-muted-foreground shrink-0">or</span>
+                  <label
+                    htmlFor="image-file"
+                    className="shrink-0 cursor-pointer h-10 px-4 rounded-lg border border-border/50 bg-background/50 text-sm flex items-center gap-2 hover:bg-muted/40 transition-colors"
+                  >
+                    <UploadCloud className="h-4 w-4 text-primary" />
+                    {imageFile ? imageFile.name : "Upload image"}
+                    <input
+                      id="image-file"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      onChange={(e) => { setImageFile(e.target.files?.[0] || null); setImageUrl(""); }}
+                      disabled={ingestMutation.isPending}
+                    />
+                  </label>
+                  {(imageUrl || imageFile) && (
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-destructive"
+                      onClick={() => { setImageUrl(""); setImageFile(null); }}
+                    >✕</button>
+                  )}
+                </div>
+                {imageUrl && (
+                  <img src={imageUrl} alt="preview" className="mt-2 h-16 w-16 object-contain rounded border border-border/40" onError={(e) => (e.currentTarget.style.display = "none")} />
+                )}
+                {imageFile && (
+                  <img src={URL.createObjectURL(imageFile)} alt="preview" className="mt-2 h-16 w-16 object-contain rounded border border-border/40" />
+                )}
               </div>
             </div>
           )}

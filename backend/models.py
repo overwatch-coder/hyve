@@ -27,6 +27,7 @@ class Product(Base):
     ingest_type = Column(String, nullable=True)  # "csv", "url", "text"
     # e.g. "Cleaning Data", "Extracting Claims"
     processing_step = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

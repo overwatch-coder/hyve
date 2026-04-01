@@ -471,6 +471,7 @@ def analyze_amazon_reviews(
             status="processing",
             ingest_type="canopy_amazon",
             processing_step="Fetching Amazon Reviews",
+            image_url=amazon_product.image_url,
         )
         db.add(hyve_product)
         db.commit()
@@ -478,6 +479,9 @@ def analyze_amazon_reviews(
     else:
         hyve_product.status = "processing"
         hyve_product.processing_step = "Queueing AI Pipeline"
+        # Always sync the latest Amazon image
+        if amazon_product.image_url and not hyve_product.image_url:
+            hyve_product.image_url = amazon_product.image_url
         db.commit()
 
     enqueue(run_amazon_ingestion_background, hyve_product.id, asin)
@@ -490,7 +494,116 @@ def analyze_amazon_reviews(
         "message": f"AI analysis of Amazon reviews started in the background.",
     }
 
-@router.post("/products/{asin}/native-reviews", response_model=schemas.NativeReviewOut)
+
+@router.post("/products/{asin}/fetch-reviews")
+def fetch_and_analyze_amazon_reviews(
+    asin: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Combined endpoint: ensures Amazon reviews are fetched from Canopy (if not cached),
+    then starts the HYVE AI analysis pipeline in the background.
+    Used by the 'New Analysis > Amazon' tab.
+    """
+    # Ensure the AmazonProduct record exists
+    amazon_product = db.query(models.AmazonProduct).filter(
+        models.AmazonProduct.asin == asin
+    ).first()
+    if not amazon_product:
+        amazon_product = amazon_product_detail(asin, db)
+    if not amazon_product:
+        raise HTTPException(status_code=404, detail="Amazon product not found.")
+
+    # Fetch reviews from Canopy if not already cached
+    cached_count = db.query(models.AmazonReview).filter(
+        models.AmazonReview.amazon_product_asin == asin
+    ).count()
+    if cached_count == 0:
+        headers = _canopy_headers()
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(_fetch_review_page, asin, p, headers) for p in [1, 2]]
+            all_reviews_raw = []
+            for f in futures:
+                all_reviews_raw.extend(f.result())
+
+        seen_ids: set[str] = set()
+        unique_reviews = []
+        for r in all_reviews_raw:
+            cid = r.get("id")
+            if cid and cid not in seen_ids:
+                seen_ids.add(cid)
+                unique_reviews.append(r)
+
+        if unique_reviews:
+            existing_ids = {
+                row.canopy_id
+                for row in db.query(models.AmazonReview.canopy_id).filter(
+                    models.AmazonReview.canopy_id.in_(seen_ids)
+                ).all()
+            }
+            for r in unique_reviews:
+                if r.get("id") in existing_ids:
+                    continue
+                reviewer_name = r.get("reviewer") or (
+                    r.get("author", {}).get("name") if isinstance(r.get("author"), dict) else r.get("reviewer_name")
+                )
+                db.add(models.AmazonReview(
+                    amazon_product_asin=asin,
+                    canopy_id=r["id"],
+                    title=r.get("title"),
+                    body=r.get("body") or r.get("review_text") or r.get("text", ""),
+                    rating=float(r.get("rating") or r.get("stars") or 0.0),
+                    reviewer_name=reviewer_name,
+                    verified_purchase=bool(r.get("verifiedPurchase") or r.get("verified_purchase")),
+                    helpful_votes=int(r.get("helpfulVotes") or r.get("helpful_votes") or 0),
+                ))
+            db.commit()
+            cached_count = len(unique_reviews)
+
+    reviews_ingested = cached_count or db.query(models.AmazonReview).filter(
+        models.AmazonReview.amazon_product_asin == asin
+    ).count()
+
+    if reviews_ingested == 0:
+        raise HTTPException(status_code=400, detail="No Amazon reviews could be fetched for this product.")
+
+    # Create or update HYVE Product, copying the Amazon image
+    hyve_product = db.query(models.Product).filter(
+        models.Product.name == amazon_product.title
+    ).first()
+    if not hyve_product:
+        from pipeline import predict_product_category
+        cat = amazon_product.category or predict_product_category(amazon_product.title)
+        hyve_product = models.Product(
+            name=amazon_product.title,
+            category=cat,
+            status="processing",
+            ingest_type="canopy_amazon",
+            processing_step="Fetching Amazon Reviews",
+            image_url=amazon_product.image_url,
+        )
+        db.add(hyve_product)
+        db.commit()
+        db.refresh(hyve_product)
+    else:
+        hyve_product.status = "processing"
+        hyve_product.processing_step = "Queueing AI Pipeline"
+        if amazon_product.image_url and not hyve_product.image_url:
+            hyve_product.image_url = amazon_product.image_url
+        db.commit()
+
+    enqueue(run_amazon_ingestion_background, hyve_product.id, asin)
+
+    return {
+        "product_id": hyve_product.id,
+        "asin": asin,
+        "reviews_ingested": reviews_ingested,
+        "status": "processing",
+        "message": f"Fetched {reviews_ingested} reviews and started AI analysis.",
+    }
+
+
 def create_native_review(
     asin: str,
     payload: schemas.NativeReviewCreate,
@@ -608,6 +721,7 @@ def analyze_native_reviews(
             status="processing",
             ingest_type="native",
             processing_step="Analyzing Native Reviews",
+            image_url=amazon_product.image_url,
         )
         db.add(hyve_product)
         db.commit()
@@ -615,6 +729,8 @@ def analyze_native_reviews(
     else:
         hyve_product.status = "processing"
         hyve_product.processing_step = "Queueing AI Pipeline"
+        if amazon_product.image_url and not hyve_product.image_url:
+            hyve_product.image_url = amazon_product.image_url
         db.commit()
 
     enqueue(run_native_ingestion_background, hyve_product.id, asin)

@@ -13,7 +13,8 @@ from pipeline import (
     extract_products_and_reviews_ai,
     predict_product_category,
     run_url_ingestion_background,
-    run_csv_ingestion_background
+    run_csv_ingestion_background,
+    run_raw_ingestion_background,
 )
 from core.tasks import enqueue
 
@@ -75,6 +76,7 @@ class UrlIngestRequest(schemas.BaseModel):
     name: Optional[str] = None
     category: str = "Uncategorized"
     product_id: Optional[int] = None
+    image_url: Optional[str] = None
 
 @router.post(
     "/ingest/url",
@@ -100,8 +102,15 @@ def global_ingest_url(
         final_cat = payload.category
         if final_cat.lower() in ["uncategorized", "undefined"] and payload.name:
             final_cat = predict_product_category(payload.name)
-            
-        product = models.Product(name=final_name, category=final_cat, status="processing", ingest_type="url", processing_step="Scraping Target URL")
+
+        product = models.Product(
+            name=final_name,
+            category=final_cat,
+            status="processing",
+            ingest_type="url",
+            processing_step="Scraping Target URL",
+            image_url=payload.image_url,
+        )
         db.add(product)
         db.commit()
         db.refresh(product)
@@ -109,6 +118,8 @@ def global_ingest_url(
         product.status = "processing"
         product.ingest_type = "url"
         product.processing_step = "Scraping Target URL"
+        if payload.image_url and not product.image_url:
+            product.image_url = payload.image_url
         db.commit()
         db.refresh(product)
 
@@ -186,3 +197,26 @@ async def global_ingest_csv(
         "reviews_added": len(df),
         "message": f"Ingestion of {len(df)} reviews across {len(product_ids)} products started."
     }
+
+
+@router.post(
+    "/ingest/raw",
+    response_model=dict,
+    summary="AI-powered raw text ingestion: detect products and reviews automatically",
+)
+async def global_ingest_raw(
+    payload: schemas.RawIngestRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Sends unstructured raw text to the AI pipeline which auto-detects product names,
+    categories and individual reviews, then creates Product records and starts analysis.
+    Products created this way will have no image_url by default; users can add one
+    afterward via PATCH /products/{id} or POST /products/{id}/image.
+    """
+    if not payload.text or len(payload.text.strip()) < 20:
+        raise HTTPException(status_code=422, detail="Text is too short to extract reviews from.")
+
+    enqueue(run_raw_ingestion_background, payload.text, payload.source_url)
+
+    return {"status": "processing", "message": "AI extraction started. Products will appear shortly."}

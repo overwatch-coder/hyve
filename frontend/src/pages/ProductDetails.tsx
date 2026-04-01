@@ -17,6 +17,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getSentimentVerdict, getSentimentColor } from "@/lib/sentiment";
 
+const FALLBACK_IMAGE = "/logo.png";
+
 interface SentimentCounts {
   positive: number;
   negative: number;
@@ -45,6 +47,7 @@ interface AnalyticsData {
   review_count: number;
   claim_count: number;
   overall_sentiment: number;
+  image_url?: string | null;
   critical_risk_factor: RiskStrengthItem | null;
   strongest_selling_point: RiskStrengthItem | null;
   theme_breakdown: ThemeAnalytics[];
@@ -96,7 +99,7 @@ export default function ProductDetails() {
             Analysis
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-foreground font-medium truncate max-w-[200px]">
+          <span className="text-foreground font-medium truncate max-w-50">
             {data.product_name}
           </span>
           <ChevronRight className="h-3 w-3" />
@@ -104,21 +107,32 @@ export default function ProductDetails() {
         </nav>
 
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div className="space-y-1.5">
-            <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground leading-tight">
-              {data.product_name}
-            </h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider">
-                {data.category}
-              </span>
-              <p className="text-muted-foreground text-sm font-medium">
-                Deep Consumer Analytics
-              </p>
+          <div className="flex items-start gap-4">
+            {/* Product image */}
+            <div className="h-16 w-16 rounded-xl overflow-hidden border border-border/30 bg-muted/20 flex items-center justify-center shrink-0">
+              <img
+                src={data.image_url || FALLBACK_IMAGE}
+                alt={data.product_name}
+                className="h-full w-full object-contain p-1"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = FALLBACK_IMAGE; }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground leading-tight">
+                {data.product_name}
+              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider">
+                  {data.category}
+                </span>
+                <p className="text-muted-foreground text-sm font-medium">
+                  Deep Consumer Analytics
+                </p>
+              </div>
             </div>
           </div>
           <Link to={`/products/${productId}`} className="w-full md:w-auto">
-            <Button className="w-full h-12 md:h-11 px-6 gap-2 font-bold shadow-lg shadow-primary/20 transition-all hover:translate-y-[-2px] hover:shadow-primary/30 active:translate-y-0">
+            <Button className="w-full h-12 md:h-11 px-6 gap-2 font-bold shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:shadow-primary/30 active:translate-y-0">
               Explore Decision Map
               <ArrowRight className="h-4 w-4" />
             </Button>

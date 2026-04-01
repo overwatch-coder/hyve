@@ -107,6 +107,7 @@ class ProductBase(BaseModel):
     status: str = "ready"
     ingest_type: Optional[str] = None
     processing_step: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class RawIngestRequest(BaseModel):

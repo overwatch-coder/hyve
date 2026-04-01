@@ -38,6 +38,7 @@ function ProductNodeRaw({
     score?: number;
     reviewCount?: number;
     category?: string;
+    imageUrl?: string | null;
   };
   id: string;
 }) {
@@ -62,6 +63,22 @@ function ProductNodeRaw({
             <ChevronDown className="h-4 w-4" />
           )}
         </button>
+      )}
+
+      {/* Product image or icon fallback */}
+      {data.imageUrl ? (
+        <img
+          src={data.imageUrl}
+          alt={data.label as string}
+          className="h-12 w-12 object-contain rounded-lg bg-white/10 mb-1"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
+        />
+      ) : (
+        <div className="h-12 w-12 rounded-lg bg-white/10 flex items-center justify-center mb-1">
+          <Star className="h-6 w-6 opacity-60" />
+        </div>
       )}
 
       {category && (

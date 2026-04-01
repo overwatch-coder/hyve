@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import sys
 import os
 import logging
@@ -36,6 +37,11 @@ with engine.connect() as conn:
     try:
         conn.execute(text("ALTER TABLE products ADD COLUMN advices_seller TEXT"))
         conn.commit()
+    except Exception: pass
+    try:
+        conn.execute(text("ALTER TABLE products ADD COLUMN image_url VARCHAR"))
+        conn.commit()
+        print("MIGRATION: Added image_url column to products table.")
     except Exception: pass
 
 app = FastAPI(
@@ -81,6 +87,12 @@ app.add_middleware(
 )
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+# Ensure the uploaded-images directory exists and mount it
+from core.images import ensure_upload_dir, STATIC_DIR
+ensure_upload_dir()
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR.parent)), name="static")
+
 @app.get("/", tags=["Root"], include_in_schema=False)
 def root():
     return {"message": "Welcome to the HYVE API", "docs": f"{BACKEND_URL}/docs"}

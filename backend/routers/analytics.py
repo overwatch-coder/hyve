@@ -33,6 +33,7 @@ class ProductAnalyticsResponse(schemas.BaseModel):
     review_count: int
     claim_count: int
     overall_sentiment: float
+    image_url: str | None = None
     summary: str | None = None
     advices: list[str] | None = None
     summary_seller: str | None = None
@@ -136,6 +137,7 @@ def get_product_analytics(product_id: int, db: Session = Depends(get_db)):
         review_count=review_count,
         claim_count=total_claims,
         overall_sentiment=product.overall_sentiment_score,
+        image_url=product.image_url,
         summary=product.summary,
         advices=adv_consumer,
         summary_seller=product.summary_seller,

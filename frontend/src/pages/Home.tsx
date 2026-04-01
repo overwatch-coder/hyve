@@ -129,8 +129,8 @@ export default function Home() {
       {/* ── HERO SECTION ── */}
       <section className="relative pt-16 md:pt-32 pb-20 md:pb-32 px-4 md:px-6">
         {/* Abstract Background Blobs */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-primary/5 blur-[120px] rounded-full -z-10" />
-        <div className="absolute top-40 right-[-10%] w-[500px] h-[500px] bg-emerald-500/5 blur-[100px] rounded-full -z-10" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-250 h-150 bg-primary/5 blur-[120px] rounded-full -z-10" />
+        <div className="absolute top-40 right-[-10%] w-125 h-125 bg-emerald-500/5 blur-[100px] rounded-full -z-10" />
 
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
           {/* Left: Content */}

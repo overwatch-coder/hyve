@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload, subqueryload
 import schemas
@@ -6,6 +6,8 @@ import models
 from database import get_db
 from core.security import admin_required
 from core.pagination import paginate
+from core.images import save_product_image, normalize_image_url
+from typing import Optional
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -121,3 +123,43 @@ def get_product_reviews(
         models.Review.product_id == product_id
     ).order_by(models.Review.created_at.desc())
     return paginate(query, page, size)
+
+
+# ── Product metadata update (name / category / image_url) ──────────────────
+class ProductUpdate(schemas.BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+@router.patch("/{product_id}", response_model=schemas.Product)
+def update_product(product_id: int, payload: ProductUpdate, db: Session = Depends(get_db)):
+    """Update product name, category, or image URL."""
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if payload.name is not None:
+        product.name = payload.name
+    if payload.category is not None:
+        product.category = payload.category
+    if payload.image_url is not None:
+        product.image_url = normalize_image_url(payload.image_url)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@router.post("/{product_id}/image", response_model=schemas.Product)
+async def upload_product_image(
+    product_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Upload a new product image and store it on the server."""
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    product.image_url = await save_product_image(file)
+    db.commit()
+    db.refresh(product)
+    return product
