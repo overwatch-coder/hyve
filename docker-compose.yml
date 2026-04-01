@@ -33,9 +33,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1500M
+          memory: 900M
         reservations:
-          memory: 512M
+          memory: 256M
 
   db:
     image: postgres:15-alpine
