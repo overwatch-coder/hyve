@@ -1,24 +1,77 @@
-version: '3.8'
-
 services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  backend:
+    build: ./backend
+    env_file: ./backend/.env
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Named volume for uploaded product images — preserved across docker compose up --build
+      - hyve-uploads:/app/static/product-images
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 1500M
+        reservations:
+          memory: 512M
+
   db:
     image: postgres:15-alpine
-    container_name: hyve-postgres
-    restart: always
-    environment:
-      POSTGRES_USER: hyve
-      POSTGRES_PASSWORD: hyvepass
-      POSTGRES_DB: hyve
-    ports:
-      - "5433:5432"
+    restart: unless-stopped
+    env_file: ./backend/.env
     volumes:
       - hyve-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hyve"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
 
-  adminer:
-    image: adminer
-    restart: always
-    ports:
-      - 8080:8080
+  redis:
+    image: redis:7-alpine
+    # Redis is used as an embedding cache only. Data loss on restart is acceptable.
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
 
 volumes:
   hyve-pgdata:
+  hyve-uploads:
+
+# TLS/HTTPS: Out of scope for initial deployment.
+# To add HTTPS, run Certbot on the EC2 instance as a future step.
