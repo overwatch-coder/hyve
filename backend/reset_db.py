@@ -1,6 +1,6 @@
 import models
 from database import engine, SessionLocal
-from index import batch_ingest_reviews
+from routers.ingestion import batch_ingest_reviews
 from schemas import BatchIngestRequest, BatchReviewItem
 from ingest_reviews import EARBUDS_REVIEWS, DESK_REVIEWS, MEALKIT_REVIEWS
 
