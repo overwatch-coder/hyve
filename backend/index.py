@@ -97,6 +97,10 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR.parent)), name="static
 def root():
     return {"message": "Welcome to the HYVE API", "docs": f"{BACKEND_URL}/docs"}
 
+@app.get("/health", tags=["Health"], include_in_schema=False)
+def health_check():
+    return {"status": "ok"}
+
 from sqlalchemy.orm import Session
 from fastapi import Depends
 from database import get_db
