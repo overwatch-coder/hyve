@@ -1,5 +1,5 @@
 # STAGE 1: Builder
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
@@ -11,9 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements and install dependencies
 COPY requirements.txt .
 
-# Optimize Torch for CPU to save ~700MB
-# We install torch CPU first, then the rest.
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+# Install torch CPU-only first to save ~700MB vs the full GPU build.
+# --extra-index-url (not --index-url): keeps PyPI as primary index.
+# ARM64 (aarch64) torch wheels on PyPI are CPU-only by nature — this is the deployment target.
+# Note: on x86_64, pip may pick the full CUDA wheel from PyPI instead of the +cpu variant.
+RUN pip install --no-cache-dir torch --extra-index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 # STAGE 2: Final Image
@@ -46,14 +48,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
+# Install Playwright browser binaries (Chromium only for efficiency).
+# Placed before COPY . . so this expensive step is not cache-busted by code changes.
+RUN playwright install chromium
+
+# Pre-download the SentenceTransformer model so first startup is fast.
+# Placed before COPY . . so the model cache survives iterative code-only rebuilds.
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
 # Copy application code
 COPY . .
 
-# Install Playwright browser binaries (Chromium only for efficiency)
-RUN playwright install chromium
-
-# Expose port (adjust if your backend uses a different one)
+# Expose port
 EXPOSE 8000
 
-# Run initialization and then start the server
-CMD uvicorn index:app --host 0.0.0.0 --port 8000
+# Health check using Python stdlib (curl is not present in python:3.11-slim).
+# start-period=120s: gives the app time to warm the embedding model on first start.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=8)"
+
+CMD ["uvicorn", "index:app", "--host", "0.0.0.0", "--port", "8000"]
