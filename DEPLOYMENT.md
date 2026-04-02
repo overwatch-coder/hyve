@@ -4,7 +4,7 @@ This guide walks through deploying the full HYVE stack (React + FastAPI + Postgr
 
 **Architecture:** Nginx (port 80) serves the React SPA and reverse-proxies `/api/*` to FastAPI. PostgreSQL and Redis run as Docker containers with named volumes. Only port 80 and port 22 are exposed publicly.
 
-**Estimated cost:** ~$14–16/month (t4g.small, 30 GiB gp3, us-east-1)
+**Estimated cost:** Free tier eligible for 12 months (t3.micro, 750 hrs/month). After 12 months: ~$8/month (t3.micro + 30 GiB gp3, us-east-1).
 
 ---
 
@@ -24,8 +24,8 @@ This guide walks through deploying the full HYVE stack (React + FastAPI + Postgr
 | Setting | Value |
 |---|---|
 | Name | `hyve-production` |
-| AMI | **Amazon Linux 2023 (ARM64)** — search "Amazon Linux 2023", select the ARM64 variant |
-| Instance type | `t4g.small` |
+| AMI | **Amazon Linux 2023 (x86_64)** — search "Amazon Linux 2023", select the x86_64 variant |
+| Instance type | `t3.micro` |
 | Key pair | Create new or select existing → download the `.pem` file |
 | Storage | **30 GiB, gp3** |
 
@@ -84,7 +84,7 @@ Amazon Linux 2023's bundled plugins are outdated. Install both manually:
 sudo mkdir -p /usr/local/lib/docker/cli-plugins
 
 # Docker Compose
-sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-aarch64 \
+sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
   -o /usr/local/lib/docker/cli-plugins/docker-compose
 sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
@@ -92,7 +92,7 @@ sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 BUILDX_VER=$(curl -s https://api.github.com/repos/docker/buildx/releases/latest \
   | grep '"tag_name"' | cut -d'"' -f4)
 sudo curl -SL \
-  "https://github.com/docker/buildx/releases/download/${BUILDX_VER}/buildx-${BUILDX_VER}.linux-arm64" \
+  "https://github.com/docker/buildx/releases/download/${BUILDX_VER}/buildx-${BUILDX_VER}.linux-amd64" \
   -o /usr/local/lib/docker/cli-plugins/docker-buildx
 sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
 ```
@@ -106,20 +106,21 @@ docker buildx version    # expect: github.com/docker/buildx v0.17.0 or later
 
 ---
 
-## Step 5: Create Swap Space
+## Step 5: Swap Space (Optional)
 
-The t4g.small has 2 GB RAM. Adding swap prevents OOM kills during the Playwright + AI pipeline under concurrent load:
+The embedding model runs via OpenAI/Gemini API calls — PyTorch is not loaded locally, so the backend is lean enough to run on 1 GB RAM without swap.
+
+If you want a safety net against OOM kills under heavy concurrent load, add 1 GB swap:
 
 ```bash
-sudo fallocate -l 2G /swapfile
+sudo fallocate -l 1G /swapfile
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile
 sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-free -h
 ```
 
-Expected: `Swap:` row showing `2.0Gi` total.
+Otherwise, skip this step entirely.
 
 ---
 
@@ -166,7 +167,7 @@ Save and exit: `Ctrl+X`, `Y`, `Enter`
 docker compose up -d --build
 ```
 
-> The first build takes **8–12 minutes** — it downloads Python dependencies and Playwright/Chromium.
+> The first build takes **5–8 minutes** — it downloads Python dependencies and Playwright/Chromium.
 
 Watch build output:
 
