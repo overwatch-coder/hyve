@@ -603,7 +603,7 @@ def fetch_and_analyze_amazon_reviews(
         "message": f"Fetched {reviews_ingested} reviews and started AI analysis.",
     }
 
-
+@router.post("/products/{asin}/native-reviews", response_model=schemas.NativeReviewOut)
 def create_native_review(
     asin: str,
     payload: schemas.NativeReviewCreate,
