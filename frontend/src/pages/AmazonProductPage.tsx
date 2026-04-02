@@ -348,7 +348,7 @@ export default function AmazonProductPage() {
         Product not found.{" "}
         <button
           className="text-primary underline"
-          onClick={() => navigate("/amazon")}
+          onClick={() => navigate(-1)}
         >
           Go back to search
         </button>

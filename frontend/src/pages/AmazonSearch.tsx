@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import {
   Search,
@@ -65,13 +65,22 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 export default function AmazonSearch() {
-  const [searchInput, setSearchInput] = useState("");
-  const [query, setQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] =
-    useState<AmazonCategory | null>(null);
-  const [page, setPage] = useState(1);
-
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  // Derive state from URL search params so it survives back-navigation
+  const query = searchParams.get("q") || "";
+  const page = Number(searchParams.get("page")) || 1;
+  const categoryParam = searchParams.get("category");
+  const categoryNameParam = searchParams.get("categoryName");
+
+  const [searchInput, setSearchInput] = useState(query);
+  const [selectedCategory, setSelectedCategory] =
+    useState<AmazonCategory | null>(
+      categoryParam
+        ? { id: categoryParam, categoryId: categoryParam, name: categoryNameParam || "" }
+        : null
+    );
 
   // 1. Fetch Categories (shown when no search query and no category selected)
   const { data: categories, isLoading: categoriesLoading } = useQuery<
@@ -122,17 +131,17 @@ export default function AmazonSearch() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchInput.trim().length >= 0) {
-      setQuery(searchInput.trim());
-      setSelectedCategory(null); // Clear category if searching
-      setPage(1);
+    const trimmed = searchInput.trim();
+    if (trimmed.length >= 0) {
+      setSelectedCategory(null);
+      setSearchParams({ q: trimmed, page: "1" });
     }
   };
 
   const clearSearch = () => {
     setSearchInput("");
-    setQuery("");
-    setPage(1);
+    setSelectedCategory(null);
+    setSearchParams({});
   };
 
   const isBrowseMode = !query && !selectedCategory;
@@ -214,7 +223,7 @@ export default function AmazonSearch() {
                     className="p-5 border border-border/50 bg-card hover:bg-primary/5 hover:border-primary/30 rounded-xl text-left transition-all group flex items-center justify-between shadow-sm hover:shadow-md"
                     onClick={() => {
                       setSelectedCategory(cat);
-                      setPage(1);
+                      setSearchParams({ category: cat.id || cat.categoryId, categoryName: cat.name, page: "1" });
                     }}
                   >
                     <span className="font-medium truncate pr-2 group-hover:text-primary transition-colors">
@@ -242,7 +251,7 @@ export default function AmazonSearch() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => setSelectedCategory(null)}
+                    onClick={() => { setSelectedCategory(null); setSearchParams({}); }}
                     className="-ml-2"
                   >
                     <ArrowLeft className="h-4 w-4" />
@@ -376,7 +385,13 @@ export default function AmazonSearch() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  onClick={() => {
+                    const prev = Math.max(1, page - 1);
+                    const params: Record<string, string> = { page: String(prev) };
+                    if (query) params.q = query;
+                    if (selectedCategory) { params.category = selectedCategory.id || selectedCategory.categoryId; params.categoryName = selectedCategory.name; }
+                    setSearchParams(params);
+                  }}
                   disabled={page === 1}
                 >
                   <ChevronLeft className="h-4 w-4 mr-1" /> Previous
@@ -387,7 +402,13 @@ export default function AmazonSearch() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  onClick={() => {
+                    const next = Math.min(totalPages, page + 1);
+                    const params: Record<string, string> = { page: String(next) };
+                    if (query) params.q = query;
+                    if (selectedCategory) { params.category = selectedCategory.id || selectedCategory.categoryId; params.categoryName = selectedCategory.name; }
+                    setSearchParams(params);
+                  }}
                   disabled={page >= totalPages}
                 >
                   Next <ChevronRight className="h-4 w-4 ml-1" />
