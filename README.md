@@ -12,11 +12,12 @@ HYVE is an AI-powered platform that transforms unstructured consumer reviews int
 | Visualization | React Flow, Dagre, Framer Motion                         |
 | Data Fetching | React Query, Axios                                       |
 | Backend       | FastAPI (Python), Uvicorn                                |
-| Database      | PostgreSQL (Neon), SQLAlchemy                            |
-| AI Engine     | OpenAI GPT-4o / Google Gemini                            |
-| Clustering    | Sentence-Transformers (`all-MiniLM-L6-v2`), K-Means      |
+| Database      | PostgreSQL 15, SQLAlchemy                                |
+| AI / LLM      | OpenAI GPT-4o or Google Gemini 2.5 Flash                 |
+| Embeddings    | OpenAI `text-embedding-3-small` or Gemini `gemini-embedding-001` (API-based, no local model) |
 | Task Queue    | Background Threads (default) / Celery + Redis (optional) |
-| Deployment    | Vercel (frontend), Render.com (backend)                  |
+| Cache         | Redis (embedding cache, optional Celery broker)          |
+| Deployment    | Vercel + Render.com **or** AWS EC2 (Docker Compose)      |
 
 ---
 
@@ -25,21 +26,22 @@ HYVE is an AI-powered platform that transforms unstructured consumer reviews int
 ```text
 ┌────────────┐       ┌──────────────────┐       ┌──────────────────┐
 │  Frontend  │──────▶│  FastAPI Server   │──────▶│  PostgreSQL DB   │
-│  (Vercel)  │       │  (Render.com)     │       │  (Neon)          │
+│            │       │                   │       │                  │
 └────────────┘       └───────┬──────────┘       └──────────────────┘
                              │ enqueue()
                              ▼
                      ┌──────────────────┐
                      │ Background Thread │
-                     │ (same process)    │
+                     │  (same process)  │
                      └──────────────────┘
                        AI Processing:
-                       • Claim Extraction
-                       • Clustering
+                       • Claim Extraction (LLM)
+                       • Embedding via API (OpenAI / Gemini)
+                       • Clustering (K-Means)
                        • Deduplication
 ```
 
-**How it works:** When a user submits reviews (via CSV, URL, or Amazon), the API instantly dispatches the heavy AI processing into a background thread and returns immediately. The processing runs in the same server process — no extra services or costs required. When you're ready to scale, set `USE_CELERY=true` to upgrade to a dedicated Celery worker without changing any code.
+**How it works:** When a user submits reviews (via CSV, URL, or Amazon ASIN), the API instantly dispatches the heavy AI processing to a background thread and returns immediately. Embeddings are computed via the OpenAI or Gemini API — no local model, no GPU, no large RAM requirements. When you're ready to scale, set `USE_CELERY=true` to upgrade to a dedicated Celery worker without changing any code.
 
 ---
 
@@ -48,8 +50,9 @@ HYVE is an AI-powered platform that transforms unstructured consumer reviews int
 - **Python 3.10+**
 - **Node.js 18+**
 - **Git**
-- An **OpenAI API key** (or Google Gemini API key)
-- A **PostgreSQL** database URL (free tier at [neon.tech](https://neon.tech))
+- An **OpenAI API key** (`LLM_PROVIDER=openai`) **or** a **Google Gemini API key** (`LLM_PROVIDER=gemini`) — also used for embeddings
+- A **PostgreSQL** database URL — free options: [Neon](https://neon.tech), local Docker, or SQLite for quick local dev
+- A **Redis** URL — [Upstash](https://upstash.com) free tier works, or run Redis locally
 
 ---
 
@@ -101,19 +104,34 @@ cp .env.example .env
 Edit `backend/.env` with your values:
 
 ```env
-OPENAI_API_KEY=sk-your-key-here
-LLM_PROVIDER="openai"                               # "openai" or "gemini"
-DATABASE_URL=postgresql://user:pass@host/dbname      # Neon or local PostgreSQL
-REDIS_URL=rediss://default:token@host:6379           # Upstash Redis URL
+# LLM — choose one provider
+LLM_PROVIDER=openai                                  # "openai" or "gemini"
+OPENAI_API_KEY=sk-your-openai-key                    # required if LLM_PROVIDER=openai
+GEMINI_API_KEY=your-gemini-key                       # required if LLM_PROVIDER=gemini
+
+# Database — SQLite works for zero-setup local dev
+DATABASE_URL=sqlite:///hyvedb.sqlite3                # or postgresql://user:pass@host/db
+
+# Redis — used for embedding cache (and Celery if enabled)
+REDIS_URL=redis://localhost:6379/0
+EMBEDDING_CACHE_REDIS_URL=redis://localhost:6379/1
+
+# Auth
 ADMIN_PASSWORD=your_admin_password
-JWT_SECRET="your_jwt_secret"
-FRONTEND_URL="http://localhost:3000"
-BACKEND_URL="http://localhost:8000"
-CANOPY_API_KEY="your_canopy_key"                     # For Amazon product data
-HF_TOKEN="your_hugging_face_token"                   # For embedding models
+JWT_SECRET=your_jwt_secret
+
+# URLs (used for CORS + API docs)
+FRONTEND_URL=http://localhost:5173
+BACKEND_URL=http://localhost:8000
+
+# Amazon product data (optional)
+CANOPY_API_KEY=your_canopy_key
+
+# Background tasks
+USE_CELERY=false                                     # set "true" to use Celery + Redis
 ```
 
-> **Note:** If using Gemini, set `LLM_PROVIDER="gemini"` and add `GEMINI_API_KEY` to your `.env`.
+> **Embeddings:** HYVE uses the same API key you provide for LLM calls — no separate embedding service or local model download required.
 
 **Initialize the database:**
 
@@ -121,7 +139,7 @@ HF_TOKEN="your_hugging_face_token"                   # For embedding models
 # Option A — Reset (drop & recreate tables)
 python reset_db.py
 
-# Option B — Seed with sample data (no API key needed)
+# Option B — Seed with sample data (no reviews needed)
 python seed.py
 ```
 
@@ -131,13 +149,11 @@ python seed.py
 uvicorn index:app --reload --port 8000
 ```
 
-That's it for the backend — background tasks run automatically inside the same process.
-
 ---
 
 ### Step 3 — Frontend Setup
 
-Open a **third terminal**:
+Open a **new terminal**:
 
 ```bash
 cd frontend
@@ -158,6 +174,7 @@ Edit `frontend/.env`:
 
 ```env
 VITE_API_BASE_URL=http://localhost:8000
+VITE_API_URL=http://localhost:8000
 ```
 
 **Start the dev server:**
@@ -168,7 +185,7 @@ npm run dev
 
 ---
 
-### Step 5 — Open the App
+### Step 4 — Open the App
 
 | URL                          | Description      |
 | ---------------------------- | ---------------- |
@@ -178,65 +195,77 @@ npm run dev
 
 ---
 
-## Running with Docker (Alternative)
+## Running with Docker Compose (Full Stack)
 
-If you prefer Docker for local development, a `docker-compose.yml` is provided in the project root:
+The `docker-compose.yml` in the project root runs the **entire stack** — frontend, backend, PostgreSQL, and Redis — in one command. No separate installs required.
 
 ```bash
-docker-compose up -d --build
+# Copy and fill in your secrets
+cp backend/.env.example backend/.env.production
+nano backend/.env.production
+
+# Start everything
+docker compose up -d --build
 ```
 
 This starts:
 
-- **PostgreSQL** on port `5433`
-- **Adminer** (DB GUI) on port `8080`
+| Service      | Port  | Description                |
+| ------------ | ----- | -------------------------- |
+| `frontend`   | 80    | Nginx-served React app     |
+| `backend`    | 8000  | FastAPI + Uvicorn          |
+| `postgres`   | 5432  | PostgreSQL 15              |
+| `redis`      | 6379  | Redis 7 (cache + broker)   |
 
-> **Note:** You still need to start the backend API server and frontend separately, or add them to the compose file.
+> **First run:** The backend auto-creates all tables on startup. No manual migration step needed.
 
 ---
 
 ## Production Deployment
 
-### Frontend → Vercel
-
-1. Push your repo to GitHub
-2. Import the `frontend/` folder as a new project on [vercel.com](https://vercel.com)
-3. Set the environment variable:
-   - `VITE_API_BASE_URL` = your Render backend URL (e.g., `https://hyve-api.onrender.com`)
-4. Deploy
-
-### Backend → Render.com
-
-Deploy a single **Web Service** — no separate worker needed:
-
-1. Render Dashboard → **New** → **Web Service**
-2. Connect your repo
-3. Set **Root Directory**: `backend`
-4. Set **Environment**: `Docker`
-5. Add all env vars from your `.env`
-6. Deploy
-
-Background AI tasks run inside the same server process using background threads, so you don't need a separate paid worker service.
-
-> **Scaling up later:** When traffic grows and you can afford a dedicated worker, simply add `USE_CELERY=true` to your env vars and create a Background Worker service on Render with the command `celery -A worker.celery_app worker --loglevel=info`. No code changes needed.
+HYVE supports two deployment paths. Choose the one that fits your needs:
 
 ---
 
-## Background Tasks
+### Option A — Vercel (Frontend) + Render.com (Backend)
 
-HYVE uses a smart task dispatcher (`core/tasks.py`) for all heavy AI processing. By default, tasks run in **background threads** within the same server process — zero extra cost. When `USE_CELERY=true` is set, tasks are dispatched to a dedicated Celery worker via Redis instead.
+Best for: zero-infrastructure, quick deploys, free tier friendly (with cold starts on Render free plan).
 
-Here's what runs as a background task:
+#### Frontend → Vercel
 
-| Task                              | Trigger                                       | What it does                                            |
-| --------------------------------- | --------------------------------------------- | ------------------------------------------------------- |
-| `run_url_ingestion_background`    | POST `/ingest/url`                            | Scrapes a URL, extracts reviews, runs AI claim pipeline |
-| `run_csv_ingestion_background`    | POST `/ingest/csv`                            | Parses CSV/Excel, groups by product, runs AI pipeline   |
-| `run_amazon_ingestion_background` | POST `/amazon/products/{asin}/analyze-amazon` | Pipes cached Amazon reviews through AI engine           |
-| `run_native_ingestion_background` | POST `/amazon/products/{asin}/analyze-native` | Pipes HYVE native reviews through AI engine             |
-| `run_raw_ingestion_background`    | Raw text ingestion                            | AI-extracts products/reviews from unstructured text     |
+1. Push your repo to GitHub
+2. Import the `frontend/` folder as a new project on [vercel.com](https://vercel.com)
+3. Set environment variables in the Vercel dashboard:
+   - `VITE_API_BASE_URL` = your Render backend URL (e.g., `https://hyve-api.onrender.com`)
+   - `VITE_API_URL` = same value as above
+4. Deploy
 
-All tasks are dispatched via `enqueue()` from the API routers.
+#### Backend → Render.com
+
+1. Render Dashboard → **New** → **Web Service**
+2. Connect your GitHub repo
+3. Set **Root Directory**: `backend`
+4. Set **Environment**: `Docker`
+5. Add all required env vars (see [Environment Variables Reference](#environment-variables-reference))
+6. Deploy
+
+Background AI tasks run inside the same server process using background threads — no separate paid worker service needed.
+
+> **Scaling up:** When traffic grows, add `USE_CELERY=true` and provision a Background Worker on Render with the command `celery -A worker.celery_app worker --loglevel=info`. No code changes needed.
+
+---
+
+### Option B — AWS EC2 (Docker Compose, Self-Hosted)
+
+Best for: full control, no cold starts, free-tier eligible with `t3.micro`, HTTPS support via DuckDNS + Let's Encrypt.
+
+See the full step-by-step guide: **[DEPLOYMENT.md](./DEPLOYMENT.md)**
+
+Highlights:
+- Runs the entire stack on a single EC2 `t3.micro` instance (free tier)
+- One-command deploys via `deploy.sh` (push → SSH → pull → rebuild)
+- Optional HTTPS via free [DuckDNS](https://www.duckdns.org) subdomain + Let's Encrypt
+- PostgreSQL and Redis are included in the Docker Compose stack — no external DB service needed
 
 ---
 
@@ -244,31 +273,49 @@ All tasks are dispatched via `enqueue()` from the API routers.
 
 ### Backend (`backend/.env`)
 
-| Variable               | Required | Description                                     |
-| ---------------------- | -------- | ----------------------------------------------- |
-| `OPENAI_API_KEY`       | Yes*     | OpenAI API key for GPT-4o                       |
-| `GEMINI_API_KEY`       | Yes*     | Google Gemini API key (if using Gemini)         |
-| `LLM_PROVIDER`         | Yes      | `"openai"` or `"gemini"`                        |
-| `DATABASE_URL`         | Yes      | PostgreSQL connection string                    |
-| `REDIS_URL`            | Yes      | Upstash Redis URL (`rediss://...`)              |
-| `ADMIN_PASSWORD`       | Yes      | Password for admin endpoints                    |
-| `JWT_SECRET`           | Yes      | Secret key for JWT token signing                |
-| `FRONTEND_URL`         | Yes      | Frontend URL for CORS                           |
-| `BACKEND_URL`          | Yes      | Backend URL (used in API docs)                  |
-| `CANOPY_API_KEY`       | Yes      | Canopy API key for Amazon product data          |
-| `HF_TOKEN`             | No       | Hugging Face token for embedding models         |
-| `CLUSTERING_BACKEND`   | No       | `"embedding"` (default) or `"llm"`              |
-| `CLUSTERING_FALLBACK`  | No       | Set to `"llm"` for auto-fallback                |
-| `WARM_EMBEDDING_MODEL` | No       | Set to `"1"` to warm model at startup           |
-| `AI_DEDUP_SINGLE_CALL` | No       | Set to `"1"` for optimized deduplication        |
+| Variable                   | Required | Description                                                   |
+| -------------------------- | -------- | ------------------------------------------------------------- |
+| `LLM_PROVIDER`             | Yes      | `"openai"` or `"gemini"`                                      |
+| `OPENAI_API_KEY`           | Yes*     | OpenAI API key — used for LLM calls **and** embeddings        |
+| `GEMINI_API_KEY`           | Yes*     | Google Gemini API key — used for LLM calls **and** embeddings |
+| `DATABASE_URL`             | Yes      | PostgreSQL or SQLite connection string                        |
+| `REDIS_URL`                | Yes      | Redis URL for embedding cache (and Celery broker if enabled)  |
+| `EMBEDDING_CACHE_REDIS_URL`| No       | Separate Redis DB for embeddings (defaults to `REDIS_URL`)    |
+| `ADMIN_PASSWORD`           | Yes      | Password for admin endpoints                                  |
+| `JWT_SECRET`               | Yes      | Secret key for JWT token signing                              |
+| `FRONTEND_URL`             | Yes      | Frontend URL for CORS allow-list                              |
+| `BACKEND_URL`              | Yes      | Backend URL (used in API docs)                                |
+| `CANOPY_API_KEY`           | No       | Canopy API key for Amazon product data                        |
+| `USE_CELERY`               | No       | `"true"` to dispatch tasks via Celery; default `"false"`      |
+| `CLUSTERING_BACKEND`       | No       | `"embedding"` (default) or `"llm"`                            |
+| `CLUSTERING_FALLBACK`      | No       | `"llm"` to auto-fallback if embedding clustering fails        |
+| `AI_DEDUP_SINGLE_CALL`     | No       | `"1"` for optimized single-call deduplication                 |
+| `DOMAIN`                   | No       | Your domain/hostname — required only for HTTPS on AWS         |
 
-_*One of `OPENAI_API_KEY` or `GEMINI_API_KEY` is required depending on `LLM_PROVIDER`._
+_*Exactly one of `OPENAI_API_KEY` or `GEMINI_API_KEY` is required, matching your `LLM_PROVIDER` choice._
 
 ### Frontend (`frontend/.env`)
 
-| Variable              | Required | Description                        |
-| --------------------- | -------- | ---------------------------------- |
-| `VITE_API_BASE_URL`   | Yes      | Backend API URL                    |
+| Variable            | Required | Description                               |
+| ------------------- | -------- | ----------------------------------------- |
+| `VITE_API_BASE_URL` | Yes      | Backend API base URL                      |
+| `VITE_API_URL`      | Yes      | Backend API URL (used by some hooks)      |
+
+---
+
+## Background Tasks
+
+HYVE uses a smart task dispatcher (`core/tasks.py`) for all heavy AI processing. By default, tasks run in **background threads** within the same server process — zero extra cost. When `USE_CELERY=true` is set, tasks are dispatched to a dedicated Celery worker via Redis instead.
+
+| Task                              | Trigger                                           | What it does                                            |
+| --------------------------------- | ------------------------------------------------- | ------------------------------------------------------- |
+| `run_url_ingestion_background`    | `POST /ingest/url`                                | Scrapes a URL, extracts reviews, runs AI claim pipeline |
+| `run_csv_ingestion_background`    | `POST /ingest/csv`                                | Parses CSV/Excel, groups by product, runs AI pipeline   |
+| `run_amazon_ingestion_background` | `POST /amazon/products/{asin}/analyze-amazon`     | Pipes cached Amazon reviews through AI engine           |
+| `run_native_ingestion_background` | `POST /amazon/products/{asin}/analyze-native`     | Pipes HYVE native reviews through AI engine             |
+| `run_raw_ingestion_background`    | Raw text ingestion                                | AI-extracts products/reviews from unstructured text     |
+
+All tasks are dispatched via `enqueue()` from the API routers.
 
 ---
 
@@ -277,14 +324,11 @@ _*One of `OPENAI_API_KEY` or `GEMINI_API_KEY` is required depending on `LLM_PROV
 ```bash
 cd backend
 
-# Reset — drop all tables and recreate
+# Reset — drop all tables and recreate (USE WITH CAUTION in production)
 python reset_db.py
 
-# Seed — populate with sample data
+# Seed — populate with sample data for testing
 python seed.py
-
-# Ingest — real reviews via API (server must be running)
-python ingest_reviews.py
 ```
 
 ---
@@ -294,43 +338,49 @@ python ingest_reviews.py
 ```text
 hyve/
 ├── backend/
-│   ├── index.py             # FastAPI app entry point
-│   ├── models.py            # SQLAlchemy models
-│   ├── schemas.py           # Pydantic schemas
-│   ├── database.py          # DB engine & session
-│   ├── ai_engine.py         # LLM extraction & clustering
-│   ├── pipeline.py          # Full AI processing pipeline
-│   ├── worker.py            # Celery background tasks (Upstash Redis)
+│   ├── index.py              # FastAPI app entry point
+│   ├── models.py             # SQLAlchemy models
+│   ├── schemas.py            # Pydantic schemas
+│   ├── database.py           # DB engine & session
+│   ├── ai_engine.py          # LLM extraction & clustering
+│   ├── pipeline.py           # Full AI processing pipeline
+│   ├── worker.py             # Celery background tasks
 │   ├── routers/
-│   │   ├── admin.py         # Admin endpoints
-│   │   ├── amazon.py        # Amazon catalog & review analysis
-│   │   ├── analytics.py     # Analytics & reporting
-│   │   ├── claims.py        # Claim management
-│   │   ├── experiments.py   # A/B testing experiments
-│   │   ├── ingestion.py     # CSV, URL, raw text ingestion
-│   │   ├── products.py      # Product CRUD
-│   │   ├── reviews.py       # Review management
-│   │   └── themes.py        # Theme management
-│   ├── core/                # Shared utilities (pagination, security)
-│   ├── ingest_reviews.py    # Review ingestion script
-│   ├── seed.py              # Sample data seeder
-│   ├── reset_db.py          # DB reset utility
-│   ├── Dockerfile           # Docker image for backend
+│   │   ├── admin.py          # Admin endpoints
+│   │   ├── amazon.py         # Amazon catalog & review analysis
+│   │   ├── analytics.py      # Analytics & reporting
+│   │   ├── claims.py         # Claim management
+│   │   ├── experiments.py    # A/B testing experiments
+│   │   ├── ingestion.py      # CSV, URL, raw text ingestion
+│   │   ├── products.py       # Product CRUD
+│   │   ├── reviews.py        # Review management
+│   │   └── themes.py         # Theme management
+│   ├── core/                 # Shared utilities (tasks, pagination, security)
+│   ├── seed.py               # Sample data seeder
+│   ├── reset_db.py           # DB reset utility
+│   ├── Dockerfile
 │   ├── requirements.txt
 │   └── .env.example
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/           # Home, Dashboard, Products, Explore, etc.
-│   │   ├── components/      # Reusable UI components
-│   │   ├── hooks/           # Custom React hooks
-│   │   ├── layouts/         # Page layouts
-│   │   └── lib/             # Utilities
+│   │   ├── pages/            # Home, Dashboard, Products, Explore, etc.
+│   │   ├── components/       # Reusable UI components
+│   │   ├── hooks/            # Custom React hooks
+│   │   ├── layouts/          # Page layouts
+│   │   └── lib/              # Utilities & API client
+│   ├── nginx.conf            # HTTP Nginx config
+│   ├── nginx-https.conf      # HTTPS Nginx config template (AWS)
+│   ├── start.sh              # Entrypoint: auto-switches HTTP↔HTTPS
+│   ├── Dockerfile
 │   ├── package.json
 │   ├── vite.config.ts
 │   └── .env.example
 │
-├── docker-compose.yml       # Local dev: Postgres + Adminer
+├── docker-compose.yml        # Full stack: frontend, backend, postgres, redis
+├── deploy.sh                 # One-command deploy to AWS EC2 (run locally)
+├── .deploy.env.example       # EC2 credentials template for deploy.sh
+├── DEPLOYMENT.md             # Full AWS EC2 deployment guide
 └── README.md
 ```
 
@@ -342,18 +392,18 @@ hyve/
 # Clone
 git clone https://github.com/your-username/hyve.git && cd hyve
 
-# ── Terminal 1: Backend API ──
+# ── Terminal 1: Backend ──
 cd backend
-python -m venv venv && venv\Scripts\activate
+python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env          # edit with your values
+cp .env.example .env          # edit with your keys
 python reset_db.py
 uvicorn index:app --reload --port 8000
 
 # ── Terminal 2: Frontend ──
 cd frontend
 npm install
-copy .env.example .env          # set VITE_API_BASE_URL=http://localhost:8000
+cp .env.example .env          # VITE_API_BASE_URL=http://localhost:8000
 npm run dev
 ```
 
