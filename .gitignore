@@ -40,3 +40,6 @@ nul
 
 # Git worktrees
 .worktrees
+
+# Local deploy config (contains EC2 host + SSH key path)
+.deploy.env

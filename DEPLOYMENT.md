@@ -267,22 +267,54 @@ crontab -l
 
 ## Step 13: Enable HTTPS (Let's Encrypt)
 
-**Requires a domain name** pointed at your EC2 IP. HTTPS does not work with a raw IP address.
+Let's Encrypt **cannot issue certificates for raw IP addresses** — you need a domain name. But you don't have to buy one. You have two free options:
 
-### 13a. Point a domain to your EC2
+| Option | Cost | Browser warning? | Notes |
+|---|---|---|---|
+| **A — EC2 hostname** (recommended) | Free | None | Use your instance's built-in DNS + Elastic IP |
+| **B — Custom domain** | ~$10–15/yr | None | Most flexible |
+| **C — Self-signed cert** | Free | Yes (one-time bypass) | Works with raw IP, instant setup |
 
-1. In your DNS provider, create an **A record**: `yourdomain.com` → EC2 public IP
+---
+
+### Option A: EC2 hostname + Elastic IP (free, no domain purchase)
+
+Your EC2 instance already has a valid DNS hostname like `ec2-16-170-225-232.eu-north-1.compute.amazonaws.com`. Let's Encrypt can issue a certificate for it. The only catch is the hostname changes if you stop/start the instance — an Elastic IP fixes that permanently and is free while the instance is running.
+
+**13a-A. Allocate an Elastic IP (one-time)**
+
+In AWS Console → EC2 → Elastic IPs → Allocate Elastic IP address → Allocate.
+Then: Actions → Associate Elastic IP → select your instance → Associate.
+
+Your public IP is now static. Your hostname stabilises to `ec2-<ip-dashes>.region.compute.amazonaws.com`.
+
+**13a-B. Note your new stable hostname**
+
+```bash
+curl http://169.254.169.254/latest/meta-data/public-hostname
+# e.g. ec2-16-170-225-232.eu-north-1.compute.amazonaws.com
+```
+
+Use this as `YOUR_HOSTNAME` in the steps below.
+
+---
+
+### Option B: Custom domain
+
+1. In your DNS provider, create an **A record**: `yourdomain.com` → EC2 Elastic IP
 2. Optional: also add `www.yourdomain.com` → same IP
 3. Wait for DNS to propagate (~5 minutes)
 
-> **Elastic IP:** If you stop/start your EC2, the public IP changes and your DNS breaks. Allocate an Elastic IP in the AWS console and associate it with your instance to get a stable IP.
+Use `yourdomain.com` as `YOUR_HOSTNAME` below.
+
+---
 
 ### 13b. Open port 443 in the security group
 
-In AWS Console → EC2 → Security Groups → your instance's security group → Inbound rules → Add rule:
+AWS Console → EC2 → Security Groups → your instance → Inbound rules → Add rule:
 - Type: HTTPS, Port: 443, Source: `0.0.0.0/0`
 
-### 13c. Install certbot on the EC2
+### 13c. Install certbot
 
 ```bash
 sudo dnf install -y certbot
@@ -290,30 +322,28 @@ sudo dnf install -y certbot
 
 ### 13d. Get the certificate
 
-Stop the frontend container temporarily so certbot can bind to port 80:
+Stop frontend temporarily so certbot can bind to port 80:
 
 ```bash
 cd ~/hyve
 docker compose stop frontend
-sudo certbot certonly --standalone -d yourdomain.com
+sudo certbot certonly --standalone -d YOUR_HOSTNAME
 docker compose start frontend
 ```
 
-The cert is saved to `/etc/letsencrypt/live/yourdomain.com/`.
+The cert is saved to `/etc/letsencrypt/live/YOUR_HOSTNAME/`.
 
 ### 13e. Enable HTTPS in the application
-
-Set `DOMAIN` in your `.env` and update the URLs to `https://`:
 
 ```bash
 nano ~/hyve/backend/.env
 ```
 
-Add/update these lines:
+Add/update these lines (replace `YOUR_HOSTNAME` with the actual value):
 ```
-DOMAIN=yourdomain.com
-FRONTEND_URL=https://yourdomain.com
-BACKEND_URL=https://yourdomain.com
+DOMAIN=YOUR_HOSTNAME
+FRONTEND_URL=https://YOUR_HOSTNAME
+BACKEND_URL=https://YOUR_HOSTNAME
 ```
 
 Update `docker-compose.yml` to expose port 443 and mount the certs:
@@ -328,16 +358,16 @@ frontend:
   build: ./frontend
   ports:
     - "80:80"
-    - "443:443"          # add this
+    - "443:443"                              # add this
   environment:
-    - DOMAIN=${DOMAIN}   # add this
+    - DOMAIN=${DOMAIN}                       # add this
   volumes:
     - /etc/letsencrypt:/etc/letsencrypt:ro   # add this
   restart: unless-stopped
   ...
 ```
 
-Rebuild and restart:
+Rebuild:
 
 ```bash
 docker compose up -d --build frontend
@@ -347,7 +377,7 @@ The startup script inside the container detects the cert and automatically switc
 
 Verify:
 ```bash
-curl https://yourdomain.com/api/health
+curl https://YOUR_HOSTNAME/api/health
 # Expected: {"status":"ok"}
 ```
 
@@ -357,7 +387,7 @@ curl https://yourdomain.com/api/health
 crontab -e
 ```
 
-Add this line (runs renewal check twice daily, reloads nginx after):
+Add this line (renewal check twice daily, reloads nginx after):
 
 ```
 0 0,12 * * * sudo certbot renew --quiet && docker compose -f ~/hyve/docker-compose.yml exec frontend nginx -s reload
@@ -365,16 +395,75 @@ Add this line (runs renewal check twice daily, reloads nginx after):
 
 ---
 
-After pushing code changes to git:
+### Option C: Self-signed certificate (raw IP, instant, browser warning)
+
+Use this if you want HTTPS immediately without any domain setup. The browser will show a security warning once — click "Advanced → Proceed" to bypass it.
 
 ```bash
-ssh -i your-key.pem ec2-user@<ec2-public-ip>
-cd ~/hyve
-git pull
-docker compose up -d --build
+# Generate a self-signed cert valid for 1 year
+sudo mkdir -p /etc/ssl/hyve
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/hyve/privkey.pem \
+  -out /etc/ssl/hyve/fullchain.pem \
+  -subj "/CN=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)"
 ```
 
-Docker layer caching makes subsequent builds fast (1–3 minutes unless Python or npm dependencies changed).
+Then set `DOMAIN` to a placeholder and point the cert mount to `/etc/ssl/hyve`:
+
+In `backend/.env`:
+```
+DOMAIN=self-signed
+FRONTEND_URL=https://<ec2-public-ip>
+BACKEND_URL=https://<ec2-public-ip>
+```
+
+In `docker-compose.yml` frontend service:
+```yaml
+environment:
+  - DOMAIN=self-signed
+volumes:
+  - /etc/ssl/hyve:/etc/letsencrypt/live/self-signed:ro
+ports:
+  - "80:80"
+  - "443:443"
+```
+
+Rebuild: `docker compose up -d --build frontend`
+
+---
+
+## Deploying Updates (One-Command Deploy)
+
+A `deploy.sh` script automates the full push → SSH → pull → rebuild cycle.
+
+### Setup (one time only)
+
+```bash
+cp .deploy.env.example .deploy.env
+nano .deploy.env   # fill in EC2_HOST and SSH_KEY
+chmod +x deploy.sh
+```
+
+`.deploy.env` contents:
+```
+EC2_HOST=ec2-user@<your-ec2-public-ip>
+SSH_KEY=/path/to/your-key.pem
+```
+
+### Deploying
+
+```bash
+./deploy.sh           # pushes main and deploys
+./deploy.sh my-branch # pushes a specific branch then deploys
+```
+
+What it does in order:
+1. `git push origin main` — pushes your latest code to GitHub
+2. SSHs into EC2
+3. `git pull` — pulls the latest code on the server
+4. `docker compose up -d --build` — rebuilds changed images and restarts
+
+Docker layer caching keeps rebuilds fast (1–3 minutes unless Python or npm dependencies changed).
 
 ---
 
