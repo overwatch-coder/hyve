@@ -330,6 +330,13 @@ The cert is saved to `/etc/letsencrypt/live/YOUR_HOSTNAME/`.
 
 ### 13e. Enable HTTPS in the application
 
+`DOMAIN` must be set in **two separate files** — each serves a different purpose:
+
+| File | Why it's needed |
+|---|---|
+| `~/hyve/backend/.env` | Read by FastAPI and the app at runtime (CORS, URL construction) |
+| `~/hyve/.env` | Read by Docker Compose at startup to substitute `${DOMAIN:-}` and pass it into the frontend container as an environment variable |
+
 ```bash
 nano ~/hyve/backend/.env
 ```
@@ -341,11 +348,13 @@ FRONTEND_URL=https://YOUR_HOSTNAME
 BACKEND_URL=https://YOUR_HOSTNAME
 ```
 
-Also create a root-level `.env` so Docker Compose can substitute `${DOMAIN}` from the compose file:
+Create the root-level `.env` for Docker Compose variable substitution:
 
 ```bash
 echo "DOMAIN=YOUR_HOSTNAME" > ~/hyve/.env
 ```
+
+> **Why `${DOMAIN:-}` in docker-compose.yml?** The compose file uses `${DOMAIN:-}` (empty-string default) instead of `${DOMAIN}`. This means Docker Compose will not emit a "variable not set" warning when `DOMAIN` is absent — useful in HTTP-only mode where no `.env` file exists at the repo root.
 
 Update `docker-compose.yml` to expose port 443 and mount the certs:
 
@@ -435,9 +444,11 @@ Rebuild: `docker compose up -d --build frontend`
 
 ## Deploying Updates (One-Command Deploy)
 
+> **Run `deploy.sh` from your local machine** — not the EC2 instance. The script pushes your code to GitHub, then SSHs into EC2 automatically to pull and rebuild.
+
 A `deploy.sh` script automates the full push → SSH → pull → rebuild cycle.
 
-### Setup (one time only)
+### Setup (one time only, on your local machine)
 
 ```bash
 cp .deploy.env.example .deploy.env
