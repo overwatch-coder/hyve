@@ -334,11 +334,17 @@ The cert is saved to `/etc/letsencrypt/live/YOUR_HOSTNAME/`.
 nano ~/hyve/backend/.env
 ```
 
-Add/update these lines (replace `YOUR_HOSTNAME` with the actual value):
+Add/update these lines in `backend/.env` (replace `YOUR_HOSTNAME` with the actual value):
 ```
 DOMAIN=YOUR_HOSTNAME
 FRONTEND_URL=https://YOUR_HOSTNAME
 BACKEND_URL=https://YOUR_HOSTNAME
+```
+
+Also create a root-level `.env` so Docker Compose can substitute `${DOMAIN}` from the compose file:
+
+```bash
+echo "DOMAIN=YOUR_HOSTNAME" > ~/hyve/.env
 ```
 
 Update `docker-compose.yml` to expose port 443 and mount the certs:
