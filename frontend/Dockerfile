@@ -30,12 +30,20 @@ FROM nginx:1.27-alpine
 RUN rm /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# HTTPS template — activated automatically by start.sh when DOMAIN is set
+# and a Let's Encrypt cert exists at /etc/letsencrypt/live/$DOMAIN/
+COPY nginx-https.conf /etc/nginx/nginx-https.conf.template
+
+# Entrypoint: switches to HTTPS config if cert is present, else runs HTTP
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
 # Copy the built React app from stage 1
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-EXPOSE 80
+EXPOSE 80 443
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost/ > /dev/null || exit 1
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/start.sh"]

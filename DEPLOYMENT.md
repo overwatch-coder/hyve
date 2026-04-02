@@ -237,14 +237,21 @@ Open `http://<ec2-public-ip>` in a browser — the HYVE app should load and work
 
 ## Step 12: Set Up Automated Database Backups
 
-Daily backup at 2am, auto-deletes files older than 7 days:
+First install `cronie` — Amazon Linux 2023 does not include cron by default:
+
+```bash
+sudo dnf install -y cronie
+sudo systemctl enable --now crond
+```
+
+Create the backups directory and add the cron job:
 
 ```bash
 mkdir -p ~/backups
 crontab -e
 ```
 
-Add this single line:
+Add this single line (daily backup at 2am, auto-deletes files older than 7 days):
 
 ```
 0 2 * * * docker compose -f ~/hyve/docker-compose.yml exec -T db pg_dump -U hyve hyve > ~/backups/hyve-$(date +\%Y\%m\%d).sql && find ~/backups -name "*.sql" -mtime +7 -delete
@@ -258,7 +265,105 @@ crontab -l
 
 ---
 
-## Updating the Application
+## Step 13: Enable HTTPS (Let's Encrypt)
+
+**Requires a domain name** pointed at your EC2 IP. HTTPS does not work with a raw IP address.
+
+### 13a. Point a domain to your EC2
+
+1. In your DNS provider, create an **A record**: `yourdomain.com` → EC2 public IP
+2. Optional: also add `www.yourdomain.com` → same IP
+3. Wait for DNS to propagate (~5 minutes)
+
+> **Elastic IP:** If you stop/start your EC2, the public IP changes and your DNS breaks. Allocate an Elastic IP in the AWS console and associate it with your instance to get a stable IP.
+
+### 13b. Open port 443 in the security group
+
+In AWS Console → EC2 → Security Groups → your instance's security group → Inbound rules → Add rule:
+- Type: HTTPS, Port: 443, Source: `0.0.0.0/0`
+
+### 13c. Install certbot on the EC2
+
+```bash
+sudo dnf install -y certbot
+```
+
+### 13d. Get the certificate
+
+Stop the frontend container temporarily so certbot can bind to port 80:
+
+```bash
+cd ~/hyve
+docker compose stop frontend
+sudo certbot certonly --standalone -d yourdomain.com
+docker compose start frontend
+```
+
+The cert is saved to `/etc/letsencrypt/live/yourdomain.com/`.
+
+### 13e. Enable HTTPS in the application
+
+Set `DOMAIN` in your `.env` and update the URLs to `https://`:
+
+```bash
+nano ~/hyve/backend/.env
+```
+
+Add/update these lines:
+```
+DOMAIN=yourdomain.com
+FRONTEND_URL=https://yourdomain.com
+BACKEND_URL=https://yourdomain.com
+```
+
+Update `docker-compose.yml` to expose port 443 and mount the certs:
+
+```bash
+nano ~/hyve/docker-compose.yml
+```
+
+Find the `frontend:` service and make these changes:
+```yaml
+frontend:
+  build: ./frontend
+  ports:
+    - "80:80"
+    - "443:443"          # add this
+  environment:
+    - DOMAIN=${DOMAIN}   # add this
+  volumes:
+    - /etc/letsencrypt:/etc/letsencrypt:ro   # add this
+  restart: unless-stopped
+  ...
+```
+
+Rebuild and restart:
+
+```bash
+docker compose up -d --build frontend
+```
+
+The startup script inside the container detects the cert and automatically switches to the HTTPS nginx config.
+
+Verify:
+```bash
+curl https://yourdomain.com/api/health
+# Expected: {"status":"ok"}
+```
+
+### 13f. Auto-renew the certificate
+
+```bash
+crontab -e
+```
+
+Add this line (runs renewal check twice daily, reloads nginx after):
+
+```
+0 0,12 * * * sudo certbot renew --quiet && docker compose -f ~/hyve/docker-compose.yml exec frontend nginx -s reload
+```
+
+---
 
 After pushing code changes to git:
 
@@ -274,6 +379,25 @@ Docker layer caching makes subsequent builds fast (1–3 minutes unless Python o
 ---
 
 ## Troubleshooting
+
+### Redis `WARNING Memory overcommit must be enabled`
+
+This is a kernel setting, not a Docker issue. Fix it permanently:
+
+```bash
+echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+docker compose restart redis
+```
+
+### `crontab: command not found`
+
+Amazon Linux 2023 does not ship with cron. Install it:
+
+```bash
+sudo dnf install -y cronie
+sudo systemctl enable --now crond
+```
 
 ### `compose build requires buildx 0.17.0 or later`
 
