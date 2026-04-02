@@ -267,41 +267,36 @@ crontab -l
 
 ## Step 13: Enable HTTPS (Let's Encrypt)
 
-Let's Encrypt **cannot issue certificates for raw IP addresses** — you need a domain name. But you don't have to buy one. You have two free options:
+Let's Encrypt **cannot issue certificates for raw IP addresses**, and it also **blocks `compute.amazonaws.com` subdomains by policy** — so the EC2 public hostname won't work either. You need a domain name, but you don't have to buy one:
 
 | Option | Cost | Browser warning? | Notes |
 |---|---|---|---|
-| **A — EC2 hostname** (recommended) | Free | None | Use your instance's built-in DNS + Elastic IP |
+| **A — DuckDNS** (recommended) | Free | None | Free subdomain in 3 minutes, Let's Encrypt works |
 | **B — Custom domain** | ~$10–15/yr | None | Most flexible |
 | **C — Self-signed cert** | Free | Yes (one-time bypass) | Works with raw IP, instant setup |
 
 ---
 
-### Option A: EC2 hostname + Elastic IP (free, no domain purchase)
+### Option A: DuckDNS free subdomain (recommended)
 
-Your EC2 instance already has a valid DNS hostname like `ec2-16-170-225-232.eu-north-1.compute.amazonaws.com`. Let's Encrypt can issue a certificate for it. The only catch is the hostname changes if you stop/start the instance — an Elastic IP fixes that permanently and is free while the instance is running.
+[DuckDNS](https://www.duckdns.org) gives you a free subdomain like `yourname.duckdns.org` that points to your EC2 IP. Let's Encrypt fully supports it.
 
-**13a-A. Allocate an Elastic IP (one-time)**
+**13a-A. Create a DuckDNS subdomain**
 
-In AWS Console → EC2 → Elastic IPs → Allocate Elastic IP address → Allocate.
-Then: Actions → Associate Elastic IP → select your instance → Associate.
+1. Go to [duckdns.org](https://www.duckdns.org) and sign in (Google/GitHub/Reddit)
+2. Pick a subdomain name (e.g. `hyve-app`) → click **Add Domain**
+3. In the **current ip** field, enter your EC2 public IP → click **Update IP**
+4. Note your full hostname: `hyve-app.duckdns.org`
 
-Your public IP is now static. Your hostname stabilises to `ec2-<ip-dashes>.region.compute.amazonaws.com`.
+> **Elastic IP tip:** If you stop/restart your EC2, the public IP changes. Allocate a free Elastic IP in AWS Console → EC2 → Elastic IPs, associate it with your instance, then update the IP in DuckDNS once. After that it never changes.
 
-**13a-B. Note your new stable hostname**
-
-```bash
-curl http://169.254.169.254/latest/meta-data/public-hostname
-# e.g. ec2-16-170-225-232.eu-north-1.compute.amazonaws.com
-```
-
-Use this as `YOUR_HOSTNAME` in the steps below.
+Use your DuckDNS hostname as `YOUR_HOSTNAME` in all steps below.
 
 ---
 
 ### Option B: Custom domain
 
-1. In your DNS provider, create an **A record**: `yourdomain.com` → EC2 Elastic IP
+1. In your DNS provider, create an **A record**: `yourdomain.com` → EC2 public IP
 2. Optional: also add `www.yourdomain.com` → same IP
 3. Wait for DNS to propagate (~5 minutes)
 
