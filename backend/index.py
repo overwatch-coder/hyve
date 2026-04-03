@@ -48,6 +48,7 @@ app = FastAPI(
     title="HYVE API",
     description="Backend API for structured consumer reviews and AI analysis.",
     version="1.0.0",
+    root_path="/api",
 )
 
 
