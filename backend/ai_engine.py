@@ -3,34 +3,75 @@ import os
 import hashlib
 import struct
 import time
+import requests as _requests
 from pydantic import BaseModel, Field
 
 # Using groq/openai as an example.
 
 # ---------------------------------------------------------------------------
-# Sentiment lexicon — used by reconcile_claim_sentiment for text-first logic
+# HuggingFace Inference API — sentiment analysis
+# Model: cardiffnlp/twitter-roberta-base-sentiment-latest
+# Labels: Negative / Neutral / Positive  (confidence score per label)
+# Docs: https://huggingface.co/cardiffnlp/twitter-roberta-base-sentiment-latest
 # ---------------------------------------------------------------------------
-_POSITIVE_WORDS = frozenset({
-    "excellent", "great", "love", "perfect", "amazing", "fantastic",
-    "outstanding", "wonderful", "superb", "brilliant", "awesome",
-    "impressive", "best", "good", "nice", "solid", "reliable",
-    "comfortable", "satisfied", "happy", "pleased", "recommend",
-    "worth", "quality", "durable", "fast", "smooth", "easy",
-    "clear", "sharp", "bright", "rich", "powerful", "efficient",
-    "beautiful", "well", "innovative", "intuitive", "helpful",
-    "fantastic", "fabulous", "loved", "enjoys", "enjoy",
-})
+_HF_SENTIMENT_MODEL = "cardiffnlp/twitter-roberta-base-sentiment-latest"
+_HF_API_URL = f"https://api-inference.huggingface.co/models/{_HF_SENTIMENT_MODEL}"
+_HF_CONFIDENCE_THRESHOLD = 0.65  # Treat result as authoritative above this score
 
-_NEGATIVE_WORDS = frozenset({
-    "terrible", "awful", "broken", "useless", "poor", "horrible",
-    "bad", "worst", "waste", "disappointing", "disappointed",
-    "defective", "faulty", "cheap", "slow", "laggy", "difficult",
-    "uncomfortable", "fragile", "unreliable", "flimsy", "noisy",
-    "overpriced", "mediocre", "inferior", "fails", "failed", "failure",
-    "broke", "cracked", "damaged", "dead", "dies", "drains",
-    "scratched", "blurry", "dim", "weak",
-    "annoying", "frustrating", "regret", "avoid", "return",
-})
+
+def _hf_label_to_polarity(label: str) -> str:
+    """Map HuggingFace model label → our internal schema value."""
+    label_lower = label.lower()
+    if "positive" in label_lower:
+        return "positive"
+    if "negative" in label_lower:
+        return "negative"
+    return "neutral"
+
+
+def analyze_sentiment_hf(text: str) -> tuple[str, float]:
+    """
+    Call the HuggingFace Inference API for ML-based sentiment analysis.
+
+    Returns (polarity, confidence) where polarity is one of:
+      'positive' | 'negative' | 'neutral'
+
+    Falls back to ('neutral', 0.0) gracefully when:
+    - HF_TOKEN env var is not set
+    - The API is unavailable / rate-limited
+    - The model is still loading (503 with retry)
+
+    Requires the HF_TOKEN environment variable (free HuggingFace account).
+    """
+    token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_API_KEY")
+    if not token:
+        return "neutral", 0.0
+
+    headers = {"Authorization": f"Bearer {token}"}
+    # Truncate to ~512 chars to stay within the model's token limit
+    payload = {"inputs": text[:512]}
+
+    for attempt in range(3):
+        try:
+            resp = _requests.post(_HF_API_URL, headers=headers, json=payload, timeout=15.0)
+            if resp.status_code == 503:
+                # Model is warming up — wait and retry (exponential backoff)
+                time.sleep(2 ** attempt)
+                continue
+            resp.raise_for_status()
+            result = resp.json()
+
+            # Response shape: [[{label, score}, ...]]
+            if isinstance(result, list) and result:
+                candidates = result[0] if isinstance(result[0], list) else result
+                best = max(candidates, key=lambda x: x.get("score", 0.0))
+                polarity = _hf_label_to_polarity(best.get("label", ""))
+                return polarity, float(best.get("score", 0.0))
+
+        except Exception as exc:
+            print(f"DEBUG: HF sentiment API error (attempt {attempt + 1}): {exc}")
+
+    return "neutral", 0.0
 
 
 def reconcile_claim_sentiment(
@@ -41,44 +82,39 @@ def reconcile_claim_sentiment(
     star_rating: float | None,
 ) -> str:
     """
-    Determines the final sentiment polarity of a claim using a text-first strategy.
+    Determines the final sentiment polarity of a claim.
 
     Priority order:
-    1. Written content (claim + evidence + context) — primary signal.
-       Strong text evidence (2+ keyword hits) overrides LLM and star rating.
-    2. LLM-derived polarity — respected when consistent with moderate text signal.
-    3. Star rating — tiebreaker only when text is ambiguous and LLM returns neutral.
+    1. HuggingFace Inference API (ML model) — primary signal.
+       High confidence (≥ 0.65): result is authoritative.
+       Moderate confidence (0.5–0.65): cross-checked with LLM polarity.
+    2. LLM-derived polarity — used when HF API is unavailable or low confidence.
+    3. Star rating — final tiebreaker (3 buckets) when both above are neutral/ambiguous.
 
     Returns: "positive" | "negative" | "neutral"
     """
-    combined = f"{claim_text} {evidence_text} {context_text}".lower()
-    pos_hits = sum(1 for w in _POSITIVE_WORDS if w in combined)
-    neg_hits = sum(1 for w in _NEGATIVE_WORDS if w in combined)
-    text_strength = abs(pos_hits - neg_hits)
+    analysis_text = f"{claim_text}. {evidence_text}".strip(". ")
+    hf_polarity, hf_confidence = analyze_sentiment_hf(analysis_text)
 
-    # --- Strong text signal: override everything ---
-    if text_strength >= 2:
-        return "positive" if pos_hits > neg_hits else "negative"
+    # --- High-confidence HF result: authoritative ---
+    if hf_confidence >= _HF_CONFIDENCE_THRESHOLD and hf_polarity in ("positive", "negative"):
+        return hf_polarity
 
-    # --- Moderate text signal: trust LLM when aligned, else defer to text ---
-    if text_strength == 1:
-        text_lean = "positive" if pos_hits > neg_hits else "negative"
-        if llm_polarity == text_lean:
-            return llm_polarity
-        return text_lean
+    # --- Moderate HF confidence: use when LLM agrees, otherwise still prefer HF ---
+    if hf_confidence >= 0.5 and hf_polarity in ("positive", "negative"):
+        return hf_polarity  # HF ML model beats LLM heuristic at any non-trivial confidence
 
-    # --- Ambiguous text: rely on LLM verdict ---
+    # --- HF unavailable / low confidence / neutral: fall back to LLM ---
     if llm_polarity in ("positive", "negative"):
         return llm_polarity
 
-    # --- True fallback: use star rating (3 buckets) ---
+    # --- Final fallback: star rating (3 buckets) ---
     if star_rating is not None:
         if star_rating >= 3.5:
             return "positive"
-        elif star_rating < 2.5:
+        if star_rating < 2.5:
             return "negative"
-        else:
-            return "neutral"  # 2.5 <= rating < 3.5
+        return "neutral"  # 2.5 ≤ rating < 3.5
 
     return "neutral"
 
