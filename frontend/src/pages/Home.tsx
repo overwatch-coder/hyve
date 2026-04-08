@@ -132,7 +132,7 @@ export default function Home() {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-250 h-150 bg-primary/5 blur-[120px] rounded-full -z-10" />
         <div className="absolute top-40 right-[-10%] w-125 h-125 bg-emerald-500/5 blur-[100px] rounded-full -z-10" />
 
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-16 items-center md:items-start">
           {/* Left: Content */}
           <div className="lg:col-span-7 space-y-8">
             <motion.h1
@@ -141,10 +141,10 @@ export default function Home() {
               transition={{ delay: 0.1 }}
               className="text-4xl md:text-7xl font-black tracking-tight leading-tight md:leading-[1] text-foreground"
             >
-              Hundreds of reviews.{" "}
+              Hundreds Of Reviews.{" "}
               <br className="hidden md:block" />
               <span className="bg-linear-to-r from-primary to-emerald-500 bg-clip-text text-transparent">
-                One clear picture.
+                One Clear Picture.
               </span>
             </motion.h1>
 
