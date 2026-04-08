@@ -49,7 +49,7 @@ export default function Products() {
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="relative w-full sm:w-64 group">
+          <div data-tour="products-search" className="relative w-full sm:w-64 group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
             <Input
               placeholder="Search products..."
@@ -67,7 +67,7 @@ export default function Products() {
               Search Amazon
             </Button>
           </Link>
-          <Link to="/new" className="w-full sm:w-auto">
+          <Link data-tour="products-new" to="/new" className="w-full sm:w-auto">
             <Button className="w-full h-10 px-6 gap-2 font-bold shadow-lg shadow-primary/20 rounded-xl hover:-translate-y-0.5 transition-all active:translate-y-0">
               <Plus className="h-4 w-4" />
               New Analysis
@@ -88,7 +88,7 @@ export default function Products() {
         </div>
       ) : (
         <>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div data-tour="products-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {pagedProducts?.map((p: any) => (
             <Card
               key={p.id}

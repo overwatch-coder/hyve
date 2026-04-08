@@ -38,7 +38,7 @@ export default function About() {
           decision map you can explore.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
+        <div data-tour="about-how" className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
           <Card className="border-border/40">
             <CardContent className="p-5 flex flex-col gap-2">
               <Sparkles className="h-6 w-6 text-primary" />

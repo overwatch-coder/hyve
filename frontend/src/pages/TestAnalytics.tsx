@@ -89,7 +89,7 @@ export default function TestAnalytics() {
             </p>
           </div>
 
-          <div className="flex gap-4">
+          <div data-tour="ab-stats" className="flex gap-4">
             <Card className="flex-1 bg-primary/5 border-primary/20 shadow-none">
               <CardContent className="p-4 md:p-6 text-center space-y-1">
                 <Users className="h-4 w-4 md:h-5 md:w-5 text-primary mx-auto mb-2" />

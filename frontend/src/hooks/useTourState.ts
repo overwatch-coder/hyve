@@ -7,6 +7,8 @@ interface TourState {
   completedRoutes: string[];
   /** Whether the user dismissed the entire tour */
   dismissed: boolean;
+  /** Whether the full-site sequence tour is in progress */
+  sequenceActive: boolean;
 }
 
 function loadState(): TourState {
@@ -16,7 +18,7 @@ function loadState(): TourState {
   } catch {
     // corrupted — reset
   }
-  return { completedRoutes: [], dismissed: false };
+  return { completedRoutes: [], dismissed: false, sequenceActive: false };
 }
 
 function saveState(state: TourState) {
@@ -46,18 +48,29 @@ export function useTourState() {
   }, []);
 
   const dismissTour = useCallback(() => {
-    setState((prev) => ({ ...prev, dismissed: true }));
+    setState((prev) => ({ ...prev, dismissed: true, sequenceActive: false }));
   }, []);
 
   const restartTour = useCallback(() => {
-    setState({ completedRoutes: [], dismissed: false });
+    setState({ completedRoutes: [], dismissed: false, sequenceActive: false });
+  }, []);
+
+  const startSequence = useCallback(() => {
+    setState((prev) => ({ ...prev, sequenceActive: true, dismissed: false }));
+  }, []);
+
+  const endSequence = useCallback(() => {
+    setState((prev) => ({ ...prev, sequenceActive: false }));
   }, []);
 
   return {
     isDismissed: state.dismissed,
+    isSequenceActive: state.sequenceActive,
     isRouteCompleted,
     markRouteCompleted,
     dismissTour,
     restartTour,
+    startSequence,
+    endSequence,
   };
 }

@@ -141,12 +141,11 @@ export default function Home() {
               transition={{ delay: 0.1 }}
               className="text-4xl md:text-8xl font-black tracking-tight leading-none md:leading-[0.95] text-foreground"
             >
-              Turn <span className="text-primary italic">Noise</span> Into{" "}
+              Stop reading reviews.{" "}
               <br className="hidden md:block" />
               <span className="bg-linear-to-r from-primary to-emerald-500 bg-clip-text text-transparent">
-                Actionable
-              </span>{" "}
-              Clarity.
+                Start understanding them.
+              </span>
             </motion.h1>
 
             <motion.p
@@ -155,8 +154,9 @@ export default function Home() {
               transition={{ delay: 0.2 }}
               className="text-lg md:text-2xl text-muted-foreground font-medium max-w-2xl leading-relaxed"
             >
-              HYVE clusters thousands of raw reviews into a visual decision
-              tree. Drill down from themes to specific claims in seconds.
+              Paste in an Amazon product and HYVE reads every review for you.
+              You get a simple visual map of what buyers love and hate — so you
+              can decide in seconds instead of hours.
             </motion.p>
           </div>
 
@@ -206,10 +206,10 @@ export default function Home() {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 md:mb-12 gap-6">
             <div>
               <p className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] text-primary mb-2">
-                Live Examples
+                Already Done For You
               </p>
               <h2 className="text-3xl md:text-4xl font-black tracking-tighter">
-                Community Analyzed Products
+                Products We've Analyzed
               </h2>
             </div>
             <Link to="/products" className="w-full md:w-auto">
@@ -233,23 +233,23 @@ export default function Home() {
             {[
               {
                 icon: GitBranch,
-                title: "Drill-Down Logic",
-                desc: "No more overall scores. Navigate from themes to specific verified claims.",
+                title: "Interactive Decision Tree",
+                desc: "Click into any theme to see exactly what reviewers said — positive, negative, and mixed.",
               },
               {
                 icon: TrendingUp,
-                title: "Conflict Detection",
-                desc: "AI identifies when reviews disagree and highlights the tension points.",
+                title: "Spot Disagreements",
+                desc: "See where buyers disagree so you know which issues are widespread vs. outliers.",
               },
               {
                 icon: MessageSquare,
-                title: "Chat-with-Review",
-                desc: "Ask our AI assistant specific questions and get answers cited from the dataset.",
+                title: "Ask the Reviews",
+                desc: "Type a question and the AI finds the answer inside the review dataset for you.",
               },
               {
                 icon: ShieldCheck,
-                title: "Source Integrity",
-                desc: "Every claim mapped back to original text. Full transparency, zero hallucination.",
+                title: "Every Claim Is Sourced",
+                desc: "Tap any claim to see the original review it came from. Nothing is made up.",
               },
             ].map((feature, i) => (
               <div key={i} className="space-y-4">
@@ -273,18 +273,18 @@ export default function Home() {
         <div className="max-w-3xl mx-auto space-y-6 md:space-y-8">
           <Trophy className="h-10 w-10 md:h-12 md:w-12 text-primary mx-auto opacity-50" />
           <h2 className="text-3xl md:text-5xl font-black tracking-tighter">
-            Ready to Buy Smarter?
+            Ready to decide smarter?
           </h2>
           <p className="text-lg md:text-xl text-muted-foreground font-medium">
-            Join 5,000+ shoppers and product teams using collective intelligence
-            to make better decisions.
+            Search for any Amazon product and get a full decision map in
+            minutes. No account needed.
           </p>
           <Button
             size="lg"
             className="w-full md:w-auto h-14 md:h-16 px-12 rounded-2xl font-black uppercase tracking-[0.3em] text-xs"
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           >
-            Analyze Your First Product
+            Try it now
           </Button>
         </div>
       </section>

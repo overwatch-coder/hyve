@@ -45,6 +45,21 @@ export const productsSteps: Step[] = [
     placement: "center",
     disableBeacon: true,
   },
+  {
+    target: '[data-tour="products-search"]',
+    content:
+      "Search through analyzed products by name or category to find what you're looking for quickly.",
+  },
+  {
+    target: '[data-tour="products-new"]',
+    content:
+      "Want to analyze a product yourself? Click here to start a new analysis from scratch.",
+  },
+  {
+    target: '[data-tour="products-grid"]',
+    content:
+      "Each card shows the product's sentiment score and how many themes were found. Click any card to open its full decision map.",
+  },
 ];
 
 // ─── EXPLORE (Decision Map) PAGE ───
@@ -67,6 +82,43 @@ export const amazonSteps: Step[] = [
     placement: "center",
     disableBeacon: true,
   },
+  {
+    target: '[data-tour="amazon-search"]',
+    content:
+      'Type a product name here (e.g. "Sony WH-1000XM5") and press Search. HYVE will fetch the latest Amazon listings for you.',
+  },
+];
+
+// ─── ABOUT PAGE ───
+export const aboutSteps: Step[] = [
+  {
+    target: "body",
+    content:
+      "This page explains how HYVE works under the hood — from reading reviews to building the decision map.",
+    placement: "center",
+    disableBeacon: true,
+  },
+  {
+    target: '[data-tour="about-how"]',
+    content:
+      "These three pillars sum up what HYVE does: AI reads reviews, builds a visual decision map, and scores every theme so you see the full picture at a glance.",
+  },
+];
+
+// ─── A/B RESULTS PAGE ───
+export const abResultsSteps: Step[] = [
+  {
+    target: "body",
+    content:
+      "This page shows real test data: people who used HYVE made decisions faster and more confidently than those who read reviews the old way.",
+    placement: "center",
+    disableBeacon: true,
+  },
+  {
+    target: '[data-tour="ab-stats"]',
+    content:
+      "These numbers come from controlled tests comparing HYVE users to traditional review readers. The results speak for themselves.",
+  },
 ];
 
 // ─── THEME DETAILS PAGE ───
@@ -88,7 +140,25 @@ export function getStepsForRoute(pathname: string): Step[] {
   if (pathname === "/") return homeSteps;
   if (pathname === "/products") return productsSteps;
   if (pathname === "/amazon") return amazonSteps;
+  if (pathname === "/about") return aboutSteps;
+  if (pathname === "/test-analytics") return abResultsSteps;
   if (/^\/products\/\d+\/theme\/\d+$/.test(pathname)) return themeDetailsSteps;
   if (/^\/products\/\d+$/.test(pathname)) return exploreSteps;
   return [];
+}
+
+/** Ordered list of routes for the full-site sequence tour */
+export const TOUR_SEQUENCE = [
+  "/",
+  "/products",
+  "/amazon",
+  "/about",
+  "/test-analytics",
+];
+
+/** Returns the next route in the sequence, or null if at the end */
+export function getNextSequenceRoute(current: string): string | null {
+  const idx = TOUR_SEQUENCE.indexOf(current);
+  if (idx === -1 || idx === TOUR_SEQUENCE.length - 1) return null;
+  return TOUR_SEQUENCE[idx + 1];
 }
