@@ -139,7 +139,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="text-3xl md:text-6xl font-black tracking-tight leading-tight md:leading-[1] text-foreground"
+              className="text-4xl md:text-7xl font-black tracking-tight leading-tight md:leading-[1] text-foreground"
             >
               Hundreds of reviews.{" "}
               <br className="hidden md:block" />
@@ -152,7 +152,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="text-lg md:text-2xl text-muted-foreground font-medium max-w-2xl leading-relaxed"
+              className="text-xl md:text-3xl text-muted-foreground font-medium max-w-2xl leading-relaxed"
             >
               HYVE turns hundreds of product reviews into a simple visual map
               so you can see what buyers love and hate — and make smarter

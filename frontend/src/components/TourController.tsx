@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Joyride, STATUS } from "react-joyride";
 import type { CallBackProps } from "react-joyride";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { useTourState } from "@/hooks/useTourState";
 import {
   getStepsForRoute,
-  getNextSequenceRoute,
   homeCompletionSteps,
   TOUR_SEQUENCE,
 } from "@/config/tourSteps";
@@ -35,11 +34,17 @@ export default function TourController() {
     startSequence,
     endSequence,
     advanceSequence,
+    setSequenceIndex,
   } = useTourState();
 
   const [run, setRun] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [dark, setDark] = useState(isDarkMode);
+
+  // Synchronous mirror of sequenceIndex — written before navigate() so that the
+  // isCompletionStep computation in the very next render is always correct,
+  // without relying on React state to settle before the route change renders.
+  const committedIndexRef = useRef(sequenceIndex);
 
   // Fetch first analyzed product ID for dynamic tour routing
   const { data: firstProductId } = useQuery({
@@ -51,6 +56,11 @@ export default function TourController() {
     },
     staleTime: 1000 * 60 * 5,
   });
+
+  // Keep ref in sync whenever persisted state changes (e.g. after startSequence / endSequence)
+  useEffect(() => {
+    committedIndexRef.current = sequenceIndex;
+  }, [sequenceIndex]);
 
   // Track dark mode changes
   useEffect(() => {
@@ -69,10 +79,12 @@ export default function TourController() {
   // Determine which steps to show:
   // - If we're in sequence mode and back at "/" for the last step, show completion steps
   // - Otherwise use the normal route-based steps
+  // Read from committedIndexRef (not state) so this is correct in the same render
+  // that fires immediately after we call navigate() in handleJoyrideCallback.
   const isCompletionStep =
     isSequenceActive &&
     location.pathname === "/" &&
-    sequenceIndex === TOUR_SEQUENCE.length - 1;
+    committedIndexRef.current === TOUR_SEQUENCE.length - 1;
 
   const steps = isCompletionStep
     ? homeCompletionSteps
@@ -112,6 +124,7 @@ export default function TourController() {
       setRun(false);
 
       if (status === STATUS.SKIPPED) {
+        committedIndexRef.current = 0;
         dismissTour();
         endSequence();
         return;
@@ -120,23 +133,45 @@ export default function TourController() {
       markRouteCompleted(routeKey);
 
       if (isSequenceActive) {
-        const nextTemplate = getNextSequenceRoute(sequenceIndex);
-        if (nextTemplate) {
-          let resolved = resolveSequenceRoute(nextTemplate);
-          // If dynamic product not available, skip to the entry after it
-          if (!resolved && nextTemplate === "DYNAMIC_PRODUCT") {
-            advanceSequence(); // skip DYNAMIC_PRODUCT
-            const fallback = getNextSequenceRoute(sequenceIndex + 1);
-            resolved = fallback;
-          }
-          if (resolved) {
-            advanceSequence();
-            navigate(resolved);
-          } else {
+        // Use the ref for a synchronous, non-stale current index.
+        // This avoids the race where advanceSequence() schedules a setState
+        // but navigate() fires immediately, causing the next render to read
+        // the old sequenceIndex from state.
+        const currentIdx = committedIndexRef.current;
+        const nextIndex = currentIdx + 1;
+        const nextTemplate = TOUR_SEQUENCE[nextIndex] ?? null;
+
+        if (!nextTemplate || nextIndex >= TOUR_SEQUENCE.length) {
+          committedIndexRef.current = 0;
+          endSequence();
+          return;
+        }
+
+        let resolved: string | null = resolveSequenceRoute(nextTemplate);
+
+        if (!resolved && nextTemplate === "DYNAMIC_PRODUCT") {
+          // Dynamic product not yet available — skip to the entry after it.
+          const skipIndex = nextIndex + 1;
+          const skipTemplate = TOUR_SEQUENCE[skipIndex] ?? null;
+          if (!skipTemplate) {
+            committedIndexRef.current = 0;
             endSequence();
+            return;
           }
+          committedIndexRef.current = skipIndex;
+          setSequenceIndex(skipIndex);
+          navigate(skipTemplate);
+          return;
+        }
+
+        if (resolved) {
+          // Update the ref BEFORE navigate() so the very next render
+          // (triggered by the route change) computes isCompletionStep correctly.
+          committedIndexRef.current = nextIndex;
+          setSequenceIndex(nextIndex);
+          navigate(resolved);
         } else {
-          // Sequence complete
+          committedIndexRef.current = 0;
           endSequence();
         }
       }
@@ -146,9 +181,8 @@ export default function TourController() {
       dismissTour,
       markRouteCompleted,
       isSequenceActive,
-      sequenceIndex,
       endSequence,
-      advanceSequence,
+      setSequenceIndex,
       navigate,
       resolveSequenceRoute,
     ],
@@ -161,6 +195,7 @@ export default function TourController() {
 
   const handleStartFullTour = () => {
     setShowHelp(false);
+    committedIndexRef.current = 0;
     restartTour();
     startSequence();
     if (location.pathname !== "/") {
@@ -181,7 +216,7 @@ export default function TourController() {
 
   // Determine the "last" button label based on context
   const isLastInSequence =
-    isSequenceActive && sequenceIndex >= TOUR_SEQUENCE.length - 1;
+    isSequenceActive && committedIndexRef.current >= TOUR_SEQUENCE.length - 1;
   const lastLabel = isSequenceActive
     ? isLastInSequence
       ? "Finish tour"

@@ -5,7 +5,7 @@ import type { Step } from "react-joyride";
  * Steps are grouped by page so the tour can resume across routes.
  */
 
-// ─── HOME PAGE (first visit) ───
+// ─── HOME PAGE (first visit — intro only, no hero highlights) ───
 export const homeSteps: Step[] = [
   {
     target: "body",
@@ -13,26 +13,6 @@ export const homeSteps: Step[] = [
       "Welcome to HYVE! We turn hundreds of product reviews into a simple visual map so you can make smarter decisions — fast. Let's show you around.",
     placement: "center",
     disableBeacon: true,
-  },
-  {
-    target: '[data-tour="hero-section"]',
-    content:
-      "This is your home base. From here you can start a new analysis, search for products, or explore ones that are already done.",
-  },
-  {
-    target: '[data-tour="nav-analyzed"]',
-    content:
-      "Here you'll find products that have already been analyzed. Click to browse their decision maps.",
-  },
-  {
-    target: '[data-tour="nav-products"]',
-    content:
-      "Search for new products to analyze. Right now Amazon is available — more sources are coming soon.",
-  },
-  {
-    target: '[data-tour="nav-about"]',
-    content:
-      "Want to learn more about how HYVE works? Check the About page or FAQs.",
   },
 ];
 

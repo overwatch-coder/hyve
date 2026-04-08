@@ -69,6 +69,10 @@ export function useTourState() {
     setState((prev) => ({ ...prev, sequenceIndex: prev.sequenceIndex + 1 }));
   }, []);
 
+  const setSequenceIndex = useCallback((n: number) => {
+    setState((prev) => ({ ...prev, sequenceIndex: n }));
+  }, []);
+
   return {
     isDismissed: state.dismissed,
     isSequenceActive: state.sequenceActive,
@@ -80,5 +84,6 @@ export function useTourState() {
     startSequence,
     endSequence,
     advanceSequence,
+    setSequenceIndex,
   };
 }
