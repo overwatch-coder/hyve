@@ -5,7 +5,7 @@ load_dotenv()
 from celery import Celery
 from database import SessionLocal
 import models
-from ai_engine import extract_claims_from_llm, cluster_claims
+from ai_engine import extract_claims_from_llm, cluster_claims, reconcile_claim_sentiment
 
 # Use redis running on localhost by default
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -49,7 +49,7 @@ def process_review_ai_task(review_id: int):
         provider = os.getenv("LLM_PROVIDER", "openai")
         print(f"Extracting claims using {provider}...")
         try:
-            extraction_result = extract_claims_from_llm(review.original_text, provider)
+            extraction_result = extract_claims_from_llm(review.original_text, provider, star_rating=review.star_rating)
             claims_data = extraction_result.get("claims", [])
         except Exception as e:
             print(f"LLM Extraction failed: {e}")
@@ -62,12 +62,22 @@ def process_review_ai_task(review_id: int):
         # 3. Save extracted claims to DB
         saved_claims = []
         for claim_dict in claims_data:
+            claim_text = claim_dict.get("claim_text", "")
+            evidence_text = claim_dict.get("evidence_text", "")
+            context_text = claim_dict.get("context_text", "")
+            final_polarity = reconcile_claim_sentiment(
+                claim_text=claim_text,
+                evidence_text=evidence_text,
+                context_text=context_text,
+                llm_polarity=claim_dict.get("sentiment_polarity", "neutral"),
+                star_rating=review.star_rating,
+            )
             new_claim = models.Claim(
                 review_id=review.id,
-                claim_text=claim_dict.get("claim_text", ""),
-                evidence_text=claim_dict.get("evidence_text", ""),
-                context_text=claim_dict.get("context_text", ""),
-                sentiment_polarity=claim_dict.get("sentiment_polarity", "neutral"),
+                claim_text=claim_text,
+                evidence_text=evidence_text,
+                context_text=context_text,
+                sentiment_polarity=final_polarity,
                 severity=float(claim_dict.get("severity", 0.0))
             )
             db.add(new_claim)

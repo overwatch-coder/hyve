@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 import models
 from ai_engine import (
     extract_claims_from_llm,
+    extract_claims_from_llm_async,
+    reconcile_claim_sentiment,
     cluster_claims,
     cluster_claims_llm,
-    extract_claims_from_llm_async,
 )
 import asyncio
 import time
@@ -68,7 +69,7 @@ def process_review_sync(review_id: int, db: Session) -> dict:
     print(f"DEBUG: Starting LLM extraction for review {review_id} using {provider}")
     
     try:
-        extraction_result = extract_claims_from_llm(review.original_text, provider)
+        extraction_result = extract_claims_from_llm(review.original_text, provider, star_rating=review.star_rating)
         claims_data = extraction_result.get("claims", [])
     except Exception as e:
         return {"status": "error", "message": f"LLM extraction failed: {str(e)}"}
@@ -85,13 +86,21 @@ def process_review_sync(review_id: int, db: Session) -> dict:
         
         if not claim_text:
             continue
+
+        final_polarity = reconcile_claim_sentiment(
+            claim_text=claim_text,
+            evidence_text=evidence_text,
+            context_text=context_text,
+            llm_polarity=claim_dict.get("sentiment_polarity", "neutral"),
+            star_rating=review.star_rating,
+        )
             
         new_claim = models.Claim(
             review_id=review.id,
             claim_text=claim_text,
             evidence_text=evidence_text,
             context_text=context_text,
-            sentiment_polarity=claim_dict.get("sentiment_polarity", "neutral"),
+            sentiment_polarity=final_polarity,
             severity=float(claim_dict.get("severity", 0.0)),
         )
         db.add(new_claim)
@@ -140,17 +149,31 @@ def batch_process_reviews(review_ids: list[int], db):
     finally:
         loop.close()
         
+    # Build a lookup map for star_rating by review_id
+    star_rating_map = {r.id: r.star_rating for r in reviews}
+
     for review_id, claims_data in results:
+        review_star_rating = star_rating_map.get(review_id)
         for claim_dict in claims_data:
             claim_text = claim_dict.get("claim_text") or claim_dict.get("core_claim", "")
             if not claim_text: continue
+
+            evidence_text = claim_dict.get("evidence_text") or claim_dict.get("supporting_evidence", "")
+            context_text = claim_dict.get("context_text") or claim_dict.get("context", "")
+            final_polarity = reconcile_claim_sentiment(
+                claim_text=claim_text,
+                evidence_text=evidence_text,
+                context_text=context_text,
+                llm_polarity=claim_dict.get("sentiment_polarity", "neutral"),
+                star_rating=review_star_rating,
+            )
             
             new_claim = models.Claim(
                 review_id=review_id,
                 claim_text=claim_text,
-                evidence_text=claim_dict.get("evidence_text") or claim_dict.get("supporting_evidence", ""),
-                context_text=claim_dict.get("context_text") or claim_dict.get("context", ""),
-                sentiment_polarity=claim_dict.get("sentiment_polarity", "neutral"),
+                evidence_text=evidence_text,
+                context_text=context_text,
+                sentiment_polarity=final_polarity,
                 severity=float(claim_dict.get("severity", 0.0) or 0.0),
             )
             db.add(new_claim)

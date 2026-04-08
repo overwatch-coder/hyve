@@ -7,6 +7,81 @@ from pydantic import BaseModel, Field
 
 # Using groq/openai as an example.
 
+# ---------------------------------------------------------------------------
+# Sentiment lexicon — used by reconcile_claim_sentiment for text-first logic
+# ---------------------------------------------------------------------------
+_POSITIVE_WORDS = frozenset({
+    "excellent", "great", "love", "perfect", "amazing", "fantastic",
+    "outstanding", "wonderful", "superb", "brilliant", "awesome",
+    "impressive", "best", "good", "nice", "solid", "reliable",
+    "comfortable", "satisfied", "happy", "pleased", "recommend",
+    "worth", "quality", "durable", "fast", "smooth", "easy",
+    "clear", "sharp", "bright", "rich", "powerful", "efficient",
+    "beautiful", "well", "innovative", "intuitive", "helpful",
+    "fantastic", "fabulous", "loved", "enjoys", "enjoy",
+})
+
+_NEGATIVE_WORDS = frozenset({
+    "terrible", "awful", "broken", "useless", "poor", "horrible",
+    "bad", "worst", "waste", "disappointing", "disappointed",
+    "defective", "faulty", "cheap", "slow", "laggy", "difficult",
+    "uncomfortable", "fragile", "unreliable", "flimsy", "noisy",
+    "overpriced", "mediocre", "inferior", "fails", "failed", "failure",
+    "broke", "cracked", "damaged", "dead", "dies", "drains",
+    "scratched", "blurry", "dim", "weak",
+    "annoying", "frustrating", "regret", "avoid", "return",
+})
+
+
+def reconcile_claim_sentiment(
+    claim_text: str,
+    evidence_text: str,
+    context_text: str,
+    llm_polarity: str,
+    star_rating: float | None,
+) -> str:
+    """
+    Determines the final sentiment polarity of a claim using a text-first strategy.
+
+    Priority order:
+    1. Written content (claim + evidence + context) — primary signal.
+       Strong text evidence (2+ keyword hits) overrides LLM and star rating.
+    2. LLM-derived polarity — respected when consistent with moderate text signal.
+    3. Star rating — tiebreaker only when text is ambiguous and LLM returns neutral.
+
+    Returns: "positive" | "negative" | "neutral"
+    """
+    combined = f"{claim_text} {evidence_text} {context_text}".lower()
+    pos_hits = sum(1 for w in _POSITIVE_WORDS if w in combined)
+    neg_hits = sum(1 for w in _NEGATIVE_WORDS if w in combined)
+    text_strength = abs(pos_hits - neg_hits)
+
+    # --- Strong text signal: override everything ---
+    if text_strength >= 2:
+        return "positive" if pos_hits > neg_hits else "negative"
+
+    # --- Moderate text signal: trust LLM when aligned, else defer to text ---
+    if text_strength == 1:
+        text_lean = "positive" if pos_hits > neg_hits else "negative"
+        if llm_polarity == text_lean:
+            return llm_polarity
+        return text_lean
+
+    # --- Ambiguous text: rely on LLM verdict ---
+    if llm_polarity in ("positive", "negative"):
+        return llm_polarity
+
+    # --- True fallback: use star rating (3 buckets) ---
+    if star_rating is not None:
+        if star_rating >= 3.5:
+            return "positive"
+        elif star_rating < 2.5:
+            return "negative"
+        else:
+            return "neutral"  # 2.5 <= rating < 3.5
+
+    return "neutral"
+
 
 class ExtractionResult(BaseModel):
     claims: list[dict] = Field(
@@ -22,20 +97,30 @@ def _clean_json_text(text: str) -> str:
         t = t.rsplit("\n", 1)[0]
     return t.strip()
 
-def extract_claims_from_llm(review_text: str, provider: str = "openai") -> dict:
+def extract_claims_from_llm(review_text: str, provider: str = "openai", star_rating: float | None = None) -> dict:
     """
-    Extracts structured claims from raw review text using an LLM. 
+    Extracts structured claims from raw review text using an LLM.
     Supports multiple providers via environment configuration.
+
+    star_rating is passed as secondary context only — the written text is
+    the authoritative signal for sentiment polarity.
     """
+    rating_context = (
+        f"\n    Note: The reviewer gave a star rating of {star_rating}/5. "
+        "Treat this as secondary context only — the written review text is "
+        "the authoritative signal for sentiment polarity."
+        if star_rating is not None else ""
+    )
     prompt = f"""
     Analyze the following product review and extract key arguments/claims.
     For each distinct claim, extract:
     - The core claim (e.g., "Battery life is poor")
     - Supporting evidence from the text (e.g., "Drains within 5 hours")
     - Context (e.g., "Heavy social media use")
-    - Sentiment polarity (positive, negative, or neutral)
+    - Sentiment polarity (positive, negative, or neutral) — base this on the
+      written content of the review, not the star rating.
     - Severity (a float basically mapping how critical this issue is on a scale from 0.0 to 1.0)
-    
+    {rating_context}
     Review text: "{review_text}"
     """
 
@@ -72,19 +157,29 @@ def extract_claims_from_llm(review_text: str, provider: str = "openai") -> dict:
         raise ValueError(f"Unsupported LLM provider: {provider}")
 
 
-async def extract_claims_from_llm_async(review_text: str, provider: str = "openai") -> dict:
+async def extract_claims_from_llm_async(review_text: str, provider: str = "openai", star_rating: float | None = None) -> dict:
     """
     Async version of extract_claims_from_llm for parallel execution.
+
+    star_rating is passed as secondary context only — the written text is
+    the authoritative signal for sentiment polarity.
     """
+    rating_context = (
+        f"\n    Note: The reviewer gave a star rating of {star_rating}/5. "
+        "Treat this as secondary context only — the written review text is "
+        "the authoritative signal for sentiment polarity."
+        if star_rating is not None else ""
+    )
     prompt = f"""
     Analyze the following product review and extract key arguments/claims.
     For each distinct claim, extract:
     - The core claim (e.g., "Battery life is poor")
     - Supporting evidence from the text (e.g., "Drains within 5 hours")
     - Context (e.g., "Heavy social media use")
-    - Sentiment polarity (positive, negative, or neutral)
+    - Sentiment polarity (positive, negative, or neutral) — base this on the
+      written content of the review, not the star rating.
     - Severity (a float basically mapping how critical this issue is on a scale from 0.0 to 1.0)
-    
+    {rating_context}
     Review text: "{review_text}"
     """
 
