@@ -9,6 +9,8 @@ interface TourState {
   dismissed: boolean;
   /** Whether the full-site sequence tour is in progress */
   sequenceActive: boolean;
+  /** Current index within the TOUR_SEQUENCE array */
+  sequenceIndex: number;
 }
 
 function loadState(): TourState {
@@ -18,7 +20,7 @@ function loadState(): TourState {
   } catch {
     // corrupted — reset
   }
-  return { completedRoutes: [], dismissed: false, sequenceActive: false };
+  return { completedRoutes: [], dismissed: false, sequenceActive: false, sequenceIndex: 0 };
 }
 
 function saveState(state: TourState) {
@@ -48,29 +50,35 @@ export function useTourState() {
   }, []);
 
   const dismissTour = useCallback(() => {
-    setState((prev) => ({ ...prev, dismissed: true, sequenceActive: false }));
+    setState((prev) => ({ ...prev, dismissed: true, sequenceActive: false, sequenceIndex: 0 }));
   }, []);
 
   const restartTour = useCallback(() => {
-    setState({ completedRoutes: [], dismissed: false, sequenceActive: false });
+    setState({ completedRoutes: [], dismissed: false, sequenceActive: false, sequenceIndex: 0 });
   }, []);
 
   const startSequence = useCallback(() => {
-    setState((prev) => ({ ...prev, sequenceActive: true, dismissed: false }));
+    setState((prev) => ({ ...prev, sequenceActive: true, sequenceIndex: 0, dismissed: false, completedRoutes: [] }));
   }, []);
 
   const endSequence = useCallback(() => {
-    setState((prev) => ({ ...prev, sequenceActive: false }));
+    setState((prev) => ({ ...prev, sequenceActive: false, sequenceIndex: 0 }));
+  }, []);
+
+  const advanceSequence = useCallback(() => {
+    setState((prev) => ({ ...prev, sequenceIndex: prev.sequenceIndex + 1 }));
   }, []);
 
   return {
     isDismissed: state.dismissed,
     isSequenceActive: state.sequenceActive,
+    sequenceIndex: state.sequenceIndex,
     isRouteCompleted,
     markRouteCompleted,
     dismissTour,
     restartTour,
     startSequence,
     endSequence,
+    advanceSequence,
   };
 }

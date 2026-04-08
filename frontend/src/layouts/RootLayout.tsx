@@ -104,18 +104,18 @@ export default function RootLayout() {
               <ChevronDown className="h-3 w-3" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuItem asChild>
+              <DropdownMenuItem asChild className="focus:bg-primary focus:text-white hover:bg-primary hover:text-white">
                 <Link to="/amazon" className="flex items-center gap-2 cursor-pointer">
                   <ShoppingBag className="h-4 w-4" />
                   Amazon
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem disabled className="flex items-center gap-2 opacity-50">
+              <DropdownMenuItem disabled className="flex items-center gap-2 opacity-50 focus:bg-primary/10">
                 <Lock className="h-4 w-4" />
                 <span>Jumia</span>
                 <span className="ml-auto text-[10px] font-semibold text-muted-foreground">Coming soon</span>
               </DropdownMenuItem>
-              <DropdownMenuItem disabled className="flex items-center gap-2 opacity-50">
+              <DropdownMenuItem disabled className="flex items-center gap-2 opacity-50 focus:bg-primary/10">
                 <Lock className="h-4 w-4" />
                 <span>Alibaba</span>
                 <span className="ml-auto text-[10px] font-semibold text-muted-foreground">Coming soon</span>
@@ -139,13 +139,13 @@ export default function RootLayout() {
               <ChevronDown className="h-3 w-3" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-40">
-              <DropdownMenuItem asChild>
+              <DropdownMenuItem asChild className="focus:bg-primary focus:text-white hover:bg-primary hover:text-white">
                 <Link to="/about" className="flex items-center gap-2 cursor-pointer">
                   <Info className="h-4 w-4" />
                   About HYVE
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
+              <DropdownMenuItem asChild className="focus:bg-primary focus:text-white hover:bg-primary hover:text-white">
                 <Link to="/faq" className="flex items-center gap-2 cursor-pointer">
                   <HelpCircle className="h-4 w-4" />
                   FAQ
@@ -203,8 +203,8 @@ export default function RootLayout() {
                     className={cn(
                       "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
                       location.pathname === "/products"
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                        ? "bg-primary text-white"
+                        : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
                     )}
                   >
                     <Activity className="h-4 w-4" />
@@ -221,8 +221,8 @@ export default function RootLayout() {
                     className={cn(
                       "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
                       location.pathname.startsWith("/amazon")
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                        ? "bg-primary text-white"
+                        : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
                     )}
                   >
                     <ShoppingBag className="h-4 w-4" />
@@ -249,8 +249,8 @@ export default function RootLayout() {
                     className={cn(
                       "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
                       location.pathname === "/about"
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                        ? "bg-primary text-white"
+                        : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
                     )}
                   >
                     <Info className="h-4 w-4" />
@@ -262,8 +262,8 @@ export default function RootLayout() {
                     className={cn(
                       "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
                       location.pathname === "/faq"
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                        ? "bg-primary text-white"
+                        : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
                     )}
                   >
                     <HelpCircle className="h-4 w-4" />
@@ -276,8 +276,8 @@ export default function RootLayout() {
                     className={cn(
                       "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
                       location.pathname === "/test-analytics"
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                        ? "bg-primary text-white"
+                        : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
                     )}
                   >
                     <BarChart2 className="h-4 w-4" />

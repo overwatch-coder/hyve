@@ -139,12 +139,12 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="text-4xl md:text-8xl font-black tracking-tight leading-none md:leading-[0.95] text-foreground"
+              className="text-3xl md:text-6xl font-black tracking-tight leading-tight md:leading-[1] text-foreground"
             >
-              Stop reading reviews.{" "}
+              Hundreds of reviews.{" "}
               <br className="hidden md:block" />
               <span className="bg-linear-to-r from-primary to-emerald-500 bg-clip-text text-transparent">
-                Start understanding them.
+                One clear picture.
               </span>
             </motion.h1>
 
@@ -154,9 +154,10 @@ export default function Home() {
               transition={{ delay: 0.2 }}
               className="text-lg md:text-2xl text-muted-foreground font-medium max-w-2xl leading-relaxed"
             >
-              Paste in an Amazon product and HYVE reads every review for you.
-              You get a simple visual map of what buyers love and hate — so you
-              can decide in seconds instead of hours.
+              HYVE turns hundreds of product reviews into a simple visual map
+              so you can see what buyers love and hate — and make smarter
+              decisions in seconds, not hours. Works with Amazon, CSV uploads,
+              and more sources coming soon.
             </motion.p>
           </div>
 

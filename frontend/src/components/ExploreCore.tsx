@@ -969,7 +969,7 @@ export function ExploreContentImpl({
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
+            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0" data-tour="explore-view-toggle">
               <Tabs
                 value={viewMode}
                 onValueChange={(v) => setViewMode(v as any)}
@@ -1081,7 +1081,7 @@ export function ExploreContentImpl({
             )}
           </div>
 
-          <div className="h-150 rounded-2xl border border-border/40 bg-card/30 overflow-hidden shadow-sm">
+          <div className="h-150 rounded-2xl border border-border/40 bg-card/30 overflow-hidden shadow-sm" data-tour="explore-tree">
             {viewMode === "traditional" ? (
               <TraditionalReviewsView productId={productId} />
             ) : viewMode === "accordion" ? (
