@@ -32,7 +32,7 @@ git push origin "$BRANCH"
 echo "▶ Step 2/3 — Connecting to $EC2_HOST..."
 echo "▶ Step 3/3 — Pulling latest code and rebuilding..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$EC2_HOST" \
-  "cd ~/hyve && git pull origin $BRANCH && docker compose up -d --build"
+  "cd ~/hyve && git pull origin $BRANCH && docker compose down --remove-orphans && docker compose up -d --build"
 
 echo ""
 echo "✓ Deployment complete."
