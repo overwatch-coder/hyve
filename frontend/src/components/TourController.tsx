@@ -298,8 +298,9 @@ export default function TourController() {
             tooltipFooter: {
               marginTop: 8,
             },
-            buttonNext: {
+            buttonPrimary: {
               backgroundColor: PRIMARY,
+              color: "#ffffff",
               borderRadius: 8,
               fontSize: 13,
               fontWeight: 600,
