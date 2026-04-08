@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Joyride, STATUS } from "react-joyride";
-import type { CallBackProps } from "react-joyride";
+import { ACTIONS, EVENTS, Joyride, STATUS } from "react-joyride";
+import type { EventData } from "react-joyride";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { HelpCircle, RotateCcw, MapPin } from "lucide-react";
@@ -33,7 +33,6 @@ export default function TourController() {
     restartTour,
     startSequence,
     endSequence,
-    advanceSequence,
     setSequenceIndex,
   } = useTourState();
 
@@ -90,6 +89,30 @@ export default function TourController() {
     ? homeCompletionSteps
     : getStepsForRoute(location.pathname);
 
+  // First landing-page visit should enter the full guided sequence automatically.
+  // Without this, the intro modal runs as a standalone one-page tour and clicking
+  // the last button simply finishes instead of advancing to /products.
+  useEffect(() => {
+    if (
+      location.pathname === "/" &&
+      !isDismissed &&
+      !isSequenceActive &&
+      !isRouteCompleted(routeKey)
+    ) {
+      committedIndexRef.current = 0;
+      setSequenceIndex(0);
+      startSequence();
+    }
+  }, [
+    location.pathname,
+    routeKey,
+    isDismissed,
+    isSequenceActive,
+    isRouteCompleted,
+    setSequenceIndex,
+    startSequence,
+  ]);
+
   // Auto-start tour on new routes (or in sequence mode)
   useEffect(() => {
     if (steps.length > 0 && !isDismissed) {
@@ -116,14 +139,19 @@ export default function TourController() {
   );
 
   const handleJoyrideCallback = useCallback(
-    (data: CallBackProps) => {
-      const { status } = data;
-      const finished = [STATUS.FINISHED, STATUS.SKIPPED].includes(status as any);
-      if (!finished) return;
+    (data: EventData) => {
+      const { action, index, status, type } = data;
+      const completedCurrentPageStep =
+        type === EVENTS.STEP_AFTER &&
+        action === ACTIONS.NEXT &&
+        index === steps.length - 1;
+      const skipped = status === STATUS.SKIPPED;
+
+      if (!completedCurrentPageStep && !skipped) return;
 
       setRun(false);
 
-      if (status === STATUS.SKIPPED) {
+      if (skipped) {
         committedIndexRef.current = 0;
         dismissTour();
         endSequence();
@@ -234,7 +262,7 @@ export default function TourController() {
           showProgress
           scrollToFirstStep
           disableOverlayClose
-          callback={handleJoyrideCallback}
+          onEvent={handleJoyrideCallback}
           locale={{
             back: "Back",
             close: "Got it",
