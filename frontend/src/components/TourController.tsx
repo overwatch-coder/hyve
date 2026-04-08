@@ -318,9 +318,12 @@ export default function TourController() {
             buttonClose: {
               color: mutedText,
             },
-            beacon: {
-              inner: PRIMARY,
-              outer: PRIMARY,
+            beaconInner: {
+              backgroundColor: PRIMARY,
+            },
+            beaconOuter: {
+              borderColor: PRIMARY,
+              backgroundColor: `${PRIMARY}33`,
             },
           }}
         />
