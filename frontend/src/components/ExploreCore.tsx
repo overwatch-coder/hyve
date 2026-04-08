@@ -238,7 +238,7 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
         id: posSentimentId,
         type: "sentiment",
         data: {
-          label: "Pros",
+          label: "Positive",
           type: "pos",
           expanded: false,
           childIds: claimIds,
@@ -332,7 +332,7 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
         id: negSentimentId,
         type: "sentiment",
         data: {
-          label: "Cons",
+          label: "Negative",
           type: "neg",
           expanded: false,
           childIds: claimIds,

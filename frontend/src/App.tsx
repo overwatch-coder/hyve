@@ -14,6 +14,8 @@ import TestAnalytics from "./pages/TestAnalytics";
 import ExperimentPage from "./pages/ExperimentPage";
 import AmazonSearch from "@/pages/AmazonSearch";
 import AmazonProductPage from "@/pages/AmazonProductPage";
+import About from "@/pages/About";
+import FAQ from "@/pages/FAQ";
 
 const queryClient = new QueryClient();
 
@@ -59,6 +61,10 @@ function App() {
               {/* Amazon Product Search & Native Reviews */}
               <Route path="amazon" element={<AmazonSearch />} />
               <Route path="amazon/:asin" element={<AmazonProductPage />} />
+
+              {/* About & FAQ */}
+              <Route path="about" element={<About />} />
+              <Route path="faq" element={<FAQ />} />
             </Route>
           </Routes>
         </BrowserRouter>

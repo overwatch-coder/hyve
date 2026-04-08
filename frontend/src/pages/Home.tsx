@@ -127,7 +127,7 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-background -mt-8 overflow-x-hidden">
       {/* ── HERO SECTION ── */}
-      <section className="relative pt-16 md:pt-32 pb-20 md:pb-32 px-4 md:px-6">
+      <section data-tour="hero-section" className="relative pt-16 md:pt-32 pb-20 md:pb-32 px-4 md:px-6">
         {/* Abstract Background Blobs */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-250 h-150 bg-primary/5 blur-[120px] rounded-full -z-10" />
         <div className="absolute top-40 right-[-10%] w-125 h-125 bg-emerald-500/5 blur-[100px] rounded-full -z-10" />
