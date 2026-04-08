@@ -263,6 +263,9 @@ export default function TourController() {
           scrollToFirstStep
           disableOverlayClose
           onEvent={handleJoyrideCallback}
+          floaterProps={{ disableAnimation: false }}
+          overlayColor="rgba(0, 0, 0, 0.55)"
+          zIndex={10000}
           locale={{
             back: "Back",
             close: "Got it",
@@ -271,19 +274,13 @@ export default function TourController() {
             skip: "Skip tour",
           }}
           styles={{
-            options: {
-              primaryColor: PRIMARY,
-              backgroundColor: tooltipBg,
-              textColor: tooltipText,
-              arrowColor: tooltipBg,
-              overlayColor: "rgba(0, 0, 0, 0.55)",
-              zIndex: 10000,
-            },
             tooltip: {
               borderRadius: 12,
               fontSize: 14,
               padding: "16px 20px",
               boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+              backgroundColor: tooltipBg,
+              color: tooltipText,
             },
             tooltipTitle: {
               fontSize: 15,
