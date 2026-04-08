@@ -152,11 +152,11 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="text-xl md:text-3xl text-muted-foreground font-medium max-w-2xl leading-relaxed"
+              className="text-sm md:text-xl text-muted-foreground font-light max-w-2xl leading-relaxed"
             >
               HYVE turns hundreds of product reviews into a simple visual map
-              so you can see what buyers love and hate — and make smarter
-              decisions in seconds, not hours. Works with Amazon, CSV uploads,
+              so you can see what buyers love and hate and also make smarter
+              decisions in seconds, not hours. Works with Amazon products, CSV uploads,
               and more sources coming soon.
             </motion.p>
           </div>

@@ -6,18 +6,23 @@ import type { Step } from "react-joyride";
  */
 
 // ─── HOME PAGE (first visit — intro only, no hero highlights) ───
-export const homeSteps: Step[] = [
+
+interface IStepWithRoute extends Step {
+  disableBeacon?: boolean; // whether to disable the beacon for this step
+}
+
+export const homeSteps: IStepWithRoute[] = [
   {
     target: "body",
     content:
-      "Welcome to HYVE! We turn hundreds of product reviews into a simple visual map so you can make smarter decisions — fast. Let's show you around.",
+      "Welcome to HYVE! We turn hundreds of product reviews into a simple visual map so you can make smarter decisions fast. Let's show you around.",
     placement: "center",
     disableBeacon: true,
   },
 ];
 
 // ─── HOME PAGE (completion — end of full tour) ───
-export const homeCompletionSteps: Step[] = [
+export const homeCompletionSteps: IStepWithRoute[] = [
   {
     target: "body",
     content:
@@ -28,11 +33,11 @@ export const homeCompletionSteps: Step[] = [
 ];
 
 // ─── PRODUCTS (Analyzed) PAGE ───
-export const productsSteps: Step[] = [
+export const productsSteps: IStepWithRoute[] = [
   {
     target: "body",
     content:
-      "This is the Analyzed page. Every product listed here has been processed by our AI — click any one to see its decision map.",
+      "This is the Analyzed products page. Every product listed here has been processed by our AI. You can click any one of them to see its visualized tree and detailed insights.",
     placement: "center",
     disableBeacon: true,
   },
@@ -54,11 +59,11 @@ export const productsSteps: Step[] = [
 ];
 
 // ─── EXPLORE (Decision Map / Product Detail) PAGE ───
-export const exploreSteps: Step[] = [
+export const exploreSteps: IStepWithRoute[] = [
   {
     target: "body",
     content:
-      "This is the decision map — the heart of HYVE. It shows themes, sentiments, and real claims from reviews.",
+      "This is the decision map - the heart of HYVE. It shows themes, sentiments, and real claims from reviews.",
     placement: "center",
     disableBeacon: true,
   },
@@ -75,11 +80,11 @@ export const exploreSteps: Step[] = [
 ];
 
 // ─── AMAZON SEARCH PAGE ───
-export const amazonSteps: Step[] = [
+export const amazonSteps: IStepWithRoute[] = [
   {
     target: "body",
     content:
-      "Search for any product on Amazon. When you find one, HYVE will pull its reviews and analyze them for you.",
+      "When you click on products ->Amazon link, you get to this product search page. Search for any product on Amazon here. When you find one, HYVE will pull its reviews and analyze them for you.",
     placement: "center",
     disableBeacon: true,
   },
@@ -91,13 +96,13 @@ export const amazonSteps: Step[] = [
 ];
 
 // ─── ABOUT PAGE ───
-export const aboutSteps: Step[] = [
+export const aboutSteps: IStepWithRoute[] = [
   {
     target: "body",
     content:
-      "This page explains how HYVE works under the hood — from reading reviews to building the decision map.",
+      "This page explains how HYVE works under the hood - from reading reviews to building the decision map.",
     placement: "center",
-    disableBeacon: true,
+    disableBeacon: true, 
   },
   {
     target: '[data-tour="about-how"]',
@@ -107,11 +112,11 @@ export const aboutSteps: Step[] = [
 ];
 
 // ─── FAQ PAGE ───
-export const faqSteps: Step[] = [
+export const faqSteps: IStepWithRoute[] = [
   {
     target: "body",
     content:
-      "Here you'll find quick answers to the most common questions about HYVE — how it works, where reviews come from, and more.",
+      "Here you'll find quick answers to the most common questions about HYVE, how it works, where reviews come from, and more.",
     placement: "center",
     disableBeacon: true,
   },
@@ -123,7 +128,7 @@ export const faqSteps: Step[] = [
 ];
 
 // ─── A/B RESULTS PAGE ───
-export const abResultsSteps: Step[] = [
+export const abResultsSteps: IStepWithRoute[] = [
   {
     target: "body",
     content:
@@ -139,7 +144,7 @@ export const abResultsSteps: Step[] = [
 ];
 
 // ─── THEME DETAILS PAGE ───
-export const themeDetailsSteps: Step[] = [
+export const themeDetailsSteps: IStepWithRoute[] = [
   {
     target: "body",
     content:
@@ -155,7 +160,7 @@ export const themeDetailsSteps: Step[] = [
  * When returning to "/" during a sequence completion, the controller
  * overrides this to use homeCompletionSteps instead.
  */
-export function getStepsForRoute(pathname: string): Step[] {
+export function getStepsForRoute(pathname: string): IStepWithRoute[] {
   if (pathname === "/") return homeSteps;
   if (pathname === "/products") return productsSteps;
   if (pathname === "/amazon") return amazonSteps;

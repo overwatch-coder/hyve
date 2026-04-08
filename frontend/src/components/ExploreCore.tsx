@@ -918,7 +918,7 @@ export function ExploreContentImpl({
             to="/products"
             className="hover:text-foreground transition-colors"
           >
-            Analysis
+            Analysed Products
           </Link>
           <ChevronRight className="h-3 w-3" />
           <span className="text-foreground/60 truncate max-w-50">
