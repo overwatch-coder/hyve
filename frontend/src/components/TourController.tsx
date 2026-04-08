@@ -258,14 +258,15 @@ export default function TourController() {
           steps={steps}
           run={run}
           continuous
-          showSkipButton
-          showProgress
           scrollToFirstStep
-          disableOverlayClose
           onEvent={handleJoyrideCallback}
-          floaterProps={{ disableAnimation: false }}
-          overlayColor="rgba(0, 0, 0, 0.55)"
-          zIndex={10000}
+          options={{
+            showProgress: true,
+            overlayColor: "rgba(0, 0, 0, 0.55)",
+            zIndex: 10000,
+            overlayClickAction: false,
+            buttons: ["skip", "back", "close", "primary"],
+          }}
           locale={{
             back: "Back",
             close: "Got it",
