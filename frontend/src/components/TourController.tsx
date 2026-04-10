@@ -113,16 +113,29 @@ export default function TourController() {
     startSequence,
   ]);
 
-  // Auto-start tour on new routes (or in sequence mode)
+  // Auto-start tour on new routes (or in sequence mode).
+  // The Explore page has an async data fetch, so give it a longer delay to
+  // ensure the Joyride instance (remounted via key={routeKey}) is fully settled
+  // before we set run=true and the first modal appears.
+  const isExplorePage = /^\/products\/\d+$/.test(location.pathname);
   useEffect(() => {
     if (steps.length > 0 && !isDismissed) {
       if (isSequenceActive || !isRouteCompleted(routeKey)) {
-        const t = setTimeout(() => setRun(true), 600);
+        const delay = isExplorePage ? 900 : 600;
+        const t = setTimeout(() => setRun(true), delay);
         return () => clearTimeout(t);
       }
     }
     setRun(false);
-  }, [routeKey, steps.length, isDismissed, isSequenceActive, isRouteCompleted, isCompletionStep]);
+  }, [
+    routeKey,
+    steps.length,
+    isDismissed,
+    isSequenceActive,
+    isRouteCompleted,
+    isCompletionStep,
+    isExplorePage,
+  ]);
 
   /**
    * Resolve the actual URL for the next sequence entry.
@@ -255,6 +268,7 @@ export default function TourController() {
     <>
       {steps.length > 0 && (
         <Joyride
+          key={routeKey}
           steps={steps}
           run={run}
           continuous

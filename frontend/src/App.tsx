@@ -16,6 +16,7 @@ import AmazonSearch from "@/pages/AmazonSearch";
 import AmazonProductPage from "@/pages/AmazonProductPage";
 import About from "@/pages/About";
 import FAQ from "@/pages/FAQ";
+import Team from "@/pages/Team";
 
 const queryClient = new QueryClient();
 
@@ -56,7 +57,10 @@ function App() {
               {/* Admin */}
               <Route path="admin/login" element={<AdminLogin />} />
               <Route path="admin" element={<AdminDashboard />} />
-              <Route path="admin/experiments/review" element={<AdminExperimentReview />} />
+              <Route
+                path="admin/experiments/review"
+                element={<AdminExperimentReview />}
+              />
 
               {/* Amazon Product Search & Native Reviews */}
               <Route path="amazon" element={<AmazonSearch />} />
@@ -65,6 +69,7 @@ function App() {
               {/* About & FAQ */}
               <Route path="about" element={<About />} />
               <Route path="faq" element={<FAQ />} />
+              <Route path="team" element={<Team />} />
             </Route>
           </Routes>
         </BrowserRouter>

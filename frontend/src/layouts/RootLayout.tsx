@@ -14,6 +14,7 @@ import {
   Info,
   HelpCircle,
   Lock,
+  Users,
 } from "lucide-react";
 import {
   Sheet,
@@ -80,10 +81,11 @@ export default function RootLayout() {
             <Link
               to="/products"
               data-tour="nav-analyzed"
-              className={`text-sm font-semibold transition-colors ${location.pathname === "/products"
+              className={`text-sm font-semibold transition-colors ${
+                location.pathname === "/products"
                   ? "text-primary"
                   : "text-muted-foreground hover:text-foreground"
-                }`}
+              }`}
             >
               Analyzed
             </Link>
@@ -104,21 +106,37 @@ export default function RootLayout() {
                 <ChevronDown className="h-3 w-3" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48">
-                <DropdownMenuItem asChild className="focus:bg-primary focus:text-white hover:bg-primary hover:text-white">
-                  <Link to="/amazon" className="flex items-center gap-2 cursor-pointer">
+                <DropdownMenuItem
+                  asChild
+                  className="focus:bg-primary focus:text-white hover:bg-primary hover:text-white"
+                >
+                  <Link
+                    to="/amazon"
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
                     <ShoppingBag className="h-4 w-4" />
                     Amazon
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled className="flex items-center gap-2 opacity-50 focus:bg-primary/10">
+                <DropdownMenuItem
+                  disabled
+                  className="flex items-center gap-2 opacity-50 focus:bg-primary/10"
+                >
                   <Lock className="h-4 w-4" />
                   <span>Jumia</span>
-                  <span className="ml-auto text-[10px] font-semibold text-muted-foreground">Coming soon</span>
+                  <span className="ml-auto text-[10px] font-semibold text-muted-foreground">
+                    Coming soon
+                  </span>
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled className="flex items-center gap-2 opacity-50 focus:bg-primary/10">
+                <DropdownMenuItem
+                  disabled
+                  className="flex items-center gap-2 opacity-50 focus:bg-primary/10"
+                >
                   <Lock className="h-4 w-4" />
                   <span>Alibaba</span>
-                  <span className="ml-auto text-[10px] font-semibold text-muted-foreground">Coming soon</span>
+                  <span className="ml-auto text-[10px] font-semibold text-muted-foreground">
+                    Coming soon
+                  </span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -129,7 +147,9 @@ export default function RootLayout() {
                 data-tour="nav-about"
                 className={cn(
                   "text-sm font-semibold transition-colors flex items-center gap-1 outline-none",
-                  location.pathname === "/about" || location.pathname === "/faq"
+                  location.pathname === "/about" ||
+                    location.pathname === "/faq" ||
+                    location.pathname === "/team"
                     ? "text-primary"
                     : "text-muted-foreground hover:text-foreground",
                 )}
@@ -138,17 +158,41 @@ export default function RootLayout() {
                 About
                 <ChevronDown className="h-3 w-3" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-40">
-                <DropdownMenuItem asChild className="focus:bg-primary focus:text-white hover:bg-primary hover:text-white">
-                  <Link to="/about" className="flex items-center gap-2 cursor-pointer">
+              <DropdownMenuContent align="start" className="w-44">
+                <DropdownMenuItem
+                  asChild
+                  className="focus:bg-primary focus:text-white hover:bg-primary hover:text-white"
+                >
+                  <Link
+                    to="/about"
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
                     <Info className="h-4 w-4" />
                     About HYVE
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild className="focus:bg-primary focus:text-white hover:bg-primary hover:text-white">
-                  <Link to="/faq" className="flex items-center gap-2 cursor-pointer">
+                <DropdownMenuItem
+                  asChild
+                  className="focus:bg-primary focus:text-white hover:bg-primary hover:text-white"
+                >
+                  <Link
+                    to="/faq"
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
                     <HelpCircle className="h-4 w-4" />
                     FAQ
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  asChild
+                  className="focus:bg-primary focus:text-white hover:bg-primary hover:text-white"
+                >
+                  <Link
+                    to="/team"
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <Users className="h-4 w-4" />
+                    Team
                   </Link>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -156,10 +200,11 @@ export default function RootLayout() {
 
             <Link
               to="/test-analytics"
-              className={`text-sm font-semibold transition-colors flex items-center gap-1.5 ${location.pathname === "/test-analytics"
+              className={`text-sm font-semibold transition-colors flex items-center gap-1.5 ${
+                location.pathname === "/test-analytics"
                   ? "text-primary"
                   : "text-muted-foreground hover:text-foreground"
-                }`}
+              }`}
             >
               <BarChart2 className="h-3.5 w-3.5" />
               A/B Results
@@ -169,7 +214,9 @@ export default function RootLayout() {
           <div className="flex items-center gap-2 md:gap-4">
             <div className="text-[10px] md:text-xs font-medium text-muted-foreground hidden sm:block">
               Systems Status:{" "}
-              <span className="text-emerald-500 font-bold ml-1">Operational</span>
+              <span className="text-emerald-500 font-bold ml-1">
+                Operational
+              </span>
             </div>
 
             {/* Mobile Navigation */}
@@ -212,7 +259,9 @@ export default function RootLayout() {
 
                     {/* Products section */}
                     <div className="px-4 pt-2">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-2">Products</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-2">
+                        Products
+                      </p>
                     </div>
                     <Link
                       to="/amazon"
@@ -230,17 +279,23 @@ export default function RootLayout() {
                     <div className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-muted-foreground/40 cursor-not-allowed">
                       <Lock className="h-4 w-4" />
                       Jumia
-                      <span className="ml-auto text-[9px] font-semibold bg-muted/50 px-2 py-0.5 rounded-full">Coming soon</span>
+                      <span className="ml-auto text-[9px] font-semibold bg-muted/50 px-2 py-0.5 rounded-full">
+                        Coming soon
+                      </span>
                     </div>
                     <div className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-muted-foreground/40 cursor-not-allowed">
                       <Lock className="h-4 w-4" />
                       Alibaba
-                      <span className="ml-auto text-[9px] font-semibold bg-muted/50 px-2 py-0.5 rounded-full">Coming soon</span>
+                      <span className="ml-auto text-[9px] font-semibold bg-muted/50 px-2 py-0.5 rounded-full">
+                        Coming soon
+                      </span>
                     </div>
 
                     {/* About section */}
                     <div className="px-4 pt-2">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-2">About</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-2">
+                        About
+                      </p>
                     </div>
                     <Link
                       to="/about"
@@ -267,6 +322,19 @@ export default function RootLayout() {
                     >
                       <HelpCircle className="h-4 w-4" />
                       FAQ
+                    </Link>
+                    <Link
+                      to="/team"
+                      onClick={() => setSheetOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
+                        location.pathname === "/team"
+                          ? "bg-primary text-white"
+                          : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
+                      )}
+                    >
+                      <Users className="h-4 w-4" />
+                      Team
                     </Link>
 
                     <Link
@@ -295,7 +363,8 @@ export default function RootLayout() {
                 </SheetContent>
               </Sheet>
             </div>
-          </div></div>
+          </div>
+        </div>
       </header>
 
       <main

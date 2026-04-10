@@ -52,14 +52,17 @@ def record_experiment_result(payload: schemas.ExperimentResultCreate, db: Sessio
     refs_to_check = []
 
     if platform == "traditional":
+        # Traditional and HYVE now share the same 4 tasks so results are
+        # directly comparable across platforms.
         fields_to_check = ["weakness_paraphrase", "claim_paraphrase",
                            "positive_paraphrase", "negative_paraphrase"]
-        refs_to_check = ["weakness_review_ref", "claim_review_ref",
-                         "positive_review_ref", "negative_review_ref"]
+        refs_to_check = ["weakness_ref", "claim_ref",
+                         "positive_ref", "negative_ref"]
     elif platform == "hyve":
-        fields_to_check = ["weakness_paraphrase",
-                           "claim_paraphrase", "strategy_paraphrase"]
-        refs_to_check = ["weakness_ref", "claim_ref", "strategy_ref"]
+        fields_to_check = ["weakness_paraphrase", "claim_paraphrase",
+                           "positive_paraphrase", "negative_paraphrase"]
+        refs_to_check = ["weakness_ref", "claim_ref",
+                         "positive_ref", "negative_ref"]
 
     if payload.evidence:
         for field, ref_key in zip(fields_to_check, refs_to_check):
