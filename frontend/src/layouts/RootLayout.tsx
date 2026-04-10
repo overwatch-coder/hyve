@@ -229,9 +229,9 @@ export default function RootLayout() {
                 </SheetTrigger>
                 <SheetContent
                   side="right"
-                  className="w-72 bg-background/95 backdrop-blur-xl border-l border-border/40"
+                  className="w-72 bg-background/95 backdrop-blur-xl border-l border-border/40 flex flex-col"
                 >
-                  <SheetHeader className="text-left mb-8">
+                  <SheetHeader className="text-left mb-6 shrink-0">
                     <SheetTitle className="flex items-center gap-2.5">
                       <div className="relative shrink-0">
                         <Hexagon className="h-6 w-6 text-primary fill-primary/10" />
@@ -242,12 +242,12 @@ export default function RootLayout() {
                       </span>
                     </SheetTitle>
                   </SheetHeader>
-                  <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-2 flex-1 overflow-y-auto min-h-0 pr-1">
                     <Link
                       to="/products"
                       onClick={() => setSheetOpen(false)}
                       className={cn(
-                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
+                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-bold text-sm",
                         location.pathname === "/products"
                           ? "bg-primary text-white"
                           : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
@@ -258,8 +258,8 @@ export default function RootLayout() {
                     </Link>
 
                     {/* Products section */}
-                    <div className="px-4 pt-2">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-2">
+                    <div className="px-4 pt-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-1">
                         Products
                       </p>
                     </div>
@@ -267,7 +267,7 @@ export default function RootLayout() {
                       to="/amazon"
                       onClick={() => setSheetOpen(false)}
                       className={cn(
-                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
+                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-bold text-sm",
                         location.pathname.startsWith("/amazon")
                           ? "bg-primary text-white"
                           : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
@@ -276,14 +276,14 @@ export default function RootLayout() {
                       <ShoppingBag className="h-4 w-4" />
                       Amazon
                     </Link>
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-muted-foreground/40 cursor-not-allowed">
+                    <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold text-muted-foreground/40 cursor-not-allowed">
                       <Lock className="h-4 w-4" />
                       Jumia
                       <span className="ml-auto text-[9px] font-semibold bg-muted/50 px-2 py-0.5 rounded-full">
                         Coming soon
                       </span>
                     </div>
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-muted-foreground/40 cursor-not-allowed">
+                    <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold text-muted-foreground/40 cursor-not-allowed">
                       <Lock className="h-4 w-4" />
                       Alibaba
                       <span className="ml-auto text-[9px] font-semibold bg-muted/50 px-2 py-0.5 rounded-full">
@@ -292,8 +292,8 @@ export default function RootLayout() {
                     </div>
 
                     {/* About section */}
-                    <div className="px-4 pt-2">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-2">
+                    <div className="px-4 pt-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-1">
                         About
                       </p>
                     </div>
@@ -301,7 +301,7 @@ export default function RootLayout() {
                       to="/about"
                       onClick={() => setSheetOpen(false)}
                       className={cn(
-                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
+                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-bold text-sm",
                         location.pathname === "/about"
                           ? "bg-primary text-white"
                           : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
@@ -314,7 +314,7 @@ export default function RootLayout() {
                       to="/faq"
                       onClick={() => setSheetOpen(false)}
                       className={cn(
-                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
+                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-bold text-sm",
                         location.pathname === "/faq"
                           ? "bg-primary text-white"
                           : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
@@ -327,7 +327,7 @@ export default function RootLayout() {
                       to="/team"
                       onClick={() => setSheetOpen(false)}
                       className={cn(
-                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
+                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-bold text-sm",
                         location.pathname === "/team"
                           ? "bg-primary text-white"
                           : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
@@ -341,7 +341,7 @@ export default function RootLayout() {
                       to="/test-analytics"
                       onClick={() => setSheetOpen(false)}
                       className={cn(
-                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm",
+                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-bold text-sm",
                         location.pathname === "/test-analytics"
                           ? "bg-primary text-white"
                           : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
@@ -352,7 +352,7 @@ export default function RootLayout() {
                     </Link>
                   </div>
 
-                  <div className="absolute bottom-8 left-6 right-6 p-4 rounded-2xl bg-primary/5 border border-primary/10 text-center">
+                  <div className="mt-4 shrink-0 p-4 rounded-2xl bg-primary/5 border border-primary/10 text-center">
                     <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">
                       Status
                     </p>
