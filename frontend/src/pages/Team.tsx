@@ -59,7 +59,7 @@ const TEAM: Member[] = [
     roleIcon: Brain,
     gradient: "from-primary via-violet-500 to-indigo-500",
     initials: "MM",
-    photo: "/team/makinde.jpg",
+    photo: "/avatars/makinde.jpg",
     social: [
       { label: "GitHub", href: "https://github.com/placeholder", icon: Github },
       {
@@ -89,7 +89,7 @@ const TEAM: Member[] = [
     roleIcon: Layers,
     gradient: "from-sky-500 via-blue-500 to-cyan-500",
     initials: "AO",
-    photo: "/team/adeola.jpg",
+    photo: "/avatars/adeola.jpg",
     social: [
       { label: "GitHub", href: "https://github.com/placeholder", icon: Github },
       {
@@ -115,7 +115,7 @@ const TEAM: Member[] = [
     roleIcon: BarChart2,
     gradient: "from-emerald-500 via-teal-500 to-green-500",
     initials: "JE",
-    photo: "/team/john.jpg",
+    photo: "/avatars/john.jpg",
     social: [
       { label: "GitHub", href: "https://github.com/placeholder", icon: Github },
       {
@@ -139,7 +139,7 @@ const TEAM: Member[] = [
     roleIcon: Code2,
     gradient: "from-amber-500 via-orange-500 to-red-500",
     initials: "AN",
-    photo: "/team/atsu.jpg",
+    photo: "/avatars/atsu.jpg",
     social: [
       { label: "GitHub", href: "https://github.com/placeholder", icon: Github },
       {
