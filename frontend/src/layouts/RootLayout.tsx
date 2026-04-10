@@ -397,7 +397,7 @@ export default function RootLayout() {
         </footer>
       )}
 
-      {!isProductPage && <TourController />}
+      <TourController />
       <Toaster />
     </div>
   );

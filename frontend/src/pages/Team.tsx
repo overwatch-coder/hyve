@@ -45,14 +45,14 @@ interface Member {
    ────────────────────────────────────────────────── */
 const TEAM: Member[] = [
   {
-    name: "Alex Mercer",
+    name: "Makinde Mark Olusanya",
     role: "AI & Backend Lead",
     tagline: "Turning raw reviews into structured intelligence",
-    bio: "Alex architects the AI pipeline at the heart of HYVE — from multi-step LLM prompting to theme extraction and sentiment scoring. With a background in NLP and distributed systems, they ensure the analysis is fast, accurate, and production-ready.",
+    bio: "Makinde architects the AI pipeline at the heart of HYVE — from multi-step LLM prompting to theme extraction and sentiment scoring. With a background in NLP and distributed systems, they ensure the analysis is fast, accurate, and production-ready.",
     skills: ["Python", "LLM Orchestration", "FastAPI", "PostgreSQL", "NLP"],
     roleIcon: Brain,
     gradient: "from-primary via-violet-500 to-indigo-500",
-    initials: "AM",
+    initials: "MM",
     social: [
       { label: "GitHub", href: "https://github.com/placeholder", icon: Github },
       {
@@ -68,10 +68,10 @@ const TEAM: Member[] = [
     ],
   },
   {
-    name: "Jordan Reyes",
+    name: "Adeola Okikiola",
     role: "Frontend & UX Lead",
     tagline: "Crafting the interface where data becomes clarity",
-    bio: "Jordan transforms complex analytical output into the interactive decision maps users love. Passionate about motion design and accessibility, they own everything from the React component library to the Joyride onboarding experience.",
+    bio: "Adeola transforms complex analytical output into the interactive decision maps users love. Passionate about motion design and accessibility, they own everything from the React component library to the Joyride onboarding experience.",
     skills: [
       "React",
       "TypeScript",
@@ -81,7 +81,7 @@ const TEAM: Member[] = [
     ],
     roleIcon: Layers,
     gradient: "from-sky-500 via-blue-500 to-cyan-500",
-    initials: "JR",
+    initials: "AO",
     social: [
       { label: "GitHub", href: "https://github.com/placeholder", icon: Github },
       {
@@ -93,10 +93,10 @@ const TEAM: Member[] = [
     ],
   },
   {
-    name: "Sam Okafor",
+    name: "John Edikan",
     role: "Data & Research Lead",
     tagline: "Evidence-first design, every decision validated",
-    bio: "Sam drives the data strategy behind HYVE — designing the A/B experiments, analysing participant results, and ensuring every feature is grounded in user research. Their work proves HYVE genuinely helps people decide faster and with more confidence.",
+    bio: "John drives the data strategy behind HYVE which is designing the A/B experiments, analysing participant results, and ensuring every feature is grounded in user research. Their work proves HYVE genuinely helps people decide faster and with more confidence.",
     skills: [
       "Data Analysis",
       "A/B Testing",
@@ -106,7 +106,7 @@ const TEAM: Member[] = [
     ],
     roleIcon: BarChart2,
     gradient: "from-emerald-500 via-teal-500 to-green-500",
-    initials: "SO",
+    initials: "JE",
     social: [
       { label: "GitHub", href: "https://github.com/placeholder", icon: Github },
       {
@@ -122,14 +122,14 @@ const TEAM: Member[] = [
     ],
   },
   {
-    name: "Priya Nair",
+    name: "Atsu Nyamadi",
     role: "Full-Stack & DevOps Lead",
     tagline: "Shipping HYVE reliably from dev to production",
-    bio: "Priya keeps the entire stack humming — from Docker and CI/CD pipelines to AWS deployment and database migrations. She bridges the frontend and backend teams, resolving integration issues and owning the infrastructure that makes HYVE available 24/7.",
+    bio: "Atsu keeps the entire stack humming — from Docker and CI/CD pipelines to AWS deployment and database migrations. They bridge the frontend and backend teams, resolving integration issues and owning the infrastructure that makes HYVE available 24/7.",
     skills: ["Docker", "AWS", "CI/CD", "Node.js", "PostgreSQL"],
     roleIcon: Code2,
     gradient: "from-amber-500 via-orange-500 to-red-500",
-    initials: "PN",
+    initials: "AN",
     social: [
       { label: "GitHub", href: "https://github.com/placeholder", icon: Github },
       {
