@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { TruncatedProductName } from "@/components/TruncatedProductName";
 
 import {
   ProductNode,
@@ -388,6 +389,7 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
         product.name?.length > 30
           ? product?.name?.slice(0, 30) + "..."
           : product?.name,
+      fullName: product?.name,
       score,
       reviewCount,
       category,
@@ -935,7 +937,8 @@ export function ExploreContentImpl({
             <div className="flex items-center gap-5">
               <div className="min-w-0">
                 <h1 className="text-xl md:text-3xl font-black text-foreground uppercase max-w-2xl">
-                  {productData?.name || "Product Analysis"}
+                  {/* {productData?.name || "Product Analysis"} */}
+                  <TruncatedProductName name={productData?.name || "Product Analysis"} truncateAt={60} />
                 </h1>
                 <div className="flex items-center gap-3 mt-1.5 overflow-x-auto no-scrollbar pb-1">
                   {productData?.overall_sentiment_score != null && (
@@ -969,7 +972,10 @@ export function ExploreContentImpl({
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0" data-tour="explore-view-toggle">
+            <div
+              className="flex flex-col sm:flex-row items-center gap-3 shrink-0"
+              data-tour="explore-view-toggle"
+            >
               <Tabs
                 value={viewMode}
                 onValueChange={(v) => setViewMode(v as any)}
@@ -1081,7 +1087,10 @@ export function ExploreContentImpl({
             )}
           </div>
 
-          <div className="h-150 rounded-2xl border border-border/40 bg-card/30 overflow-hidden shadow-sm" data-tour="explore-tree">
+          <div
+            className="h-150 rounded-2xl border border-border/40 bg-card/30 overflow-hidden shadow-sm"
+            data-tour="explore-tree"
+          >
             {viewMode === "traditional" ? (
               <TraditionalReviewsView productId={productId} />
             ) : viewMode === "accordion" ? (

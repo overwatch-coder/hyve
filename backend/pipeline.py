@@ -1033,7 +1033,7 @@ def run_url_ingestion_background(product_id: int, url: str):
     processes claims, and marks product as ready.
     """
     from database import SessionLocal
-    from main import batch_ingest_reviews, BatchIngestRequest, BatchReviewItem
+    from schemas import BatchReviewItem
     from urllib.parse import urlparse
     import time
 
@@ -1044,7 +1044,22 @@ def run_url_ingestion_background(product_id: int, url: str):
             return
 
         print(f"DEBUG: Background ingestion started for product {product_id} from {url}")
-        
+
+        # --- Amazon URL: redirect to Canopy API (reliable, no scraping needed) ---
+        import re as _re
+        _parsed = urlparse(url)
+        if "amazon." in _parsed.netloc:
+            asin_match = _re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', url)
+            if asin_match:
+                asin = asin_match.group(1)
+                print(f"DEBUG: Detected Amazon URL, redirecting to Canopy API for ASIN {asin}")
+                from routers.amazon import run_amazon_ingestion_background
+                db.close()
+                run_amazon_ingestion_background(product_id, asin)
+                return
+            else:
+                print("DEBUG: Amazon URL detected but could not extract ASIN — falling through to scraper")
+
         product.processing_step = "Scraping Target URL"
         db.commit()
         
@@ -1230,7 +1245,7 @@ def run_csv_ingestion_background(product_ids: list[int], csv_data_json: str, map
         db.close()
 
 
-def prune_html_and_extract_ai_reviews(html_content: str, max_chars: int = 15000) -> dict:
+def prune_html_and_extract_ai_reviews(html_content: str, max_chars: int = 30000) -> dict:
     import json
     import os
     from bs4 import BeautifulSoup
@@ -1247,10 +1262,35 @@ def prune_html_and_extract_ai_reviews(html_content: str, max_chars: int = 15000)
         
     raw_text = soup.get_text(separator='\n', strip=True)
     
-    # Prune giant texts to fit LLM window, prioritizing end of doc where reviews usually are
+    # Prune giant texts to fit LLM window.
+    # Strategy: first try to isolate review-specific containers before falling back to
+    # a start+end slice so the middle section (where reviews live) is not discarded.
     if len(raw_text) > max_chars:
-        # Keep first 2k chars (title/desc) and last (max_chars-2k) chars (reviews)
-        raw_text = raw_text[:2000] + "\n...[TRUNCATED]...\n" + raw_text[-(max_chars-2000):]
+        # Attempt to find review containers in the original HTML before stripping
+        review_containers = soup.find_all(
+            lambda tag: tag.name in ("section", "div", "ul", "ol")
+            and any(
+                kw in " ".join(tag.get("class", []) + [tag.get("id", "")]).lower()
+                for kw in ("review", "comment", "testimonial", "rating", "feedback")
+            )
+        )
+        if review_containers:
+            review_text = "\n".join(
+                c.get_text(separator="\n", strip=True) for c in review_containers
+            )
+            # Product title + review block
+            raw_text = raw_text[:1000] + "\n...\n" + review_text[:max_chars - 1000]
+        else:
+            # Fallback: keep first 2k (title/desc) + middle chunk + last 2k
+            chunk = (max_chars - 4000) // 2
+            mid = len(raw_text) // 2
+            raw_text = (
+                raw_text[:2000]
+                + "\n...[TRUNCATED]...\n"
+                + raw_text[mid - chunk : mid + chunk]
+                + "\n...[TRUNCATED]...\n"
+                + raw_text[-2000:]
+            )
         
     provider = os.getenv("LLM_PROVIDER", "openai")
     prompt = f"""
@@ -1310,56 +1350,149 @@ Return ONLY valid JSON in exactly this format without markdown wrappers.
 
 def scrape_reviews_from_url(url: str) -> dict:
     """
-    Crawls a product URL, waits for dynamic content to render, and extracts
-    consumer reviews and product name using AI.
+    Crawls a product URL and extracts consumer reviews using AI.
+    Primary engine: Crawl4AI (async, anti-bot evasion, pagination-aware).
+    Fallback: Playwright with domcontentloaded + scroll + multi-page loop.
     Returns: {"product_name": str, "reviews": list[str]}
     """
-    from playwright.sync_api import sync_playwright
+    import asyncio
     import time
-    
-    html_content = ""
-    print(f"DEBUG: Starting Playwright crawl for {url}")
-    
+
+    # ------------------------------------------------------------------ #
+    # PRIMARY: Crawl4AI                                                    #
+    # ------------------------------------------------------------------ #
+    try:
+        from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
+
+        async def _crawl4ai_scrape(target_url: str) -> str:
+            browser_cfg = BrowserConfig(
+                headless=True,
+                viewport_width=1280,
+                viewport_height=900,
+                java_script_enabled=True,
+            )
+            run_cfg = CrawlerRunConfig(
+                cache_mode=CacheMode.BYPASS,
+                wait_until="domcontentloaded",
+                page_timeout=25000,
+                scroll_delay=0.8,
+                simulate_user=True,
+                override_navigator=True,
+            )
+            all_html = ""
+            async with AsyncWebCrawler(config=browser_cfg) as crawler:
+                # First page
+                result = await crawler.arun(url=target_url, config=run_cfg)
+                if result.success:
+                    all_html += result.html or ""
+
+                # Paginate: follow rel=next links up to 4 more pages
+                next_url = result.metadata.get("next_page_url") if result.success else None
+                for _ in range(4):
+                    if not next_url:
+                        break
+                    result = await crawler.arun(url=next_url, config=run_cfg)
+                    if result.success:
+                        all_html += result.html or ""
+                        next_url = result.metadata.get("next_page_url")
+                    else:
+                        break
+            return all_html
+
+        print(f"DEBUG: Starting Crawl4AI crawl for {url}")
+        html_content = asyncio.run(_crawl4ai_scrape(url))
+
+        if html_content:
+            print(f"DEBUG: Crawl4AI retrieved {len(html_content)} bytes — passing to AI filter")
+            result = prune_html_and_extract_ai_reviews(html_content, max_chars=30000)
+            print(f"DEBUG: AI Scraper isolated {len(result['reviews'])} reviews for: {result['product_name']}")
+            return result
+        else:
+            print("DEBUG: Crawl4AI returned empty content — falling back to Playwright")
+
+    except ImportError:
+        print("DEBUG: crawl4ai not installed — falling back to Playwright")
+    except Exception as e:
+        print(f"DEBUG: Crawl4AI failed ({e}) — falling back to Playwright")
+
+    # ------------------------------------------------------------------ #
+    # FALLBACK: Playwright (fixed)                                         #
+    # ------------------------------------------------------------------ #
+    from playwright.sync_api import sync_playwright
+
+    html_pages: list[str] = []
+    print(f"DEBUG: Starting Playwright fallback crawl for {url}")
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        # Randomize user agent to avoid basic blocks
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            viewport={"width": 1280, "height": 900},
+            locale="en-US",
         )
         page = context.new_page()
-        
-        try:
-            # Go to URL and wait until the network is mostly idle
-            page.goto(url, wait_until="networkidle", timeout=30000)
-            
-            # Additional wait just in case of lazy-loaded reviews
-            # Scroll down to trigger lazy loading
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight/2)")
-            time.sleep(2)
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            time.sleep(2)
-            
-            # Click "load more" reviews if it exists (Optional heuristics)
-            # page.evaluate("document.querySelectorAll('button').forEach(b => { if(b.innerText.toLowerCase().includes('more reviews') || b.innerText.toLowerCase().includes('load more')) b.click() })")
-            # time.sleep(2)
-            
-            html_content = page.content()
-        except Exception as e:
-            print(f"DEBUG: Playwright error: {e}")
-            try:
-                html_content = page.content()
-            except:
-                pass
-        finally:
-            browser.close()
-            
-    if not html_content:
-        raise ValueError("Failed to retrieve page content.")
 
-    print(f"DEBUG: Passing {len(html_content)} bytes of HTML to AI filter...")
-    result = prune_html_and_extract_ai_reviews(html_content)
-    
-    print(f"DEBUG: AI Scraper isolated {len(result['reviews'])} genuine reviews for: {result['product_name']}")
+        current_url: str | None = url
+        for page_num in range(5):  # up to 5 pages
+            if not current_url:
+                break
+            try:
+                # domcontentloaded never hangs; networkidle can block forever on SPAs
+                page.goto(current_url, wait_until="domcontentloaded", timeout=20000)
+
+                # Scroll to trigger lazy-loaded review sections
+                for scroll_pct in (0.25, 0.5, 0.75, 1.0):
+                    page.evaluate(f"window.scrollTo(0, document.body.scrollHeight * {scroll_pct})")
+                    time.sleep(0.7)
+
+                # Click "Load more" / "Show more reviews" buttons if present
+                try:
+                    page.evaluate(
+                        """document.querySelectorAll('button,a').forEach(el => {
+                            const t = el.innerText.toLowerCase();
+                            if (t.includes('load more') || t.includes('more review') || t.includes('show more'))
+                                el.click();
+                        });"""
+                    )
+                    time.sleep(1.2)
+                except Exception:
+                    pass
+
+                html_pages.append(page.content())
+
+                # Try to navigate to the next page via rel=next or pagination link
+                next_href = page.evaluate(
+                    """(() => {
+                        const rel = document.querySelector('link[rel=next]');
+                        if (rel) return rel.href;
+                        const btns = [...document.querySelectorAll('a')];
+                        const nxt = btns.find(a => /next|›|»/.test(a.innerText));
+                        return nxt ? nxt.href : null;
+                    })()"""
+                )
+                current_url = next_href if next_href else None
+
+            except Exception as e:
+                print(f"DEBUG: Playwright page {page_num + 1} error: {e}")
+                try:
+                    html_pages.append(page.content())
+                except Exception:
+                    pass
+                break
+
+        browser.close()
+
+    combined_html = "\n".join(html_pages)
+    if not combined_html.strip():
+        raise ValueError("Failed to retrieve page content (both Crawl4AI and Playwright failed).")
+
+    print(f"DEBUG: Playwright retrieved {len(combined_html)} bytes — passing to AI filter")
+    result = prune_html_and_extract_ai_reviews(combined_html, max_chars=30000)
+    print(f"DEBUG: AI Scraper isolated {len(result['reviews'])} reviews for: {result['product_name']}")
     return result
 
 def extract_products_and_reviews_ai(raw_text: str) -> list:

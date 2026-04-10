@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { TruncatedProductName } from "@/components/TruncatedProductName";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { getSentimentVerdict, getSentimentColor } from "@/lib/sentiment";
@@ -42,7 +43,9 @@ export default function Dashboard() {
       p.category?.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  const totalTablePages = Math.ceil((filteredProducts?.length ?? 0) / PAGE_SIZE);
+  const totalTablePages = Math.ceil(
+    (filteredProducts?.length ?? 0) / PAGE_SIZE,
+  );
   const pagedProducts = filteredProducts?.slice(
     (tablePage - 1) * PAGE_SIZE,
     tablePage * PAGE_SIZE,
@@ -129,7 +132,10 @@ export default function Dashboard() {
               placeholder="Search projects..."
               className="pl-10 bg-card text-xs h-10 border-border/40 focus:border-primary/40 focus:ring-primary/10 rounded-xl transition-all shadow-sm"
               value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setTablePage(1); }}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setTablePage(1);
+              }}
             />
           </div>
           <Link to="/new">
@@ -198,7 +204,7 @@ export default function Dashboard() {
                           />
                         </div>
                         <p className="text-sm font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
-                          {p.name}
+                          <TruncatedProductName name={p.name} truncateAt={60} />
                         </p>
                       </div>
                     </td>
@@ -336,7 +342,9 @@ export default function Dashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setTablePage((p) => Math.min(totalTablePages, p + 1))}
+                onClick={() =>
+                  setTablePage((p) => Math.min(totalTablePages, p + 1))
+                }
                 disabled={tablePage >= totalTablePages}
               >
                 Next <ChevronRight className="h-4 w-4 ml-1" />

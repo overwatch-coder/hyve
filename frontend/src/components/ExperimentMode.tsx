@@ -575,8 +575,8 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                                     ?.flatMap((t: any) =>
                                       (t.claims || []).filter((c: any) =>
                                         task.id === "positive"
-                                          ? c.sentiment === "positive"
-                                          : c.sentiment === "negative",
+                                          ? c.sentiment_polarity === "positive"
+                                          : c.sentiment_polarity === "negative",
                                       ),
                                     )
                                     .map((c: any) => (

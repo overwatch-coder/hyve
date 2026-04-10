@@ -38,6 +38,12 @@ interface Member {
   gradient: string;
   /** Initials shown inside avatar placeholder */
   initials: string;
+  /**
+   * Path to headshot photo (relative to /public).
+   * Drop a real image at this path to replace the gradient placeholder.
+   * Falls back to the gradient+initials avatar if the image fails to load.
+   */
+  photo: string;
 }
 
 /* ──────────────────────────────────────────────────
@@ -53,6 +59,7 @@ const TEAM: Member[] = [
     roleIcon: Brain,
     gradient: "from-primary via-violet-500 to-indigo-500",
     initials: "MM",
+    photo: "/team/makinde.jpg",
     social: [
       { label: "GitHub", href: "https://github.com/placeholder", icon: Github },
       {
@@ -82,6 +89,7 @@ const TEAM: Member[] = [
     roleIcon: Layers,
     gradient: "from-sky-500 via-blue-500 to-cyan-500",
     initials: "AO",
+    photo: "/team/adeola.jpg",
     social: [
       { label: "GitHub", href: "https://github.com/placeholder", icon: Github },
       {
@@ -107,6 +115,7 @@ const TEAM: Member[] = [
     roleIcon: BarChart2,
     gradient: "from-emerald-500 via-teal-500 to-green-500",
     initials: "JE",
+    photo: "/team/john.jpg",
     social: [
       { label: "GitHub", href: "https://github.com/placeholder", icon: Github },
       {
@@ -130,6 +139,7 @@ const TEAM: Member[] = [
     roleIcon: Code2,
     gradient: "from-amber-500 via-orange-500 to-red-500",
     initials: "AN",
+    photo: "/team/atsu.jpg",
     social: [
       { label: "GitHub", href: "https://github.com/placeholder", icon: Github },
       {
@@ -143,26 +153,43 @@ const TEAM: Member[] = [
 ];
 
 /* ──────────────────────────────────────────────────
-   Avatar Placeholder Component
+   Member Avatar — photo with initials fallback
    ────────────────────────────────────────────────── */
-function AvatarPlaceholder({
-  initials,
-  gradient,
+function MemberAvatar({
+  member,
   size = "lg",
 }: {
-  initials: string;
-  gradient: string;
+  member: Pick<Member, "name" | "initials" | "gradient" | "photo">;
   size?: "sm" | "lg";
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const sizeClasses =
+    size === "lg" ? "h-28 w-28 text-3xl" : "h-10 w-10 text-sm";
+
+  if (!imgFailed) {
+    return (
+      <img
+        src={member.photo}
+        alt={member.name}
+        onError={() => setImgFailed(true)}
+        className={cn(
+          "rounded-full object-cover object-top shrink-0 select-none",
+          sizeClasses,
+        )}
+      />
+    );
+  }
+
+  // Fallback: gradient initials pill
   return (
     <div
       className={cn(
         "rounded-full flex items-center justify-center font-black text-white select-none shrink-0",
-        `bg-gradient-to-br ${gradient}`,
-        size === "lg" ? "h-28 w-28 text-3xl" : "h-10 w-10 text-sm",
+        `bg-gradient-to-br ${member.gradient}`,
+        sizeClasses,
       )}
     >
-      {initials}
+      {member.initials}
     </div>
   );
 }
@@ -208,11 +235,7 @@ function MemberCard({ member }: { member: Member }) {
               hovered ? "ring-4 ring-primary/20" : "",
             )}
           >
-            <AvatarPlaceholder
-              initials={member.initials}
-              gradient={member.gradient}
-              size="sm"
-            />
+            <MemberAvatar member={member} size="sm" />
           </div>
 
           <div className="flex flex-col gap-0.5 min-w-0">
@@ -289,11 +312,7 @@ function HeroAvatarStack() {
             )}
             style={{ zIndex: TEAM.length - i }}
           >
-            <AvatarPlaceholder
-              initials={m.initials}
-              gradient={m.gradient}
-              size="lg"
-            />
+            <MemberAvatar member={m} size="lg" />
           </div>
         ))}
       </div>

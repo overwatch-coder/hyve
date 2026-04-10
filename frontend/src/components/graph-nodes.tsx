@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import { TruncatedProductName } from "@/components/TruncatedProductName";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -87,7 +88,11 @@ function ProductNodeRaw({
         </span>
       )}
       <span className="text-base font-black tracking-tight leading-tight text-center">
-        {data.label}
+        <TruncatedProductName
+          name={(data.fullName as string | undefined) || (data.label as string)}
+          truncateAt={30}
+          popoverClassName="text-foreground bg-popover"
+        />
       </span>
 
       <div className="flex items-center gap-2 mt-1">

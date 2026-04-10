@@ -5,6 +5,7 @@ import { useAdmin } from "@/hooks/useAdmin";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { getSentimentVerdict, getSentimentColor } from "@/lib/sentiment";
+import { TruncatedProductName } from "@/components/TruncatedProductName";
 import {
   Trash2,
   Eye,
@@ -230,7 +231,9 @@ export default function AdminDashboard() {
                       className="border-b border-border/20 hover:bg-muted/10 transition-colors"
                     >
                       <td className="px-6 py-4">
-                        <span className="font-bold text-sm">{p.name}</span>
+                        <span className="font-bold text-sm">
+                          <TruncatedProductName name={p.name} truncateAt={60} />
+                        </span>
                       </td>
                       <td className="px-6 py-4">
                         <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[9px] font-black uppercase tracking-wider">

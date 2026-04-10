@@ -15,7 +15,8 @@ from pydantic import BaseModel, Field
 # Docs: https://huggingface.co/cardiffnlp/twitter-roberta-base-sentiment-latest
 # ---------------------------------------------------------------------------
 _HF_SENTIMENT_MODEL = "cardiffnlp/twitter-roberta-base-sentiment-latest"
-_HF_API_URL = f"https://api-inference.huggingface.co/models/{_HF_SENTIMENT_MODEL}"
+# Updated to new HuggingFace Inference Providers router (old api-inference.huggingface.co returns 410)
+_HF_API_URL = f"https://router.huggingface.co/hf-inference/models/{_HF_SENTIMENT_MODEL}"
 _HF_CONFIDENCE_THRESHOLD = 0.65  # Treat result as authoritative above this score
 
 
@@ -53,23 +54,35 @@ def analyze_sentiment_hf(text: str) -> tuple[str, float]:
 
     for attempt in range(3):
         try:
-            resp = _requests.post(_HF_API_URL, headers=headers, json=payload, timeout=15.0)
+            resp = _requests.post(
+                _HF_API_URL, headers=headers, json=payload, timeout=15.0)
             if resp.status_code == 503:
                 # Model is warming up — wait and retry (exponential backoff)
                 time.sleep(2 ** attempt)
                 continue
+            if resp.status_code == 429:
+                # Rate limited — back off and retry
+                time.sleep(2 ** attempt)
+                continue
+            if 400 <= resp.status_code < 500:
+                # Permanent client error (410 Gone, 401 Unauthorized, etc.) — don't retry
+                print(
+                    f"DEBUG: HF sentiment API permanent error {resp.status_code} — skipping (check HF_TOKEN and model availability)")
+                return "neutral", 0.0
             resp.raise_for_status()
             result = resp.json()
 
             # Response shape: [[{label, score}, ...]]
             if isinstance(result, list) and result:
-                candidates = result[0] if isinstance(result[0], list) else result
+                candidates = result[0] if isinstance(
+                    result[0], list) else result
                 best = max(candidates, key=lambda x: x.get("score", 0.0))
                 polarity = _hf_label_to_polarity(best.get("label", ""))
                 return polarity, float(best.get("score", 0.0))
 
         except Exception as exc:
-            print(f"DEBUG: HF sentiment API error (attempt {attempt + 1}): {exc}")
+            print(
+                f"DEBUG: HF sentiment API error (attempt {attempt + 1}): {exc}")
 
     return "neutral", 0.0
 
@@ -124,7 +137,6 @@ class ExtractionResult(BaseModel):
         description="A list of distinct claims extracted from the review. Each object should have 'claim_text', 'evidence_text', 'context_text', 'sentiment_polarity' (positive/negative/neutral), and 'severity' (0.0 to 1.0).")
 
 
-
 def _clean_json_text(text: str) -> str:
     t = text.strip()
     if t.startswith("```"):
@@ -132,6 +144,7 @@ def _clean_json_text(text: str) -> str:
     if t.endswith("```"):
         t = t.rsplit("\n", 1)[0]
     return t.strip()
+
 
 def extract_claims_from_llm(review_text: str, provider: str = "openai", star_rating: float | None = None) -> dict:
     """
@@ -186,7 +199,8 @@ def extract_claims_from_llm(review_text: str, provider: str = "openai", star_rat
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
         model = genai.GenerativeModel('gemini-1.5-pro')
         sys_msg = "You are a senior data analyst extracting precise structured arguments from consumer reviews. Output JSON."
-        response = model.generate_content(f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.")
+        response = model.generate_content(
+            f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.")
         return json.loads(_clean_json_text(response.text))
 
     else:
@@ -247,7 +261,8 @@ async def extract_claims_from_llm_async(review_text: str, provider: str = "opena
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
-            lambda: model.generate_content(f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.")
+            lambda: model.generate_content(
+                f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.")
         )
         return json.loads(_clean_json_text(response.text))
 
@@ -272,7 +287,8 @@ def _embedding_cache_key(model_name: str, normalized_text: str) -> str:
 
 def _redis_get_client():
     # Prefer explicit embedding-cache URL, fall back to REDIS_URL (used by Celery).
-    redis_url = os.getenv("EMBEDDING_CACHE_REDIS_URL") or os.getenv("REDIS_URL")
+    redis_url = os.getenv(
+        "EMBEDDING_CACHE_REDIS_URL") or os.getenv("REDIS_URL")
     if not redis_url:
         return None
     try:
@@ -400,7 +416,8 @@ def cluster_claims(claims_texts: list[str]) -> list[int]:
                     contents=missing_texts[i:i + batch_size],
                     config=_gtypes.EmbedContentConfig(task_type="CLUSTERING"),
                 )
-                all_vecs.append(np.array([e.values for e in result.embeddings], dtype=np.float32))
+                all_vecs.append(
+                    np.array([e.values for e in result.embeddings], dtype=np.float32))
         else:
             import openai
             _oclient = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -409,7 +426,8 @@ def cluster_claims(claims_texts: list[str]) -> list[int]:
                     model=model_name,
                     input=missing_texts[i:i + batch_size],
                 )
-                all_vecs.append(np.array([e.embedding for e in response.data], dtype=np.float32))
+                all_vecs.append(
+                    np.array([e.embedding for e in response.data], dtype=np.float32))
         new_vecs = np.vstack(all_vecs) if len(all_vecs) > 1 else all_vecs[0]
         for local_idx, original_i in enumerate(missing):
             vec = new_vecs[local_idx]
@@ -419,12 +437,14 @@ def cluster_claims(claims_texts: list[str]) -> list[int]:
             try:
                 pipe = redis_client.pipeline()
                 for local_idx, original_i in enumerate(missing):
-                    pipe.set(keys[original_i], _encode_vector_bytes(cached_vectors[original_i]))
+                    pipe.set(keys[original_i], _encode_vector_bytes(
+                        cached_vectors[original_i]))
                 pipe.execute()
             except Exception:
                 pass
 
-    unique_embeddings = np.vstack([np.asarray(v, dtype=np.float32) for v in cached_vectors])
+    unique_embeddings = np.vstack(
+        [np.asarray(v, dtype=np.float32) for v in cached_vectors])
 
     if os.getenv("HYVE_TIMING", "1") == "1":
         print(
@@ -536,9 +556,11 @@ Return ONLY valid JSON with this structure:
             import google.generativeai as genai
 
             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel(os.getenv("LLM_CLUSTER_MODEL", "gemini-1.5-flash"))
+            model = genai.GenerativeModel(
+                os.getenv("LLM_CLUSTER_MODEL", "gemini-1.5-flash"))
             sys_msg = "You are a careful clustering assistant. Output JSON only."
-            resp = model.generate_content(f"System: {sys_msg}\n\nUser: {define_prompt}\n\nOutput raw JSON.")
+            resp = model.generate_content(
+                f"System: {sys_msg}\n\nUser: {define_prompt}\n\nOutput raw JSON.")
             themes_obj = _json.loads(_clean_json_text(resp.text))
         else:
             raise ValueError(f"Unsupported provider: {provider}")
@@ -575,7 +597,8 @@ Return ONLY valid JSON with this structure:
         for start in range(0, len(claims_texts), chunk_size):
             chunk = []
             for i in range(start, min(start + chunk_size, len(claims_texts))):
-                chunk.append({"i": i, "text": _normalize_claim_text(claims_texts[i])})
+                chunk.append(
+                    {"i": i, "text": _normalize_claim_text(claims_texts[i])})
 
             assign_prompt = f"""Assign each claim to the single best theme id.
 
@@ -607,9 +630,11 @@ Return ONLY JSON:
                 import google.generativeai as genai
 
                 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-                model = genai.GenerativeModel(os.getenv("LLM_CLUSTER_MODEL", "gemini-1.5-flash"))
+                model = genai.GenerativeModel(
+                    os.getenv("LLM_CLUSTER_MODEL", "gemini-1.5-flash"))
                 sys_msg = "You classify items into provided categories. Output JSON only."
-                resp = model.generate_content(f"System: {sys_msg}\n\nUser: {assign_prompt}\n\nOutput raw JSON.")
+                resp = model.generate_content(
+                    f"System: {sys_msg}\n\nUser: {assign_prompt}\n\nOutput raw JSON.")
                 assign_obj = _json.loads(_clean_json_text(resp.text))
 
             assignments = assign_obj.get("assignments", [])
