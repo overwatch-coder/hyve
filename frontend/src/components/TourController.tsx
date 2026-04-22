@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { ACTIONS, EVENTS, Joyride, STATUS } from "react-joyride";
-import type { EventData } from "react-joyride";
+import type { EventData, TooltipRenderProps } from "react-joyride";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { HelpCircle, RotateCcw, MapPin } from "lucide-react";
+import { HelpCircle, MapPin, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTourState } from "@/hooks/useTourState";
 import {
@@ -20,16 +20,164 @@ function isDarkMode() {
   return document.documentElement.classList.contains("dark");
 }
 
+interface TourTooltipExtraProps {
+  dark: boolean;
+  isSequenceMode: boolean;
+  onStartFullTour: () => void;
+}
+
+function TourTooltip({
+  backProps,
+  closeProps,
+  index,
+  isLastStep,
+  primaryProps,
+  size,
+  skipProps,
+  step,
+  tooltipProps,
+  dark,
+  isSequenceMode,
+  onStartFullTour,
+}: TooltipRenderProps & TourTooltipExtraProps) {
+  const backgroundColor = dark ? "#1a1d2e" : "#ffffff";
+  const foregroundColor = dark ? "#e2e8f0" : "#1e293b";
+  const secondaryColor = dark ? "#94a3b8" : "#64748b";
+
+  const buttonStyle = {
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 600,
+    padding: "8px 14px",
+    border: "1px solid transparent",
+    cursor: "pointer",
+  } as const;
+
+  return (
+    <div
+      {...tooltipProps}
+      style={{
+        width: 340,
+        maxWidth: "calc(100vw - 32px)",
+        borderRadius: 12,
+        padding: 20,
+        boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+        backgroundColor,
+        color: foregroundColor,
+      }}
+    >
+      <div
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+      >
+        <div style={{ fontSize: 12, fontWeight: 700, color: secondaryColor }}>
+          Step {index + 1} of {size}
+        </div>
+        <button
+          {...closeProps}
+          style={{
+            background: "transparent",
+            border: 0,
+            color: secondaryColor,
+            cursor: "pointer",
+            padding: 0,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {step.title ? (
+        <div style={{ marginTop: 12, fontSize: 15, fontWeight: 700 }}>
+          {step.title}
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: 12, lineHeight: 1.6, fontSize: 14 }}>
+        {step.content}
+      </div>
+
+      <div
+        style={{
+          marginTop: 20,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        {index > 0 ? (
+          <button
+            {...backProps}
+            style={{
+              ...buttonStyle,
+              background: "transparent",
+              color: secondaryColor,
+              borderColor: dark ? "#334155" : "#cbd5e1",
+            }}
+          >
+            Back
+          </button>
+        ) : (
+          <span />
+        )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
+          {isSequenceMode ? (
+            <button
+              {...skipProps}
+              style={{
+                ...buttonStyle,
+                background: "transparent",
+                color: secondaryColor,
+                borderColor: dark ? "#334155" : "#cbd5e1",
+              }}
+            >
+              Skip tour
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onStartFullTour}
+              style={{
+                ...buttonStyle,
+                background: "transparent",
+                color: secondaryColor,
+                borderColor: dark ? "#334155" : "#cbd5e1",
+              }}
+            >
+              Full site tour
+            </button>
+          )}
+
+          <button
+            {...primaryProps}
+            style={{
+              ...buttonStyle,
+              backgroundColor: PRIMARY,
+              color: "#ffffff",
+            }}
+          >
+            {isLastStep ? primaryProps.title : "Next"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TourController() {
   const location = useLocation();
   const navigate = useNavigate();
   const {
-    isDismissed,
     isSequenceActive,
     sequenceIndex,
     isRouteCompleted,
     markRouteCompleted,
-    dismissTour,
+    completeAllTours,
     restartTour,
     startSequence,
     endSequence,
@@ -95,7 +243,6 @@ export default function TourController() {
   useEffect(() => {
     if (
       location.pathname === "/" &&
-      !isDismissed &&
       !isSequenceActive &&
       !isRouteCompleted(routeKey)
     ) {
@@ -106,7 +253,6 @@ export default function TourController() {
   }, [
     location.pathname,
     routeKey,
-    isDismissed,
     isSequenceActive,
     isRouteCompleted,
     setSequenceIndex,
@@ -119,18 +265,15 @@ export default function TourController() {
   // before we set run=true and the first modal appears.
   const isExplorePage = /^\/products\/\d+$/.test(location.pathname);
   useEffect(() => {
-    if (steps.length > 0 && !isDismissed) {
-      if (isSequenceActive || !isRouteCompleted(routeKey)) {
-        const delay = isExplorePage ? 900 : 600;
-        const t = setTimeout(() => setRun(true), delay);
-        return () => clearTimeout(t);
-      }
+    if (steps.length > 0 && (isSequenceActive || !isRouteCompleted(routeKey))) {
+      const delay = isExplorePage ? 900 : 600;
+      const t = setTimeout(() => setRun(true), delay);
+      return () => clearTimeout(t);
     }
     setRun(false);
   }, [
     routeKey,
     steps.length,
-    isDismissed,
     isSequenceActive,
     isRouteCompleted,
     isCompletionStep,
@@ -159,15 +302,20 @@ export default function TourController() {
         action === ACTIONS.NEXT &&
         index === steps.length - 1;
       const skipped = status === STATUS.SKIPPED;
+      const closed = action === ACTIONS.CLOSE;
+      const finished = status === STATUS.FINISHED;
 
-      if (!completedCurrentPageStep && !skipped) return;
+      if (!completedCurrentPageStep && !skipped && !closed && !finished) return;
 
       setRun(false);
 
-      if (skipped) {
+      if (skipped || closed) {
         committedIndexRef.current = 0;
-        dismissTour();
-        endSequence();
+        if (isSequenceActive) {
+          completeAllTours();
+        } else {
+          markRouteCompleted(routeKey);
+        }
         return;
       }
 
@@ -219,7 +367,7 @@ export default function TourController() {
     },
     [
       routeKey,
-      dismissTour,
+      completeAllTours,
       markRouteCompleted,
       isSequenceActive,
       endSequence,
@@ -234,7 +382,8 @@ export default function TourController() {
     setRun(true);
   };
 
-  const handleStartFullTour = () => {
+  const handleStartFullTour = useCallback(() => {
+    setRun(false);
     setShowHelp(false);
     committedIndexRef.current = 0;
     restartTour();
@@ -244,16 +393,12 @@ export default function TourController() {
     } else {
       setTimeout(() => setRun(true), 200);
     }
-  };
+  }, [location.pathname, navigate, restartTour, startSequence]);
 
   const handleResetHistory = () => {
     restartTour();
     setShowHelp(false);
   };
-
-  const tooltipBg = dark ? "#1a1d2e" : "#ffffff";
-  const tooltipText = dark ? "#e2e8f0" : "#1e293b";
-  const mutedText = dark ? "#94a3b8" : "#64748b";
 
   // Determine the "last" button label based on context
   const isLastInSequence =
@@ -274,12 +419,19 @@ export default function TourController() {
           continuous
           scrollToFirstStep
           onEvent={handleJoyrideCallback}
+          tooltipComponent={(props) => (
+            <TourTooltip
+              {...props}
+              dark={dark}
+              isSequenceMode={isSequenceActive}
+              onStartFullTour={handleStartFullTour}
+            />
+          )}
           options={{
             showProgress: true,
             overlayColor: "rgba(0, 0, 0, 0.55)",
             zIndex: 10000,
             overlayClickAction: false,
-            buttons: ["skip", "back", "close", "primary"],
           }}
           locale={{
             back: "Back",
@@ -289,47 +441,6 @@ export default function TourController() {
             skip: "Skip tour",
           }}
           styles={{
-            tooltip: {
-              borderRadius: 12,
-              fontSize: 14,
-              padding: "16px 20px",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
-              backgroundColor: tooltipBg,
-              color: tooltipText,
-            },
-            tooltipTitle: {
-              fontSize: 15,
-              fontWeight: 700,
-              color: tooltipText,
-            },
-            tooltipContent: {
-              padding: "8px 0",
-              color: tooltipText,
-              lineHeight: 1.6,
-            },
-            tooltipFooter: {
-              marginTop: 8,
-            },
-            buttonPrimary: {
-              backgroundColor: PRIMARY,
-              color: "#ffffff",
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 600,
-              padding: "8px 18px",
-            },
-            buttonBack: {
-              color: mutedText,
-              fontSize: 13,
-              marginRight: 8,
-            },
-            buttonSkip: {
-              color: mutedText,
-              fontSize: 12,
-            },
-            buttonClose: {
-              color: mutedText,
-            },
             beaconInner: {
               backgroundColor: PRIMARY,
             },

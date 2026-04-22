@@ -155,6 +155,22 @@ export const themeDetailsSteps: IStepWithRoute[] = [
 ];
 
 /**
+ * Normalized route keys used for persisted completion state.
+ * Dynamic routes are stored with parameter placeholders so revisiting a page
+ * pattern does not auto-start the tour again until the history is reset.
+ */
+export const TOUR_ROUTE_KEYS = [
+  "/",
+  "/products",
+  "/products/:id",
+  "/products/:id/theme/:id",
+  "/amazon",
+  "/about",
+  "/faq",
+  "/test-analytics",
+] as const;
+
+/**
  * Map route patterns to their step sets.
  * The tour controller matches the current pathname against these patterns.
  * When returning to "/" during a sequence completion, the controller

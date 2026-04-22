@@ -1,26 +1,56 @@
 import { useState, useCallback, useEffect } from "react";
+import { TOUR_ROUTE_KEYS } from "@/config/tourSteps";
 
 const TOUR_KEY = "hyve_tour_state";
 
 interface TourState {
   /** Routes the user has already completed the tour on */
   completedRoutes: string[];
-  /** Whether the user dismissed the entire tour */
-  dismissed: boolean;
   /** Whether the full-site sequence tour is in progress */
   sequenceActive: boolean;
   /** Current index within the TOUR_SEQUENCE array */
   sequenceIndex: number;
 }
 
+interface StoredTourState extends Partial<TourState> {
+  dismissed?: boolean;
+}
+
+const DEFAULT_STATE: TourState = {
+  completedRoutes: [],
+  sequenceActive: false,
+  sequenceIndex: 0,
+};
+
 function loadState(): TourState {
   try {
     const raw = localStorage.getItem(TOUR_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw) as StoredTourState;
+      const completedRoutes = Array.isArray(parsed.completedRoutes)
+        ? parsed.completedRoutes.filter(
+            (route): route is string => typeof route === "string",
+          )
+        : [];
+
+      if (parsed.dismissed) {
+        return {
+          ...DEFAULT_STATE,
+          completedRoutes: [...TOUR_ROUTE_KEYS],
+        };
+      }
+
+      return {
+        completedRoutes,
+        sequenceActive: parsed.sequenceActive === true,
+        sequenceIndex:
+          typeof parsed.sequenceIndex === "number" ? parsed.sequenceIndex : 0,
+      };
+    }
   } catch {
     // corrupted — reset
   }
-  return { completedRoutes: [], dismissed: false, sequenceActive: false, sequenceIndex: 0 };
+  return DEFAULT_STATE;
 }
 
 function saveState(state: TourState) {
@@ -49,24 +79,28 @@ export function useTourState() {
     }));
   }, []);
 
-  const dismissTour = useCallback(() => {
-    setState((prev) => ({ ...prev, dismissed: true, sequenceActive: false, sequenceIndex: 0 }));
+  const completeAllTours = useCallback(() => {
+    setState({
+      ...DEFAULT_STATE,
+      completedRoutes: [...TOUR_ROUTE_KEYS],
+    });
   }, []);
 
   const restartTour = useCallback(() => {
-    setState({ completedRoutes: [], dismissed: false, sequenceActive: false, sequenceIndex: 0 });
+    setState(DEFAULT_STATE);
   }, []);
 
   const startSequence = useCallback(() => {
-    setState((prev) => ({ ...prev, sequenceActive: true, sequenceIndex: 0, dismissed: false, completedRoutes: [] }));
+    setState((prev) => ({
+      ...prev,
+      sequenceActive: true,
+      sequenceIndex: 0,
+      completedRoutes: [],
+    }));
   }, []);
 
   const endSequence = useCallback(() => {
     setState((prev) => ({ ...prev, sequenceActive: false, sequenceIndex: 0 }));
-  }, []);
-
-  const advanceSequence = useCallback(() => {
-    setState((prev) => ({ ...prev, sequenceIndex: prev.sequenceIndex + 1 }));
   }, []);
 
   const setSequenceIndex = useCallback((n: number) => {
@@ -74,16 +108,14 @@ export function useTourState() {
   }, []);
 
   return {
-    isDismissed: state.dismissed,
     isSequenceActive: state.sequenceActive,
     sequenceIndex: state.sequenceIndex,
     isRouteCompleted,
     markRouteCompleted,
-    dismissTour,
+    completeAllTours,
     restartTour,
     startSequence,
     endSequence,
-    advanceSequence,
     setSequenceIndex,
   };
 }
