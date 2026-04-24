@@ -180,6 +180,11 @@ class ExperimentResult(Base):
     time_seconds = Column(Integer)
     participant_name = Column(String, nullable=True)
 
+    # Study linkage (nullable so existing rows are unaffected)
+    study_id = Column(Integer, ForeignKey("experiment_studies.id"), nullable=True, index=True)
+    participant_id = Column(Integer, ForeignKey("experiment_participants.id"), nullable=True, unique=True)
+    confidence_rating = Column(Integer, nullable=True)  # 1–5 self-reported
+
     evidence = Column(JSON, nullable=True)
     similarity_scores = Column(JSON, nullable=True)
     review_status = Column(String, default="pending")
@@ -188,3 +193,53 @@ class ExperimentResult(Base):
     reviewed_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    participant = relationship("ExperimentParticipant", back_populates="result", foreign_keys=[participant_id])
+
+
+class ExperimentStudy(Base):
+    __tablename__ = "experiment_studies"
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    consent_text = Column(Text, nullable=True)
+    instructions_hyve = Column(Text, nullable=True)
+    instructions_traditional = Column(Text, nullable=True)
+    status = Column(String, default="draft")  # draft | active | closed
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    product = relationship("Product")
+    invites = relationship("ExperimentInvite", back_populates="study", cascade="all, delete-orphan")
+    participants = relationship("ExperimentParticipant", back_populates="study", cascade="all, delete-orphan")
+
+
+class ExperimentInvite(Base):
+    __tablename__ = "experiment_invites"
+    id = Column(Integer, primary_key=True, index=True)
+    study_id = Column(Integer, ForeignKey("experiment_studies.id"), nullable=False)
+    code = Column(String, unique=True, index=True, nullable=False)
+    assigned_platform = Column(String, nullable=False)  # "hyve" | "traditional"
+    used = Column(Boolean, default=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    study = relationship("ExperimentStudy", back_populates="invites")
+    participant = relationship("ExperimentParticipant", back_populates="invite", uselist=False)
+
+
+class ExperimentParticipant(Base):
+    __tablename__ = "experiment_participants"
+    id = Column(Integer, primary_key=True, index=True)
+    study_id = Column(Integer, ForeignKey("experiment_studies.id"), nullable=False)
+    invite_id = Column(Integer, ForeignKey("experiment_invites.id"), unique=True, nullable=False)
+    session_token = Column(String, unique=True, index=True, nullable=False)
+    assigned_platform = Column(String, nullable=False)
+    consent_given_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    study = relationship("ExperimentStudy", back_populates="participants")
+    invite = relationship("ExperimentInvite", back_populates="participant")
+    result = relationship("ExperimentResult", back_populates="participant", uselist=False, foreign_keys="ExperimentResult.participant_id")
