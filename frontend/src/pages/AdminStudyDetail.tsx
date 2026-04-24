@@ -482,13 +482,13 @@ export default function AdminStudyDetail() {
                         <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                           Platform
                         </th>
-                        <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                        <th className="hidden sm:table-cell px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                           Email
                         </th>
                         <th className="px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                           Status
                         </th>
-                        <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                        <th className="hidden md:table-cell px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                           Used At
                         </th>
                         <th className="px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">
@@ -522,14 +522,14 @@ export default function AdminStudyDetail() {
                               {invite.assigned_platform}
                             </span>
                           </td>
-                          <td className="px-4 py-2.5">
+                          <td className="hidden sm:table-cell px-4 py-2.5">
                             {invite.participant_email ? (
                               <div className="flex items-center gap-1.5">
-                                <span className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                <span className="text-xs text-muted-foreground truncate max-w-[160px] lg:max-w-[220px]">
                                   {invite.participant_email}
                                 </span>
                                 {invite.email_sent && (
-                                  <span className="text-[9px] font-black uppercase text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
+                                  <span className="text-[9px] font-black uppercase text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full shrink-0">
                                     Sent
                                   </span>
                                 )}
@@ -545,7 +545,7 @@ export default function AdminStudyDetail() {
                               <span className="text-xs text-emerald-500 font-bold">Available</span>
                             )}
                           </td>
-                          <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                          <td className="hidden md:table-cell px-4 py-2.5 text-xs text-muted-foreground">
                             {invite.used_at
                               ? new Date(invite.used_at).toLocaleString()
                               : "—"}
@@ -565,7 +565,7 @@ export default function AdminStudyDetail() {
                                 {sendingEmailId === invite.id ? (
                                   <Loader2 className="h-3 w-3 animate-spin" />
                                 ) : (
-                                  <><Mail className="h-3 w-3" /> Resend</>
+                                  <><Mail className="h-3 w-3" /><span className="hidden sm:inline"> Resend</span></>
                                 )}
                               </Button>
                             ) : (
