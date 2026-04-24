@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { Link } from "react-router-dom";
-import { ShieldAlert, CheckCircle2, XCircle, ArrowLeft, RefreshCw, User, Beaker } from "lucide-react";
+import { ShieldAlert, CheckCircle2, XCircle, ArrowLeft, RefreshCw, User, Beaker, BarChart2 } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -69,6 +69,12 @@ export default function AdminExperimentReview() {
           </div>
           
           <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/admin/experiments/analysis">
+                <BarChart2 className="h-4 w-4 mr-2" />
+                Analysis
+              </Link>
+            </Button>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-[180px] h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
               <option value="pending">Pending Review</option>
               <option value="approved">Approved</option>

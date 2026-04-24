@@ -160,6 +160,9 @@ class ExperimentResultBase(BaseModel):
     time_seconds: int
     participant_name: Optional[str] = None
     evidence: Optional[ExperimentEvidence] = None
+    # Study session linkage (set by client, resolved server-side)
+    session_token: Optional[str] = None
+    confidence_rating: Optional[int] = None  # 1–5 self-reported
 
 
 class ExperimentResultCreate(ExperimentResultBase):
@@ -169,6 +172,8 @@ class ExperimentResultCreate(ExperimentResultBase):
 class ExperimentResult(ExperimentResultBase):
     id: int
     created_at: datetime
+    study_id: Optional[int] = None
+    participant_id: Optional[int] = None
     similarity_scores: Optional[Dict[str, float]] = None
     review_status: str = "pending"
     review_notes: Optional[str] = None
@@ -182,6 +187,96 @@ class ExperimentAnalytics(BaseModel):
     platform_stats: List[dict]
     total_participants: int
     recent_activity: List[ExperimentResult]
+
+
+# --- Experiment Studies ---
+
+class ExperimentStudyCreate(BaseModel):
+    product_id: int
+    title: str
+    description: Optional[str] = None
+    consent_text: Optional[str] = None
+    instructions_hyve: Optional[str] = None
+    instructions_traditional: Optional[str] = None
+
+
+class ExperimentStudyUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    consent_text: Optional[str] = None
+    instructions_hyve: Optional[str] = None
+    instructions_traditional: Optional[str] = None
+    status: Optional[str] = None  # draft | active | closed
+
+
+class ExperimentStudyOut(BaseModel):
+    id: int
+    product_id: int
+    title: str
+    description: Optional[str] = None
+    consent_text: Optional[str] = None
+    instructions_hyve: Optional[str] = None
+    instructions_traditional: Optional[str] = None
+    status: str
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ExperimentInviteOut(BaseModel):
+    id: int
+    study_id: int
+    code: str
+    assigned_platform: str
+    used: bool
+    used_at: Optional[datetime] = None
+    participant_email: Optional[str] = None
+    email_sent: bool = False
+    email_sent_at: Optional[datetime] = None
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GenerateInvitesRequest(BaseModel):
+    count: int = 0  # ignored when emails list is provided
+    emails: Optional[List[str]] = None  # if set, one code per email; count derived from len(emails)
+
+
+class InviteResolveOut(BaseModel):
+    """Returned to participant before they start — no session token yet."""
+    study_id: int
+    product_id: int
+    title: str
+    description: Optional[str] = None
+    consent_text: Optional[str] = None
+    valid: bool
+    already_used: bool
+
+
+class SessionStartOut(BaseModel):
+    """Returned after participant accepts consent and clicks Start."""
+    session_token: str
+    assigned_platform: str  # "hyve" | "traditional"
+    product_id: int
+    instructions: str  # platform-specific instructions
+
+
+class StudyAnalyticsOut(BaseModel):
+    study_id: int
+    product_id: int
+    title: str
+    status: str
+    total_invites: int
+    used_invites: int
+    completions: int
+    pending_review: int
+    approved: int
+    rejected: int
+    hyve_count: int
+    traditional_count: int
+    hyve_avg_time: Optional[float] = None
+    traditional_avg_time: Optional[float] = None
+    hyve_avg_confidence: Optional[float] = None
+    traditional_avg_confidence: Optional[float] = None
 
 # --- Ingestion ---
 

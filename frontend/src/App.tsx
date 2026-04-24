@@ -17,6 +17,11 @@ import AmazonProductPage from "@/pages/AmazonProductPage";
 import About from "@/pages/About";
 import FAQ from "@/pages/FAQ";
 import Team from "@/pages/Team";
+import StudyLanding from "@/pages/StudyLanding";
+import StudySession from "@/pages/StudySession";
+import AdminStudies from "@/pages/AdminStudies";
+import AdminStudyDetail from "@/pages/AdminStudyDetail";
+import AdminExperimentAnalysis from "@/pages/AdminExperimentAnalysis";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +31,11 @@ function App() {
       <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
         <BrowserRouter>
           <Routes>
+            {/* Invite-only study routes — full-screen, no nav shell */}
+            <Route path="study" element={<StudyLanding />} />
+            <Route path="study/:inviteCode" element={<StudyLanding />} />
+            <Route path="study/:inviteCode/session" element={<StudySession />} />
+
             <Route path="/" element={<RootLayout />}>
               {/* Public/Landing */}
               <Route index element={<Home />} />
@@ -60,6 +70,18 @@ function App() {
               <Route
                 path="admin/experiments/review"
                 element={<AdminExperimentReview />}
+              />
+              <Route
+                path="admin/experiments/studies"
+                element={<AdminStudies />}
+              />
+              <Route
+                path="admin/experiments/studies/:studyId"
+                element={<AdminStudyDetail />}
+              />
+              <Route
+                path="admin/experiments/analysis"
+                element={<AdminExperimentAnalysis />}
               />
 
               {/* Amazon Product Search & Native Reviews */}

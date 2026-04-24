@@ -43,6 +43,12 @@ interface ExperimentModeProps {
   onOpenChange: (open: boolean) => void;
   product: any;
   analytics: any;
+  // Study mode: lock platform and product, hide selectors
+  locked?: boolean;
+  lockedPlatform?: "hyve" | "traditional";
+  sessionToken?: string;
+  studyInstructions?: string;
+  onExperimentComplete?: () => void;
 }
 
 // Both platforms use identical task labels so results are directly comparable.
@@ -131,6 +137,11 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   onOpenChange,
   product,
   analytics,
+  locked = false,
+  lockedPlatform,
+  sessionToken,
+  studyInstructions,
+  onExperimentComplete,
 }) => {
   const [platform, setPlatform] = useState<"select" | "hyve" | "traditional">(
     "select",
@@ -158,6 +169,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
 
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [participantName, setParticipantName] = useState("");
+  const [confidenceRating, setConfidenceRating] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<
     "accordion" | "graph" | "traditional"
   >("graph");
@@ -169,7 +181,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   const { data: reviews } = useQuery({
     queryKey: ["product-reviews-traditional", product?.id],
     queryFn: async () => {
-      const res = await api.get(`/reviews?product_id=${product.id}&size=50`);
+      const res = await api.get(`/reviews?product_id=${product.id}&size=200`);
       return res.data.items;
     },
     enabled: platform === "traditional" && !!product?.id,
@@ -185,6 +197,14 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [isActive]);
+
+  // Auto-start in locked study mode
+  useEffect(() => {
+    if (locked && lockedPlatform && open && platform === "select") {
+      startExperiment(lockedPlatform);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locked, lockedPlatform, open]);
 
   const startExperiment = (mode: "hyve" | "traditional") => {
     setPlatform(mode);
@@ -237,6 +257,8 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
         platform,
         time_seconds: seconds,
         participant_name: participantName || "Anonymous Participant",
+        session_token: sessionToken,
+        confidence_rating: confidenceRating,
         evidence: {
           platform,
           weakness_paraphrase: evidence.weakness_paraphrase,
@@ -247,6 +269,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
         },
       });
       toast.success("Experiment results submitted successfully!");
+      onExperimentComplete?.();
       handleClose();
     } catch {
       toast.error("Failed to submit results. Please try again.");
@@ -281,6 +304,9 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   const completedCount = TASKS.filter((t) => tasksState[t.id]).length;
 
   if (!open) return null;
+
+  // In locked mode the useEffect handles auto-start; show nothing until it fires
+  if (locked && platform === "select") return null;
 
   if (platform === "select") {
     return (
@@ -714,6 +740,9 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
           participantName={participantName}
           setParticipantName={setParticipantName}
           submitResults={submitResults}
+          confidenceRating={confidenceRating}
+          setConfidenceRating={setConfidenceRating}
+          locked={locked}
         />
       </div>
     );
@@ -870,6 +899,9 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
         participantName={participantName}
         setParticipantName={setParticipantName}
         submitResults={submitResults}
+        confidenceRating={confidenceRating}
+        setConfidenceRating={setConfidenceRating}
+        locked={locked}
       />
     </div>
   );
@@ -884,6 +916,9 @@ function CompletionModal({
   participantName,
   setParticipantName,
   submitResults,
+  confidenceRating,
+  setConfidenceRating,
+  locked,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -893,6 +928,9 @@ function CompletionModal({
   participantName: string;
   setParticipantName: (v: string) => void;
   submitResults: () => void;
+  confidenceRating: number | null;
+  setConfidenceRating: (v: number | null) => void;
+  locked?: boolean;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -917,20 +955,51 @@ function CompletionModal({
             .
           </DialogDescription>
         </DialogHeader>
-        <div className="py-4">
-          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
-            Participant Identifier
-          </label>
-          <input
-            type="text"
-            className="w-full bg-muted/50 border border-border/40 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-primary/50 transition-colors"
-            placeholder="e.g. user_42 or student_A"
-            value={participantName}
-            onChange={(e) => setParticipantName(e.target.value)}
-          />
-          <p className="text-[10px] text-muted-foreground/60 mt-2 font-medium">
-            Optional — helps link your result to a participant record.
-          </p>
+        <div className="py-4 space-y-5">
+          {/* Confidence rating — always shown */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+              How confident are you in your answers?
+            </p>
+            <div className="flex gap-2 justify-between">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setConfidenceRating(n)}
+                  className={cn(
+                    "flex-1 h-10 rounded-lg border font-black text-sm transition-all",
+                    confidenceRating === n
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-muted/30 hover:border-primary/50",
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-between text-[9px] text-muted-foreground/50 font-medium px-0.5">
+              <span>Not confident</span>
+              <span>Very confident</span>
+            </div>
+          </div>
+          {/* Participant ID — hide in locked/study mode */}
+          {!locked && (
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
+                Participant Identifier
+              </label>
+              <input
+                type="text"
+                className="w-full bg-muted/50 border border-border/40 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-primary/50 transition-colors"
+                placeholder="e.g. user_42 or student_A"
+                value={participantName}
+                onChange={(e) => setParticipantName(e.target.value)}
+              />
+              <p className="text-[10px] text-muted-foreground/60 mt-2 font-medium">
+                Optional — helps link your result to a participant record.
+              </p>
+            </div>
+          )}
         </div>
         <DialogFooter className="sm:justify-center gap-3">
           <Button

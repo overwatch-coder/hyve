@@ -16,6 +16,8 @@ import {
   ShieldCheck,
   LogOut,
   AlertTriangle,
+  FlaskConical,
+  BarChart2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -120,6 +122,16 @@ export default function AdminDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Button variant="outline" asChild className="gap-2 h-10">
+            <Link to="/admin/experiments/studies">
+              <FlaskConical className="h-4 w-4" /> Studies
+            </Link>
+          </Button>
+          <Button variant="outline" asChild className="gap-2 h-10">
+            <Link to="/admin/experiments/analysis">
+              <BarChart2 className="h-4 w-4" /> Analysis
+            </Link>
+          </Button>
           <Button variant="default" asChild className="gap-2 h-10">
             <Link to="/admin/experiments/review">
               <ShieldCheck className="h-4 w-4" /> Experiment QC

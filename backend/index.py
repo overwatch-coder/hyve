@@ -43,6 +43,20 @@ with engine.connect() as conn:
         conn.commit()
         print("MIGRATION: Added image_url column to products table.")
     except Exception: pass
+    # Study / invite / participant / confidence migration
+    for stmt in [
+        "ALTER TABLE experiment_results ADD COLUMN study_id INTEGER REFERENCES experiment_studies(id)",
+        "ALTER TABLE experiment_results ADD COLUMN participant_id INTEGER UNIQUE REFERENCES experiment_participants(id)",
+        "ALTER TABLE experiment_results ADD COLUMN confidence_rating INTEGER",
+        "ALTER TABLE experiment_invites ADD COLUMN participant_email VARCHAR",
+        "ALTER TABLE experiment_invites ADD COLUMN email_sent BOOLEAN DEFAULT 0",
+        "ALTER TABLE experiment_invites ADD COLUMN email_sent_at DATETIME",
+    ]:
+        try:
+            conn.execute(text(stmt))
+            conn.commit()
+        except Exception:
+            pass
 
 app = FastAPI(
     title="HYVE API",
