@@ -4,6 +4,7 @@ fastapi==0.135.1
 httpx==0.28.1
 openai==2.26.0
 google-genai
+google-generativeai
 pandas==3.0.1
 playwright==1.58.0
 crawl4ai>=0.6.0
