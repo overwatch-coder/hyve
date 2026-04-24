@@ -195,12 +195,13 @@ def extract_claims_from_llm(review_text: str, provider: str = "openai", star_rat
         return json.loads(response.choices[0].message.content)
 
     elif provider == "gemini":
-        import google.generativeai as genai
-        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        model = genai.GenerativeModel('gemini-1.5-pro')
+        from google import genai as _ggenai
+        _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         sys_msg = "You are a senior data analyst extracting precise structured arguments from consumer reviews. Output JSON."
-        response = model.generate_content(
-            f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.")
+        response = _gclient.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.",
+        )
         return json.loads(_clean_json_text(response.text))
 
     else:
@@ -250,19 +251,17 @@ async def extract_claims_from_llm_async(review_text: str, provider: str = "opena
         return json.loads(response.choices[0].message.content)
 
     elif provider == "gemini":
-        import google.generativeai as genai
         import asyncio
-        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        model = genai.GenerativeModel('gemini-1.5-pro')
-
-        # Gemini Python SDK doesn't natively support async properly across all systems,
-        # so we run the synchronous call in a thread pool for true concurrency.
+        from google import genai as _ggenai
+        _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         sys_msg = "You are a senior data analyst extracting precise structured arguments from consumer reviews. Output JSON."
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
-            lambda: model.generate_content(
-                f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.")
+            lambda: _gclient.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.",
+            )
         )
         return json.loads(_clean_json_text(response.text))
 
@@ -553,14 +552,13 @@ Return ONLY valid JSON with this structure:
             )
             themes_obj = _json.loads(resp.choices[0].message.content)
         elif provider == "gemini":
-            import google.generativeai as genai
-
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel(
-                os.getenv("LLM_CLUSTER_MODEL", "gemini-1.5-flash"))
+            from google import genai as _ggenai
+            _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
             sys_msg = "You are a careful clustering assistant. Output JSON only."
-            resp = model.generate_content(
-                f"System: {sys_msg}\n\nUser: {define_prompt}\n\nOutput raw JSON.")
+            resp = _gclient.models.generate_content(
+                model=os.getenv("LLM_CLUSTER_MODEL", "gemini-2.0-flash"),
+                contents=f"System: {sys_msg}\n\nUser: {define_prompt}\n\nOutput raw JSON.",
+            )
             themes_obj = _json.loads(_clean_json_text(resp.text))
         else:
             raise ValueError(f"Unsupported provider: {provider}")
@@ -627,14 +625,13 @@ Return ONLY JSON:
                 )
                 assign_obj = _json.loads(resp.choices[0].message.content)
             else:
-                import google.generativeai as genai
-
-                genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-                model = genai.GenerativeModel(
-                    os.getenv("LLM_CLUSTER_MODEL", "gemini-1.5-flash"))
+                from google import genai as _ggenai
+                _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
                 sys_msg = "You classify items into provided categories. Output JSON only."
-                resp = model.generate_content(
-                    f"System: {sys_msg}\n\nUser: {assign_prompt}\n\nOutput raw JSON.")
+                resp = _gclient.models.generate_content(
+                    model=os.getenv("LLM_CLUSTER_MODEL", "gemini-2.0-flash"),
+                    contents=f"System: {sys_msg}\n\nUser: {assign_prompt}\n\nOutput raw JSON.",
+                )
                 assign_obj = _json.loads(_clean_json_text(resp.text))
 
             assignments = assign_obj.get("assignments", [])

@@ -45,10 +45,12 @@ def predict_product_category(product_name: str) -> str:
             )
             return response.choices[0].message.content.strip().replace('"', '').replace("'", "")
         else:
-            import google.generativeai as genai
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(prompt)
+            from google import genai as _ggenai
+            _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            response = _gclient.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt,
+            )
             return response.text.strip().replace('"', '').replace("'", "")
     except Exception as e:
         print(f"DEBUG: Category prediction failed: {e}")
@@ -217,11 +219,13 @@ Return ONLY valid JSON like: {{"0": {{"name": "Battery Life", "recommendation": 
             result = json.loads(response.choices[0].message.content)
             return {int(k): v for k, v in result.items()}
         elif provider == "gemini":
-            import google.generativeai as genai
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            from google import genai as _ggenai
+            _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
             sys_msg = "You generate concise thematic labels and actionable recommendations for consumer claims. Output JSON only."
-            response = model.generate_content(f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.")
+            response = _gclient.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.",
+            )
             result = json.loads(_clean_json_text(response.text))
             return {int(k): v for k, v in result.items()}
     except Exception as e:
@@ -284,11 +288,11 @@ Return ONLY valid JSON with keys:
                 "advices_seller": result.get("advices_seller", [])
             }
         else:
-            import google.generativeai as genai
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(
-                f"System: You are a product strategic analyst. Output JSON only.\n\nUser: {prompt}"
+            from google import genai as _ggenai
+            _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            response = _gclient.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=f"System: You are a product strategic analyst. Output JSON only.\n\nUser: {prompt}",
             )
             text = response.text.strip()
             if "```json" in text:
@@ -377,11 +381,13 @@ Return JSON with this exact structure:
             )
             result = _json.loads(response.choices[0].message.content)
         elif provider == "gemini":
-            import google.generativeai as genai
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel('gemini-1.5-pro')
+            from google import genai as _ggenai
+            _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
             sys_msg = "You are a data deduplication expert. Output valid JSON only."
-            response = model.generate_content(f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.")
+            response = _gclient.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.",
+            )
             result = _json.loads(_clean_json_text(response.text))
         else:
             raise ValueError(f"Unsupported provider: {provider}")
@@ -461,13 +467,18 @@ Return JSON with this exact structure:
             )
             result = _json.loads(response.choices[0].message.content)
         elif provider == "gemini":
-            import google.generativeai as genai
             import asyncio
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel('gemini-1.5-pro')
+            from google import genai as _ggenai
+            _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
             loop = asyncio.get_event_loop()
             sys_msg = "You are a data deduplication expert. Output valid JSON only."
-            response = await loop.run_in_executor(None, lambda: model.generate_content(f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON."))
+            response = await loop.run_in_executor(
+                None,
+                lambda: _gclient.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON.",
+                )
+            )
             result = _json.loads(_clean_json_text(response.text))
         else:
             raise ValueError(f"Unsupported provider: {provider}")
@@ -994,11 +1005,13 @@ Return ONLY valid JSON in this exact format, with no markdown formatting:
             return json.loads(response.choices[0].message.content)
             
         elif provider == "gemini":
-            import google.generativeai as genai
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            from google import genai as _ggenai
+            _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
             sys_msg = "You map dataset columns for consumer reviews. Output JSON only."
-            response = model.generate_content(f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON without markdown.")
+            response = _gclient.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=f"System: {sys_msg}\n\nUser: {prompt}\n\nOutput raw JSON without markdown.",
+            )
             return json.loads(_clean_json_text(response.text))
             
     except Exception as e:
@@ -1333,11 +1346,13 @@ Return ONLY valid JSON in exactly this format without markdown wrappers.
             return {"product_name": data.get("product_name", product_name), "reviews": data.get("reviews", [])}
         else:
             # Fallback to Gemini
-            import google.generativeai as genai
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"response_mime_type": "application/json"})
-            response = model.generate_content(
-                f"System: You extract consumer reviews from raw website text. Output JSON only.\n\nUser: {prompt}"
+            from google import genai as _ggenai
+            from google.genai import types as _gtypes
+            _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            response = _gclient.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=f"System: You extract consumer reviews from raw website text. Output JSON only.\n\nUser: {prompt}",
+                config=_gtypes.GenerateContentConfig(response_mime_type="application/json"),
             )
             data = json.loads(response.text)
             return {"product_name": data.get("product_name", product_name), "reviews": data.get("reviews", [])}
@@ -1554,11 +1569,13 @@ Return ONLY valid JSON in exactly this format without markdown wrappers. Do not 
             
         else:
             # Fallback to Gemini
-            import google.generativeai as genai
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"response_mime_type": "application/json"})
-            response = model.generate_content(
-                f"System: You split unstructured raw review text into structured JSON arrays by Product. Output JSON only.\n\nUser: {prompt}"
+            from google import genai as _ggenai
+            from google.genai import types as _gtypes
+            _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            response = _gclient.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=f"System: You split unstructured raw review text into structured JSON arrays by Product. Output JSON only.\n\nUser: {prompt}",
+                config=_gtypes.GenerateContentConfig(response_mime_type="application/json"),
             )
             data = json.loads(response.text)
             if isinstance(data, dict):
@@ -1724,15 +1741,14 @@ CONSUMER REVIEWS CONTEXT:
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
         else:
-            import google.generativeai as genai
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(
-                f"System: You are a helpful product assistant strictly answering based on reviews.\n\nUser: {prompt}",
-                stream=True
-            )
-            for chunk in response:
-                yield chunk.text
+            from google import genai as _ggenai
+            _gclient = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            for chunk in _gclient.models.generate_content_stream(
+                model="gemini-2.0-flash",
+                contents=f"System: You are a helpful product assistant strictly answering based on reviews.\n\nUser: {prompt}",
+            ):
+                if chunk.text:
+                    yield chunk.text
     except Exception as e:
         print(f"DEBUG: Chatbot LLM call failed: {e}")
         yield "I'm sorry, I'm having trouble processing your request right now. Please try again later."
