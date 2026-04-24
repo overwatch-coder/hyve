@@ -222,6 +222,10 @@ class ExperimentInvite(Base):
     assigned_platform = Column(String, nullable=False)  # "hyve" | "traditional"
     used = Column(Boolean, default=False)
     used_at = Column(DateTime, nullable=True)
+    # Email invitation fields
+    participant_email = Column(String, nullable=True, index=True)
+    email_sent = Column(Boolean, default=False)
+    email_sent_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     study = relationship("ExperimentStudy", back_populates="invites")

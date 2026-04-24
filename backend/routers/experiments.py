@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -10,6 +10,7 @@ import schemas
 import models
 from database import get_db
 from core.security import admin_required
+from core.email import send_invite_email, email_configured
 from experiment_scoring import score_similarity, word_count
 from datetime import datetime
 
@@ -260,33 +261,69 @@ def update_study(
 def generate_invites(
     study_id: int,
     payload: schemas.GenerateInvitesRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin: dict = Depends(admin_required),
 ):
     study = db.query(models.ExperimentStudy).filter(models.ExperimentStudy.id == study_id).first()
     if not study:
         raise HTTPException(status_code=404, detail="Study not found")
-    if payload.count < 2 or payload.count > 200:
-        raise HTTPException(status_code=400, detail="count must be between 2 and 200")
+
+    # Determine how many codes to generate and which emails to assign
+    emails: list[str] = payload.emails or []
+    count = len(emails) if emails else payload.count
+
+    if count < 1 or count > 200:
+        raise HTTPException(status_code=400, detail="count must be between 1 and 200")
 
     # Balanced 50/50 platform assignment
-    platforms = ["hyve", "traditional"] * (payload.count // 2)
-    if payload.count % 2 == 1:
+    platforms = ["hyve", "traditional"] * (count // 2)
+    if count % 2 == 1:
         platforms.append("hyve")
 
     invites = []
-    for platform in platforms:
+    for i, platform in enumerate(platforms):
         code = str(uuid_lib.uuid4()).replace("-", "")[:12].upper()
+        email = emails[i] if i < len(emails) else None
         invite = models.ExperimentInvite(
             study_id=study_id,
             code=code,
             assigned_platform=platform,
+            participant_email=email,
         )
         db.add(invite)
         invites.append(invite)
     db.commit()
     for inv in invites:
         db.refresh(inv)
+
+    # Send emails in background if addresses were provided
+    if emails and email_configured():
+        def _send_all(invs: list, title: str) -> None:
+            for inv in invs:
+                if inv.participant_email:
+                    try:
+                        send_invite_email(
+                            to_email=inv.participant_email,
+                            invite_code=inv.code,
+                            study_title=title,
+                            platform=inv.assigned_platform,
+                        )
+                        # Update sent status (new db session to avoid thread conflicts)
+                        from database import SessionLocal
+                        with SessionLocal() as bg_db:
+                            row = bg_db.query(models.ExperimentInvite).filter(
+                                models.ExperimentInvite.id == inv.id
+                            ).first()
+                            if row:
+                                row.email_sent = True
+                                row.email_sent_at = datetime.utcnow()
+                                bg_db.commit()
+                    except Exception:
+                        pass  # individual failures don't abort the batch
+
+        background_tasks.add_task(_send_all, list(invites), study.title)
+
     return invites
 
 
@@ -302,6 +339,63 @@ def list_invites(
         .order_by(models.ExperimentInvite.created_at.asc())
         .all()
     )
+
+
+@router.post("/studies/{study_id}/invites/{invite_id}/send-email", response_model=schemas.ExperimentInviteOut)
+def send_invite_email_endpoint(
+    study_id: int,
+    invite_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    """Send (or resend) the invite email for a single code."""
+    invite = (
+        db.query(models.ExperimentInvite)
+        .filter(
+            models.ExperimentInvite.id == invite_id,
+            models.ExperimentInvite.study_id == study_id,
+        )
+        .first()
+    )
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    if not invite.participant_email:
+        raise HTTPException(status_code=400, detail="No email address on this invite")
+    if invite.used:
+        raise HTTPException(status_code=409, detail="Invite already used — cannot resend")
+    if not email_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Email is not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD in your .env file.",
+        )
+
+    study = invite.study
+
+    def _send(inv: models.ExperimentInvite, title: str) -> None:
+        try:
+            send_invite_email(
+                to_email=inv.participant_email,
+                invite_code=inv.code,
+                study_title=title,
+                platform=inv.assigned_platform,
+            )
+            from database import SessionLocal
+            with SessionLocal() as bg_db:
+                row = bg_db.query(models.ExperimentInvite).filter(
+                    models.ExperimentInvite.id == inv.id
+                ).first()
+                if row:
+                    row.email_sent = True
+                    row.email_sent_at = datetime.utcnow()
+                    bg_db.commit()
+        except Exception as exc:
+            raise RuntimeError(str(exc)) from exc
+
+    background_tasks.add_task(_send, invite, study.title)
+
+    # Optimistically mark as sent in the response (background will confirm in DB)
+    return invite
 
 
 # ─── Study Analytics + Export (Admin) ─────────────────────────────────────────

@@ -20,6 +20,8 @@ import {
   Copy,
   CheckCheck,
   BarChart2,
+  Mail,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -42,6 +44,9 @@ type Invite = {
   assigned_platform: string;
   used: boolean;
   used_at?: string;
+  participant_email?: string;
+  email_sent: boolean;
+  email_sent_at?: string;
   created_at: string;
 };
 
@@ -67,7 +72,9 @@ export default function AdminStudyDetail() {
   const queryClient = useQueryClient();
 
   const [inviteCount, setInviteCount] = useState(20);
+  const [emailList, setEmailList] = useState(""); // newline-separated emails
   const [copied, setCopied] = useState(false);
+  const [sendingEmailId, setSendingEmailId] = useState<number | null>(null);
 
   // Local edit state for study config
   const [editing, setEditing] = useState(false);
@@ -119,23 +126,57 @@ export default function AdminStudyDetail() {
 
   const generateMutation = useMutation({
     mutationFn: async () => {
+      const emails = emailList
+        .split("\n")
+        .map((e) => e.trim())
+        .filter((e) => e.length > 0);
+      const body = emails.length > 0
+        ? { emails, count: emails.length }
+        : { count: inviteCount };
       const res = await api.post(
         `/experiments/studies/${studyId}/invites`,
-        { count: inviteCount },
+        body,
         { headers: getAuthHeaders() }
       );
-      return res.data;
+      return { data: res.data, emailCount: emails.length };
     },
-    onSuccess: () => {
+    onSuccess: ({ emailCount }) => {
       queryClient.invalidateQueries({ queryKey: ["admin-study-invites", studyId] });
       queryClient.invalidateQueries({ queryKey: ["admin-study-analytics", studyId] });
-      toast.success(`Generated ${inviteCount} invite codes`);
+      const msg = emailCount > 0
+        ? `Generated ${emailCount} codes and queued ${emailCount} emails`
+        : `Generated ${inviteCount} invite codes`;
+      toast.success(msg);
+      setEmailList("");
     },
     onError: (err: unknown) => {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data
           ?.detail || "Failed to generate invites";
       toast.error(msg);
+    },
+  });
+
+  const sendEmailMutation = useMutation({
+    mutationFn: async (inviteId: number) => {
+      await api.post(
+        `/experiments/studies/${studyId}/invites/${inviteId}/send-email`,
+        {},
+        { headers: getAuthHeaders() }
+      );
+      return inviteId;
+    },
+    onSuccess: (inviteId) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-study-invites", studyId] });
+      toast.success("Invite email queued");
+      setSendingEmailId(null);
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || "Failed to send email";
+      toast.error(msg);
+      setSendingEmailId(null);
     },
   });
 
@@ -352,12 +393,32 @@ export default function AdminStudyDetail() {
           <CardHeader>
             <CardTitle className="text-base font-black">Generate Invite Codes</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5">
             <p className="text-xs text-muted-foreground">
-              Codes are balanced 50/50 between HYVE and Traditional arms. Each
-              code is single-use.
+              Codes are balanced 50/50 between HYVE and Traditional arms. Each code is single-use.
             </p>
-            <div className="flex items-center gap-3">
+
+            {/* Email list (optional) */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                <Mail className="h-3 w-3" />
+                Participant Emails (one per line)
+              </label>
+              <Textarea
+                placeholder={`alice@example.com\nbob@example.com\ncarol@example.com`}
+                value={emailList}
+                onChange={(e) => setEmailList(e.target.value)}
+                rows={5}
+                className="font-mono text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground/70">
+                If emails are provided, one code is generated per address and invite links are
+                sent automatically. Leave blank to generate codes without emailing.
+              </p>
+            </div>
+
+            {/* Count (only shown when no emails) */}
+            {emailList.trim().length === 0 && (
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                   Count
@@ -371,20 +432,21 @@ export default function AdminStudyDetail() {
                   className="w-28"
                 />
               </div>
-              <div className="pt-5">
-                <Button
-                  size="sm"
-                  onClick={() => generateMutation.mutate()}
-                  disabled={generateMutation.isPending}
-                >
-                  {generateMutation.isPending ? (
-                    <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Generating…</>
-                  ) : (
-                    "Generate Codes"
-                  )}
-                </Button>
-              </div>
-            </div>
+            )}
+
+            <Button
+              size="sm"
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending}
+            >
+              {generateMutation.isPending ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Generating…</>
+              ) : emailList.trim().length > 0 ? (
+                <><Send className="h-3.5 w-3.5 mr-1.5" />Generate & Send Emails</>
+              ) : (
+                "Generate Codes"
+              )}
+            </Button>
           </CardContent>
         </Card>
 
@@ -420,11 +482,17 @@ export default function AdminStudyDetail() {
                         <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                           Platform
                         </th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                          Email
+                        </th>
                         <th className="px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                          Used
+                          Status
                         </th>
                         <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                           Used At
+                        </th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                          Action
                         </th>
                       </tr>
                     </thead>
@@ -454,6 +522,22 @@ export default function AdminStudyDetail() {
                               {invite.assigned_platform}
                             </span>
                           </td>
+                          <td className="px-4 py-2.5">
+                            {invite.participant_email ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                  {invite.participant_email}
+                                </span>
+                                {invite.email_sent && (
+                                  <span className="text-[9px] font-black uppercase text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
+                                    Sent
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground/40">—</span>
+                            )}
+                          </td>
                           <td className="px-4 py-2.5 text-center">
                             {invite.used ? (
                               <span className="text-xs text-rose-500 font-bold">Used</span>
@@ -465,6 +549,28 @@ export default function AdminStudyDetail() {
                             {invite.used_at
                               ? new Date(invite.used_at).toLocaleString()
                               : "—"}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            {invite.participant_email && !invite.used ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 gap-1 text-[10px] font-black uppercase tracking-wide"
+                                disabled={sendingEmailId === invite.id || sendEmailMutation.isPending}
+                                onClick={() => {
+                                  setSendingEmailId(invite.id);
+                                  sendEmailMutation.mutate(invite.id);
+                                }}
+                              >
+                                {sendingEmailId === invite.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <><Mail className="h-3 w-3" /> Resend</>
+                                )}
+                              </Button>
+                            ) : (
+                              <span className="text-muted-foreground/30">—</span>
+                            )}
                           </td>
                         </tr>
                       ))}

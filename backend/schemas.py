@@ -229,12 +229,16 @@ class ExperimentInviteOut(BaseModel):
     assigned_platform: str
     used: bool
     used_at: Optional[datetime] = None
+    participant_email: Optional[str] = None
+    email_sent: bool = False
+    email_sent_at: Optional[datetime] = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
 
 class GenerateInvitesRequest(BaseModel):
-    count: int  # total codes to generate; balanced 50/50 hyve/traditional
+    count: int = 0  # ignored when emails list is provided
+    emails: Optional[List[str]] = None  # if set, one code per email; count derived from len(emails)
 
 
 class InviteResolveOut(BaseModel):

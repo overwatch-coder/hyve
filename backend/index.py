@@ -48,6 +48,9 @@ with engine.connect() as conn:
         "ALTER TABLE experiment_results ADD COLUMN study_id INTEGER REFERENCES experiment_studies(id)",
         "ALTER TABLE experiment_results ADD COLUMN participant_id INTEGER UNIQUE REFERENCES experiment_participants(id)",
         "ALTER TABLE experiment_results ADD COLUMN confidence_rating INTEGER",
+        "ALTER TABLE experiment_invites ADD COLUMN participant_email VARCHAR",
+        "ALTER TABLE experiment_invites ADD COLUMN email_sent BOOLEAN DEFAULT 0",
+        "ALTER TABLE experiment_invites ADD COLUMN email_sent_at DATETIME",
     ]:
         try:
             conn.execute(text(stmt))
