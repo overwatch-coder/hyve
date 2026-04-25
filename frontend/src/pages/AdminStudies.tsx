@@ -337,7 +337,7 @@ export default function AdminStudies() {
 
             {selectedProduct && (
               <Card className="border-border/40 bg-muted/20">
-                <CardContent className="p-4 flex gap-4 items-start">
+                <CardContent className="p-4 flex gap-4 items-start overflow-hidden">
                   <div className="h-20 w-20 rounded-xl overflow-hidden border border-border/30 bg-muted/30 shrink-0 flex items-center justify-center">
                     {selectedProduct.image_url ? (
                       <img
@@ -352,8 +352,8 @@ export default function AdminStudies() {
                       <Package className="h-8 w-8 text-muted-foreground/30" />
                     )}
                   </div>
-                  <div className="space-y-1 min-w-0">
-                    <p className="text-sm font-black truncate">{selectedProduct.name}</p>
+                  <div className="space-y-1 min-w-0 max-w-full overflow-hidden">
+                    <p className="text-sm font-black truncate max-w-full">{selectedProduct.name}</p>
                     <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                       {selectedProduct.category}
                     </p>
