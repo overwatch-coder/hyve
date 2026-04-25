@@ -33,7 +33,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  ArrowLeft,
   FlaskConical,
   Loader2,
   Copy,
@@ -149,6 +148,7 @@ export default function AdminStudyDetail() {
   const [aiField, setAiField] = useState<StudyCopyField | null>(null);
   const [aiInstruction, setAiInstruction] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
+  const [copyingInviteId, setCopyingInviteId] = useState<string | null>(null);
   const [showDisableLinkConfirm, setShowDisableLinkConfirm] = useState(false);
   const [showDeleteLinkConfirm, setShowDeleteLinkConfirm] = useState(false);
 
@@ -261,7 +261,7 @@ export default function AdminStudyDetail() {
       );
       return inviteId;
     },
-    onSuccess: (inviteId) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-study-invites", studyId] });
       toast.success("Invite email queued");
       setSendingEmailId(null);
@@ -435,6 +435,14 @@ export default function AdminStudyDetail() {
     navigator.clipboard.writeText(publicJoinUrl);
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
+  };
+
+  const copyInviteUrl = (code: string) => {
+    const url = `${window.location.origin}/study/${code}`;
+    navigator.clipboard.writeText(url);
+    setCopyingInviteId(code);
+    setTimeout(() => setCopyingInviteId(null), 2000);
+    toast.success(`Study link copied`);
   };
 
   const setStatus = (status: string) => {
@@ -1100,6 +1108,19 @@ export default function AdminStudyDetail() {
                           </td>
                           <td className="px-4 py-2.5 text-center">
                             <div className="flex items-center justify-center gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                title="Copy study link with this code"
+                                onClick={() => copyInviteUrl(invite.code)}
+                              >
+                                {copyingInviteId === invite.code ? (
+                                  <CheckCheck className="h-3.5 w-3.5 text-emerald-500" />
+                                ) : (
+                                  <Copy className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
                               {invite.participant_email && !invite.used ? (
                                 <Button
                                   size="sm"
