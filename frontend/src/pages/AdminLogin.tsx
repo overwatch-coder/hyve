@@ -39,7 +39,7 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center">
       <Card className="w-full max-w-md border-border/40 shadow-2xl shadow-primary/5">
         <CardContent className="p-8 space-y-8">
           {/* Logo */}
