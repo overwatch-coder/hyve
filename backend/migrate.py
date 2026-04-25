@@ -36,11 +36,15 @@ def bootstrap_if_needed() -> None:
     cfg = build_alembic_config()
 
     if not user_tables:
-        # Fresh database: create the current schema once, then mark baseline.
+        # Fresh database: create the current schema in full, then stamp HEAD
+        # (all migrations are implicitly included via create_all).
         models.Base.metadata.create_all(bind=engine)
-
-    # Existing legacy database (or fresh one just created): mark baseline revision.
-    command.stamp(cfg, "head")
+        command.stamp(cfg, "head")
+    else:
+        # Existing legacy database: stamp at the BASELINE revision only.
+        # The upgrade() call in run() will then apply all subsequent migrations
+        # (e.g. adding new columns introduced after the baseline).
+        command.stamp(cfg, "20260425_0001")
 
 
 def run() -> None:

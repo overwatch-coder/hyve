@@ -27,7 +27,16 @@ import AdminStudies from "@/pages/AdminStudies";
 import AdminStudyDetail from "@/pages/AdminStudyDetail";
 import AdminExperimentAnalysis from "@/pages/AdminExperimentAnalysis";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 3,       // 3 min: data considered fresh, no background refetch
+      gcTime: 1000 * 60 * 10,          // 10 min: keep inactive cache entries
+      refetchOnWindowFocus: false,      // don't refetch when tab regains focus
+      retry: 1,
+    },
+  },
+});
 
 function App() {
   return (
