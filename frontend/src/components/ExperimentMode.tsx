@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   CheckSquare,
   Square,
+  Loader2,
 } from "lucide-react";
 import {
   Dialog,
@@ -154,10 +155,10 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
 
   const TASKS = getTasks(platform);
 
-  const { data: reviews } = useQuery({
+  const { data: reviews, isLoading: reviewsLoading, isError: reviewsError } = useQuery({
     queryKey: ["product-reviews-traditional", product?.id],
     queryFn: async () => {
-      const res = await api.get(`/reviews?product_id=${product.id}&size=200`);
+      const res = await api.get(`/reviews?product_id=${product.id}&size=500`);
       return res.data.items;
     },
     enabled: platform === "traditional" && !!product?.id,
@@ -811,9 +812,16 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
 
             {(!reviews || reviews.length === 0) && (
               <div className="text-center py-16 bg-muted/20 rounded-2xl border border-dashed border-border/40">
-                <p className="text-muted-foreground text-sm font-medium">
-                  Loading reviews...
-                </p>
+                {reviewsLoading ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <p className="text-muted-foreground text-sm font-medium">Loading reviews…</p>
+                  </div>
+                ) : reviewsError ? (
+                  <p className="text-destructive text-sm font-medium">Failed to load reviews. Please refresh.</p>
+                ) : (
+                  <p className="text-muted-foreground text-sm font-medium">No reviews found for this product.</p>
+                )}
               </div>
             )}
           </div>

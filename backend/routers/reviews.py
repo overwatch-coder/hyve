@@ -18,7 +18,7 @@ router = APIRouter(prefix="/reviews", tags=["Reviews"])
 def get_reviews(
     product_id: int, 
     page: int = Query(1, ge=1), 
-    size: int = Query(10, ge=1, le=100), 
+    size: int = Query(10, ge=1, le=500), 
     db: Session = Depends(get_db)
 ):
     query = db.query(models.Review).filter(models.Review.product_id == product_id)

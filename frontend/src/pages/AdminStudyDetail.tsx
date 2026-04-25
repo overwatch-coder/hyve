@@ -59,6 +59,13 @@ type Study = {
   created_at: string;
 };
 
+type ProductOption = {
+  id: number;
+  name: string;
+  category: string;
+  status: string;
+};
+
 type Invite = {
   id: number;
   code: string;
@@ -136,6 +143,18 @@ export default function AdminStudyDetail() {
   // Local edit state for study config
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Study>>({});
+
+  const { data: productsResponse } = useQuery<{ items: ProductOption[] }>({
+    queryKey: ["study-product-options"],
+    queryFn: async () => {
+      const res = await api.get("/products?page=1&size=100");
+      return res.data;
+    },
+  });
+
+  const readyProducts = (productsResponse?.items || []).filter(
+    (p) => p.status === "ready",
+  );
 
   const { data: study, isLoading: studyLoading } = useQuery<Study>({
     queryKey: ["admin-study", studyId],
@@ -320,6 +339,7 @@ export default function AdminStudyDetail() {
   const startEditing = () => {
     if (study) {
       setEditForm({
+        product_id: study.product_id,
         title: study.title,
         description: study.description,
         consent_text: study.consent_text,
@@ -361,6 +381,7 @@ export default function AdminStudyDetail() {
   if (!study) return null;
 
   return (
+    <>
     <div className="flex flex-col gap-6 animate-fade-in pb-12">
       {/* Page header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -439,27 +460,65 @@ export default function AdminStudyDetail() {
           <CardContent className="space-y-4">
             {editing ? (
               <>
+                <Field label="Product">
+                  <select
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    value={editForm.product_id ?? ""}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, product_id: parseInt(e.target.value) })
+                    }
+                  >
+                    <option value="">Select a product…</option>
+                    {readyProducts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name.length > 55 ? `${p.name.slice(0, 55)}…` : p.name} ({p.category})
+                      </option>
+                    ))}
+                    {/* keep the current product visible even if it's not "ready" */}
+                    {!readyProducts.find((p) => p.id === editForm.product_id) &&
+                      editForm.product_id && (
+                        <option value={editForm.product_id}>
+                          Product ID {editForm.product_id} (current)
+                        </option>
+                      )}
+                  </select>
+                  <p className="text-[10px] text-muted-foreground/60">
+                    Only products that finished analysis are shown. The current product is always kept.
+                  </p>
+                </Field>
                 <Field label="Title">
                   <Input
                     value={editForm.title ?? ""}
                     onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
                   />
                 </Field>
-                <Field label="Description">
+                <Field
+                  label="Description"
+                  onAiClick={() => openAiField("description")}
+                  fieldValue={editForm.description}
+                >
                   <Textarea
                     value={editForm.description ?? ""}
                     onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                     rows={2}
                   />
                 </Field>
-                <Field label="Consent Statement">
+                <Field
+                  label="Consent Statement"
+                  onAiClick={() => openAiField("consent_text")}
+                  fieldValue={editForm.consent_text}
+                >
                   <Textarea
                     value={editForm.consent_text ?? ""}
                     onChange={(e) => setEditForm({ ...editForm, consent_text: e.target.value })}
                     rows={3}
                   />
                 </Field>
-                <Field label="Instructions — HYVE Arm">
+                <Field
+                  label="Instructions — HYVE Arm"
+                  onAiClick={() => openAiField("instructions_hyve")}
+                  fieldValue={editForm.instructions_hyve}
+                >
                   <Textarea
                     value={editForm.instructions_hyve ?? ""}
                     onChange={(e) =>
@@ -468,7 +527,11 @@ export default function AdminStudyDetail() {
                     rows={3}
                   />
                 </Field>
-                <Field label="Instructions — Traditional Arm">
+                <Field
+                  label="Instructions — Traditional Arm"
+                  onAiClick={() => openAiField("instructions_traditional")}
+                  fieldValue={editForm.instructions_traditional}
+                >
                   <Textarea
                     value={editForm.instructions_traditional ?? ""}
                     onChange={(e) =>
@@ -822,42 +885,59 @@ export default function AdminStudyDetail() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* AI Generate Dialog */}
+      {/* AI Generate / Refine Dialog */}
       <Dialog open={!!aiField} onOpenChange={(open) => !open && setAiField(null)}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="font-black">
-              AI Generate — {aiField ? FIELD_LABELS[aiField] : ""}
-            </DialogTitle>
-            <DialogDescription>
-              Optionally add instructions to guide the AI (e.g. "Keep it under 3 sentences.").
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-2">
-            <Textarea
-              placeholder="e.g. Professional tone. Mention the product name. Keep it concise."
-              value={aiInstruction}
-              onChange={(e) => setAiInstruction(e.target.value)}
-              rows={3}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setAiField(null)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={aiAssistMutation.isPending || !aiField}
-              onClick={() => aiField && aiAssistMutation.mutate(aiField)}
-            >
-              {aiAssistMutation.isPending ? (
-                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Generating…</>
-              ) : (
-                <><Sparkles className="h-4 w-4 mr-2" />Generate</>
-              )}
-            </Button>
-          </DialogFooter>
+          {(() => {
+            const hasContent = aiField
+              ? !!(editForm[aiField as keyof typeof editForm] as string | undefined)?.trim()
+              : false;
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-black">
+                    {hasContent ? "Refine Content" : "AI Generate"} —{" "}
+                    {aiField ? FIELD_LABELS[aiField] : ""}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {hasContent
+                      ? "Describe how you'd like to refine the existing content, or leave blank for automatic improvement."
+                      : "Optionally describe what to generate (e.g. \"Keep it under 3 sentences.\"). Leave blank to auto-generate."}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="py-2">
+                  <Textarea
+                    placeholder={
+                      hasContent
+                        ? "e.g. Make it more concise. Use a professional tone."
+                        : "e.g. Professional tone. Mention the product name. Keep it concise."
+                    }
+                    value={aiInstruction}
+                    onChange={(e) => setAiInstruction(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setAiField(null)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    disabled={aiAssistMutation.isPending || !aiField}
+                    onClick={() => aiField && aiAssistMutation.mutate(aiField)}
+                  >
+                    {aiAssistMutation.isPending ? (
+                      <><Loader2 className="h-4 w-4 animate-spin mr-2" />{hasContent ? "Refining…" : "Generating…"}</>
+                    ) : (
+                      <><Sparkles className="h-4 w-4 mr-2" />{hasContent ? "Refine Content" : "Generate"}</>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
+    </>
   );
 }
 
@@ -865,11 +945,14 @@ function Field({
   label,
   children,
   onAiClick,
+  fieldValue,
 }: {
   label: string;
   children: React.ReactNode;
   onAiClick?: () => void;
+  fieldValue?: string;
 }) {
+  const hasContent = !!fieldValue?.trim();
   return (
     <div className="space-y-1.5">
       {onAiClick ? (
@@ -881,10 +964,11 @@ function Field({
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest"
+            className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest border-primary/30 text-primary hover:bg-primary/5"
             onClick={onAiClick}
           >
-            <Sparkles className="h-3.5 w-3.5" /> AI Generate
+            <Sparkles className="h-3.5 w-3.5" />
+            {hasContent ? "Refine Content" : "AI Generate"}
           </Button>
         </div>
       ) : (
