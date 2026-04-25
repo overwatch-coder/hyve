@@ -12,7 +12,6 @@ import {
   X,
   Zap,
   Target,
-  ClipboardCheck,
   List as ListIcon,
   Star,
   Clock,
@@ -51,6 +50,18 @@ interface ExperimentModeProps {
   studyInstructions?: string;
   onExperimentComplete?: () => void;
 }
+
+type TaskGroup = "strengths" | "weaknesses";
+
+type TaskDef = {
+  id: string;
+  icon: typeof Star;
+  label: string;
+  group: TaskGroup;
+  index: number;
+  refType: "review" | "positive-claim" | "negative-claim";
+  refId: string;
+};
 
 // Both platforms use identical task labels so results are directly comparable.
 // The only difference is HOW the participant locates evidence:
@@ -112,7 +123,7 @@ const getTasks = (platform: string) => {
       refType: platform === "traditional" ? "review" : "negative-claim",
       refId: "weakness_3_ref",
     },
-  ];
+  ] satisfies TaskDef[];
 };
 
 const ExperimentMode: React.FC<ExperimentModeProps> = ({
@@ -123,7 +134,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   locked = false,
   lockedPlatform,
   sessionToken,
-  studyInstructions,
+  studyInstructions: _studyInstructions,
   onExperimentComplete,
 }) => {
   const [platform, setPlatform] = useState<"select" | "hyve" | "traditional">(
@@ -197,7 +208,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
     setHudExpanded(true);
   };
 
-  const isTaskValid = (task: (typeof TASKS)[0]) => {
+  const isTaskValid = (task: TaskDef) => {
     const text = evidence[task.group][task.index]?.trim();
     if (!text) return false;
     if (!evidence.source_refs[task.refId]) return false;

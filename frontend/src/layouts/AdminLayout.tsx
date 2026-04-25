@@ -26,7 +26,6 @@ import {
   ChevronDown,
   Menu,
   PanelLeftClose,
-  PanelLeftOpen,
   Hexagon,
   Activity,
   Package,

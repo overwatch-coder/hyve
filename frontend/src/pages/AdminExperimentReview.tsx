@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { Link } from "react-router-dom";
-import { ShieldAlert, CheckCircle2, XCircle, ArrowLeft, RefreshCw, User, Beaker, BarChart2 } from "lucide-react";
+import { ShieldAlert, CheckCircle2, XCircle, RefreshCw, User, Beaker, BarChart2 } from "lucide-react";
 import {
   Card,
   CardContent,
