@@ -199,18 +199,6 @@ export default function RootLayout() {
             </DropdownMenu>
 
             <Link
-              to="/test-analytics"
-              className={`text-sm font-semibold transition-colors flex items-center gap-1.5 ${
-                location.pathname === "/test-analytics"
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <BarChart2 className="h-3.5 w-3.5" />
-              A/B Results
-            </Link>
-
-            <Link
               to="/study"
               className={`text-sm font-semibold transition-colors flex items-center gap-1.5 ${
                 location.pathname.startsWith("/study")
@@ -220,6 +208,18 @@ export default function RootLayout() {
             >
               <Microscope className="h-3.5 w-3.5" />
               Study
+            </Link>
+
+            <Link
+              to="/test-analytics"
+              className={`text-sm font-semibold transition-colors flex items-center gap-1.5 ${
+                location.pathname === "/test-analytics"
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <BarChart2 className="h-3.5 w-3.5" />
+              A/B Results
             </Link>
           </nav>
 
@@ -350,20 +350,6 @@ export default function RootLayout() {
                     </Link>
 
                     <Link
-                      to="/test-analytics"
-                      onClick={() => setSheetOpen(false)}
-                      className={cn(
-                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-bold text-sm",
-                        location.pathname === "/test-analytics"
-                          ? "bg-primary text-white"
-                          : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
-                      )}
-                    >
-                      <BarChart2 className="h-4 w-4" />
-                      A/B Results
-                    </Link>
-
-                    <Link
                       to="/study"
                       onClick={() => setSheetOpen(false)}
                       className={cn(
@@ -375,6 +361,20 @@ export default function RootLayout() {
                     >
                       <Microscope className="h-4 w-4" />
                       Study
+                    </Link>
+
+                    <Link
+                      to="/test-analytics"
+                      onClick={() => setSheetOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-bold text-sm",
+                        location.pathname === "/test-analytics"
+                          ? "bg-primary text-white"
+                          : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
+                      )}
+                    >
+                      <BarChart2 className="h-4 w-4" />
+                      A/B Results
                     </Link>
                   </div>
 
