@@ -226,7 +226,7 @@ export default function StudyLanding() {
                       Task Instructions
                     </p>
                     {study.assigned_platform && (
-                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                      <span className="text-[10px] hidden font-black uppercase px-2 py-0.5 rounded-full bg-primary/10 text-primary">
                         {study.assigned_platform}
                       </span>
                     )}

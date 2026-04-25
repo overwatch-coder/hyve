@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useAdmin } from "@/hooks/useAdmin";
@@ -23,7 +23,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  ArrowLeft,
   Plus,
   FlaskConical,
   Loader2,
@@ -185,7 +184,7 @@ export default function AdminStudies() {
         err instanceof Error
           ? err.message
           : (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
-            "AI generation failed";
+          "AI generation failed";
       toast.error(msg);
     },
   });
@@ -248,6 +247,11 @@ export default function AdminStudies() {
           </div>
         ) : studies.length === 0 ? (
           <Card className="border-dashed border-border/50">
+            <CardHeader className="sr-only">
+              <CardTitle className="text-sm font-black">No studies yet</CardTitle>
+              <CardDescription className="text-sm text-muted-foreground">Create one to get started.</CardDescription>
+            </CardHeader>
+
             <CardContent className="flex flex-col items-center justify-center py-16 gap-4">
               <FlaskConical className="h-10 w-10 text-muted-foreground/30" />
               <p className="text-sm text-muted-foreground font-medium">
@@ -266,6 +270,13 @@ export default function AdminStudies() {
                 className="border-border/40 hover:border-border transition-colors cursor-pointer"
                 onClick={() => navigate(`/admin/experiments/studies/${study.id}`)}
               >
+                <CardHeader className="sr-only">
+                  <CardTitle className="text-sm font-black">{study.title}</CardTitle>
+                  <CardDescription className="text-sm text-muted-foreground">
+                    Product ID: {study.product_id} · Created{" "}
+                    {new Date(study.created_at).toLocaleDateString()}
+                  </CardDescription>
+                </CardHeader>
                 <CardContent className="p-5 flex items-center justify-between gap-4">
                   <div className="space-y-1 flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -353,15 +364,10 @@ export default function AdminStudies() {
                     )}
                   </div>
                   <div className="space-y-1 min-w-0 max-w-full overflow-hidden">
-                    <p className="text-sm font-black truncate max-w-full">{selectedProduct.name}</p>
+                    <p className="text-sm font-black clamp-2 max-w-full">{selectedProduct.name}</p>
                     <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                       {selectedProduct.category}
                     </p>
-                    {selectedProduct.summary && (
-                      <p className="text-xs text-muted-foreground line-clamp-3">
-                        {selectedProduct.summary}
-                      </p>
-                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -381,7 +387,7 @@ export default function AdminStudies() {
                 <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
                   Description
                 </label>
-                <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => openAiField("description")}> 
+                <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => openAiField("description")}>
                   <Sparkles className="h-3.5 w-3.5" /> AI Generate
                 </Button>
               </div>
@@ -397,7 +403,7 @@ export default function AdminStudies() {
                 <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
                   Consent Statement
                 </label>
-                <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => openAiField("consent_text")}> 
+                <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => openAiField("consent_text")}>
                   <Sparkles className="h-3.5 w-3.5" /> AI Generate
                 </Button>
               </div>
@@ -413,7 +419,7 @@ export default function AdminStudies() {
                 <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
                   Instructions — HYVE Arm
                 </label>
-                <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => openAiField("instructions_hyve")}> 
+                <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => openAiField("instructions_hyve")}>
                   <Sparkles className="h-3.5 w-3.5" /> AI Generate
                 </Button>
               </div>
@@ -429,7 +435,7 @@ export default function AdminStudies() {
                 <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
                   Instructions — Traditional Arm
                 </label>
-                <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => openAiField("instructions_traditional")}> 
+                <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => openAiField("instructions_traditional")}>
                   <Sparkles className="h-3.5 w-3.5" /> AI Generate
                 </Button>
               </div>

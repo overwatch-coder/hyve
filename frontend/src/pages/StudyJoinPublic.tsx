@@ -19,7 +19,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   Link2,
-  BookOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,8 +26,6 @@ type PublicStudyInfo = {
   title: string;
   description?: string;
   consent_text?: string;
-  instructions_hyve?: string;
-  instructions_traditional?: string;
   status: string;
   public_link_active: boolean;
 };
@@ -237,41 +234,6 @@ export default function StudyJoinPublic() {
                       agree to participate voluntarily.
                     </label>
                   </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Instructions preview */}
-            {(studyInfo.instructions_hyve || studyInfo.instructions_traditional) && (
-              <Card className="border-border/50 bg-muted/20">
-                <CardContent className="p-5 space-y-4">
-                  <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground">
-                    <BookOpen className="h-3.5 w-3.5" />
-                    Task Instructions
-                  </div>
-                  <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
-                    Participants are assigned to one arm at start. You may receive HYVE or Traditional instructions:
-                  </p>
-                  {studyInfo.instructions_hyve && (
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-primary/10 text-primary inline-flex">
-                        HYVE
-                      </span>
-                      <div className="text-xs text-muted-foreground leading-relaxed bg-background/60 rounded-lg border border-border/40 p-3 whitespace-pre-wrap">
-                        {studyInfo.instructions_hyve}
-                      </div>
-                    </div>
-                  )}
-                  {studyInfo.instructions_traditional && (
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-muted text-muted-foreground inline-flex">
-                        Traditional
-                      </span>
-                      <div className="text-xs text-muted-foreground leading-relaxed bg-background/60 rounded-lg border border-border/40 p-3 whitespace-pre-wrap">
-                        {studyInfo.instructions_traditional}
-                      </div>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             )}
