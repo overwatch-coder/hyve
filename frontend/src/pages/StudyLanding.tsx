@@ -81,8 +81,6 @@ export default function StudyLanding() {
           ?.data?.detail ?? "Invalid invite code")
       : null;
 
-  const studyNotActive =
-    study && study.valid === false && study.study_status !== "active";
   const studyIsDraft = study && study.study_status === "draft";
   const studyIsClosed = study && study.study_status === "closed";
 
