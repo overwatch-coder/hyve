@@ -410,10 +410,35 @@ def generate_invites(
     if count < 1 or count > 200:
         raise HTTPException(status_code=400, detail="count must be between 1 and 200")
 
-    # Balanced 50/50 platform assignment
-    platforms = ["hyve", "traditional"] * (count // 2)
-    if count % 2 == 1:
-        platforms.append("hyve")
+    # Balanced platform assignment: check existing counts for this study first,
+    # then fill greedily so totals stay as even as possible.
+    hyve_count = (
+        db.query(func.count(models.ExperimentInvite.id))
+        .filter(
+            models.ExperimentInvite.study_id == study_id,
+            models.ExperimentInvite.assigned_platform == "hyve",
+        )
+        .scalar()
+        or 0
+    )
+    trad_count = (
+        db.query(func.count(models.ExperimentInvite.id))
+        .filter(
+            models.ExperimentInvite.study_id == study_id,
+            models.ExperimentInvite.assigned_platform == "traditional",
+        )
+        .scalar()
+        or 0
+    )
+    platforms: list[str] = []
+    h, t = hyve_count, trad_count
+    for _ in range(count):
+        if h <= t:
+            platforms.append("hyve")
+            h += 1
+        else:
+            platforms.append("traditional")
+            t += 1
 
     invites = []
     for i, platform in enumerate(platforms):
@@ -539,7 +564,7 @@ def delete_invite(
     db: Session = Depends(get_db),
     admin: dict = Depends(admin_required),
 ):
-    """Delete an unused invite code. Returns 409 if the code has already been used."""
+    """Delete an invite code (admins may delete used codes too)."""
     invite = (
         db.query(models.ExperimentInvite)
         .filter(
@@ -550,9 +575,30 @@ def delete_invite(
     )
     if not invite:
         raise HTTPException(status_code=404, detail="Invite not found")
-    if invite.used:
-        raise HTTPException(status_code=409, detail="Cannot delete an invite that has already been used")
     db.delete(invite)
+    db.commit()
+
+
+class BulkDeleteInvitesRequest(schemas.BaseModel):
+    ids: List[int]
+
+
+@router.delete("/studies/{study_id}/invites", status_code=204)
+def bulk_delete_invites(
+    study_id: int,
+    payload: BulkDeleteInvitesRequest,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    """Bulk-delete invite codes by ID. Deletes both used and unused codes."""
+    (
+        db.query(models.ExperimentInvite)
+        .filter(
+            models.ExperimentInvite.study_id == study_id,
+            models.ExperimentInvite.id.in_(payload.ids),
+        )
+        .delete(synchronize_session=False)
+    )
     db.commit()
 
 
@@ -663,6 +709,133 @@ def export_study_results(
         iter([output.getvalue()]),
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ─── Public Link Management (Admin) ──────────────────────────────────────────
+
+@router.post("/studies/{study_id}/public-link", response_model=schemas.PublicLinkOut)
+def generate_public_link(
+    study_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    """Generate (or rotate) the public join token for a study."""
+    study = db.query(models.ExperimentStudy).filter(models.ExperimentStudy.id == study_id).first()
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    token = str(uuid_lib.uuid4()).replace("-", "")
+    study.public_token = token  # type: ignore[assignment]
+    db.commit()
+    return schemas.PublicLinkOut(public_token=token)
+
+
+@router.delete("/studies/{study_id}/public-link", status_code=204)
+def disable_public_link(
+    study_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    """Disable the public join link by clearing the token."""
+    study = db.query(models.ExperimentStudy).filter(models.ExperimentStudy.id == study_id).first()
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    study.public_token = None  # type: ignore[assignment]
+    db.commit()
+
+
+# ─── Public Join Flow (no auth) ───────────────────────────────────────────────
+
+@router.get("/public/join/{public_token}", response_model=schemas.PublicStudyInfoOut)
+def get_public_study_info(public_token: str, db: Session = Depends(get_db)):
+    """Return study title, description, and consent text for the join landing page."""
+    study = (
+        db.query(models.ExperimentStudy)
+        .filter(models.ExperimentStudy.public_token == public_token)
+        .first()
+    )
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found or link has been disabled")
+    return schemas.PublicStudyInfoOut(
+        title=study.title,
+        description=study.description,
+        consent_text=study.consent_text,
+        status=study.status,
+    )
+
+
+@router.post("/public/join/{public_token}", response_model=schemas.PublicJoinOut)
+def public_join_study(public_token: str, db: Session = Depends(get_db)):
+    """
+    Atomically create an invite + participant for a public join link.
+    Uses the same balanced platform assignment as admin-generated codes.
+    """
+    study = (
+        db.query(models.ExperimentStudy)
+        .filter(models.ExperimentStudy.public_token == public_token)
+        .first()
+    )
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found or link has been disabled")
+    if study.status != "active":
+        raise HTTPException(status_code=403, detail="This study is not currently accepting participants")
+
+    # Balanced platform assignment (same greedy logic as generate_invites)
+    hyve_count = (
+        db.query(func.count(models.ExperimentInvite.id))
+        .filter(
+            models.ExperimentInvite.study_id == study.id,
+            models.ExperimentInvite.assigned_platform == "hyve",
+        )
+        .scalar()
+        or 0
+    )
+    trad_count = (
+        db.query(func.count(models.ExperimentInvite.id))
+        .filter(
+            models.ExperimentInvite.study_id == study.id,
+            models.ExperimentInvite.assigned_platform == "traditional",
+        )
+        .scalar()
+        or 0
+    )
+    assigned_platform = "hyve" if hyve_count <= trad_count else "traditional"
+
+    # Create invite
+    code = str(uuid_lib.uuid4()).replace("-", "")[:12].upper()
+    invite = models.ExperimentInvite(
+        study_id=study.id,
+        code=code,
+        assigned_platform=assigned_platform,
+        used=True,
+        used_at=datetime.utcnow(),
+    )
+    db.add(invite)
+    db.flush()  # get invite.id without committing
+
+    # Create participant
+    session_token = str(uuid_lib.uuid4())
+    participant = models.ExperimentParticipant(
+        study_id=study.id,
+        invite_id=invite.id,
+        session_token=session_token,
+        assigned_platform=assigned_platform,
+        consent_given_at=datetime.utcnow(),
+        started_at=datetime.utcnow(),
+    )
+    db.add(participant)
+    db.commit()
+
+    instructions = (
+        study.instructions_hyve if assigned_platform == "hyve" else study.instructions_traditional
+    ) or ""
+
+    return schemas.PublicJoinOut(
+        invite_code=code,
+        session_token=session_token,
+        assigned_platform=assigned_platform,
+        product_id=study.product_id,
+        instructions=instructions,
     )
 
 

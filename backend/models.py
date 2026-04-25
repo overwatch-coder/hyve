@@ -207,6 +207,7 @@ class ExperimentStudy(Base):
     instructions_hyve = Column(Text, nullable=True)
     instructions_traditional = Column(Text, nullable=True)
     status = Column(String, default="draft")  # draft | active | closed
+    public_token = Column(String, unique=True, nullable=True, index=True)  # public join link token
     created_at = Column(DateTime, default=datetime.utcnow)
 
     product = relationship("Product")

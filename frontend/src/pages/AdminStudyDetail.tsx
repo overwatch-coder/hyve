@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +44,10 @@ import {
   Plus,
   Trash2,
   Sparkles,
+  Link2,
+  Globe,
+  RefreshCw,
+  LinkOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -56,6 +61,7 @@ type Study = {
   instructions_hyve?: string;
   instructions_traditional?: string;
   status: string;
+  public_token?: string;
   created_at: string;
 };
 
@@ -137,8 +143,12 @@ export default function AdminStudyDetail() {
   const [sendingEmailId, setSendingEmailId] = useState<number | null>(null);
   const [sendingDraftRowId, setSendingDraftRowId] = useState<number | null>(null);
   const [inviteToDelete, setInviteToDelete] = useState<Invite | null>(null);
+  const [selectedInvites, setSelectedInvites] = useState<Set<number>>(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [aiField, setAiField] = useState<StudyCopyField | null>(null);
   const [aiInstruction, setAiInstruction] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [showDisableLinkConfirm, setShowDisableLinkConfirm] = useState(false);
 
   // Local edit state for study config
   const [editing, setEditing] = useState(false);
@@ -284,6 +294,43 @@ export default function AdminStudyDetail() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      await api.delete(`/experiments/studies/${studyId}/invites`, {
+        headers: getAuthHeaders(),
+        data: { ids },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-study-invites", studyId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-study-analytics", studyId] });
+      toast.success(`Deleted ${selectedInvites.size} invite code${selectedInvites.size !== 1 ? "s" : ""}`);
+      setSelectedInvites(new Set());
+      setShowBulkDeleteConfirm(false);
+    },
+    onError: () => {
+      toast.error("Failed to bulk-delete invites");
+      setShowBulkDeleteConfirm(false);
+    },
+  });
+
+  const toggleSelectInvite = (id: number) => {
+    setSelectedInvites((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedInvites.size === invites.length) {
+      setSelectedInvites(new Set());
+    } else {
+      setSelectedInvites(new Set(invites.map((i) => i.id)));
+    }
+  };
+
   const aiAssistMutation = useMutation({
     mutationFn: async (field: StudyCopyField) => {
       if (!study?.product_id) throw new Error("Study has no linked product");
@@ -318,6 +365,47 @@ export default function AdminStudyDetail() {
   const openAiField = (field: StudyCopyField) => {
     setAiField(field);
     setAiInstruction("");
+  };
+
+  const generatePublicLinkMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post(
+        `/experiments/studies/${studyId}/public-link`,
+        {},
+        { headers: getAuthHeaders() },
+      );
+      return res.data as { public_token: string };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-study", studyId] });
+      toast.success("Public link generated");
+    },
+    onError: () => toast.error("Failed to generate public link"),
+  });
+
+  const disablePublicLinkMutation = useMutation({
+    mutationFn: async () => {
+      await api.delete(`/experiments/studies/${studyId}/public-link`, {
+        headers: getAuthHeaders(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-study", studyId] });
+      setShowDisableLinkConfirm(false);
+      toast.success("Public link disabled");
+    },
+    onError: () => toast.error("Failed to disable public link"),
+  });
+
+  const publicJoinUrl = study?.public_token
+    ? `${window.location.origin}/join/${study.public_token}`
+    : null;
+
+  const copyPublicLink = () => {
+    if (!publicJoinUrl) return;
+    navigator.clipboard.writeText(publicJoinUrl);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   };
 
   const setStatus = (status: string) => {
@@ -580,138 +668,267 @@ export default function AdminStudyDetail() {
           </CardContent>
         </Card>
 
+        {/* Public Join Link */}
+        <Card className="border-border/40">
+          <CardHeader>
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="space-y-1">
+                <CardTitle className="text-base font-black flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-primary" />
+                  Public Join Link
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Share one link on social media or messaging apps. Anyone who clicks and proceeds automatically gets a unique invite code.
+                </p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {publicJoinUrl ? (
+              <>
+                <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/20 p-3">
+                  <Link2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="font-mono text-xs text-muted-foreground truncate flex-1">
+                    {publicJoinUrl}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 shrink-0"
+                    onClick={copyPublicLink}
+                  >
+                    {linkCopied ? (
+                      <CheckCheck className="h-3.5 w-3.5 text-emerald-500" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    onClick={copyPublicLink}
+                  >
+                    {linkCopied ? (
+                      <><CheckCheck className="h-3.5 w-3.5 text-emerald-500" />Copied!</>
+                    ) : (
+                      <><Copy className="h-3.5 w-3.5" />Copy Link</>
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={generatePublicLinkMutation.isPending}
+                    onClick={() => generatePublicLinkMutation.mutate()}
+                  >
+                    {generatePublicLinkMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    )}
+                    Rotate Link
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => setShowDisableLinkConfirm(true)}
+                  >
+                    <LinkOff className="h-3.5 w-3.5" />
+                    Disable
+                  </Button>
+                </div>
+                <p className="text-[10px] text-muted-foreground/60">
+                  Rotating generates a new link; the old one stops working immediately. Disabling removes the link entirely.
+                </p>
+              </>
+            ) : (
+              <div className="flex flex-col items-start gap-4">
+                <div className="rounded-xl border border-dashed border-border/40 bg-muted/10 p-5 w-full text-center space-y-2">
+                  <Globe className="h-6 w-6 text-muted-foreground/40 mx-auto" />
+                  <p className="text-xs text-muted-foreground">
+                    No public link yet. Generate one to start sharing.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={generatePublicLinkMutation.isPending}
+                  onClick={() => generatePublicLinkMutation.mutate()}
+                >
+                  {generatePublicLinkMutation.isPending ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" />Generating…</>
+                  ) : (
+                    <><Link2 className="h-3.5 w-3.5" />Generate Public Link</>
+                  )}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Invite Generation */}
         <Card className="border-border/40">
           <CardHeader>
             <CardTitle className="text-base font-black">Generate Invite Codes</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5">
+          <CardContent className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              Codes are balanced 50/50 between HYVE and Traditional arms. Each code is single-use.
+              Codes are balanced between HYVE and Traditional arms based on existing counts. Each code is single-use.
             </p>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-                  <Mail className="h-3 w-3" />
-                  Participant Emails
-                </label>
-                <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={addEmailRow}>
-                  <Plus className="h-3.5 w-3.5" /> Add Row
-                </Button>
-              </div>
+            <Tabs defaultValue="blank">
+              <TabsList className="w-full">
+                <TabsTrigger value="blank" className="flex-1">Blank Codes</TabsTrigger>
+                <TabsTrigger value="email" className="flex-1">By Participant Email</TabsTrigger>
+              </TabsList>
 
-              <div className="rounded-xl border border-border/40 overflow-hidden">
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-0 bg-muted/30 border-b border-border/30 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  <div className="px-3 py-2.5">Email</div>
-                  <div className="px-3 py-2.5 text-center">Action</div>
+              {/* ── Blank Codes tab ── */}
+              <TabsContent value="blank" className="space-y-3 pt-2">
+                <div className="rounded-xl border border-border/40 p-4 space-y-3 bg-muted/10">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      Number of Codes
+                    </label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={200}
+                      value={inviteCount}
+                      onChange={(e) => setInviteCount(parseInt(e.target.value) || 1)}
+                      className="w-28"
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => generateMutation.mutate({ count: inviteCount })}
+                    disabled={generateMutation.isPending}
+                  >
+                    {generateMutation.isPending && sendingDraftRowId === null ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Generating…</>
+                    ) : (
+                      "Generate Codes"
+                    )}
+                  </Button>
                 </div>
-                <div className="divide-y divide-border/20">
-                  {emailRows.map((row) => (
-                    <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-0 items-center bg-background">
-                      <div className="px-3 py-2.5">
-                        <Input
-                          type="email"
-                          placeholder="participant@example.com"
-                          value={row.email}
-                          onChange={(e) => updateEmailRow(row.id, e.target.value)}
-                          className="font-mono text-xs"
-                        />
-                      </div>
-                      <div className="px-3 py-2.5 flex items-center justify-end gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wide"
-                          disabled={generateMutation.isPending || row.email.trim().length === 0}
-                          onClick={() => {
-                            setSendingDraftRowId(row.id);
-                            generateMutation.mutate({ emails: [row.email.trim()] });
-                          }}
-                        >
-                          {generateMutation.isPending && sendingDraftRowId === row.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Send className="h-3.5 w-3.5" />
-                          )}
-                          <span className="hidden sm:inline">Send Now</span>
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          onClick={() => removeEmailRow(row.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+              </TabsContent>
+
+              {/* ── By Email tab ── */}
+              <TabsContent value="email" className="space-y-3 pt-2">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                      <Mail className="h-3 w-3" />
+                      Participant Emails
+                    </label>
+                    <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={addEmailRow}>
+                      <Plus className="h-3.5 w-3.5" /> Add Row
+                    </Button>
+                  </div>
+
+                  <div className="rounded-xl border border-border/40 overflow-hidden">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-0 bg-muted/30 border-b border-border/30 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      <div className="px-3 py-2.5">Email</div>
+                      <div className="px-3 py-2.5 text-center">Action</div>
                     </div>
-                  ))}
+                    <div className="divide-y divide-border/20">
+                      {emailRows.map((row) => (
+                        <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-0 items-center bg-background">
+                          <div className="px-3 py-2.5">
+                            <Input
+                              type="email"
+                              placeholder="participant@example.com"
+                              value={row.email}
+                              onChange={(e) => updateEmailRow(row.id, e.target.value)}
+                              className="font-mono text-xs"
+                            />
+                          </div>
+                          <div className="px-3 py-2.5 flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wide"
+                              disabled={generateMutation.isPending || row.email.trim().length === 0}
+                              onClick={() => {
+                                setSendingDraftRowId(row.id);
+                                generateMutation.mutate({ emails: [row.email.trim()] });
+                              }}
+                            >
+                              {generateMutation.isPending && sendingDraftRowId === row.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Send className="h-3.5 w-3.5" />
+                              )}
+                              <span className="hidden sm:inline">Send Now</span>
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={() => removeEmailRow(row.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <p className="text-[10px] text-muted-foreground/70">
+                      Fill any number of rows, then send them one by one or send all filled rows at once.
+                    </p>
+                    <Button
+                      size="sm"
+                      onClick={() => generateMutation.mutate({ emails: filledEmailRows.map((row) => row.email.trim()) })}
+                      disabled={generateMutation.isPending || filledEmailRows.length === 0}
+                    >
+                      {generateMutation.isPending && sendingDraftRowId === null ? (
+                        <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Sending…</>
+                      ) : (
+                        <><Send className="h-3.5 w-3.5 mr-1.5" />Send All Filled</>
+                      )}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <p className="text-[10px] text-muted-foreground/70">
-                  Fill any number of rows, then send them one by one or send all filled rows at once.
-                </p>
-                <Button
-                  size="sm"
-                  onClick={() => generateMutation.mutate({ emails: filledEmailRows.map((row) => row.email.trim()) })}
-                  disabled={generateMutation.isPending || filledEmailRows.length === 0}
-                >
-                  {generateMutation.isPending && sendingDraftRowId === null ? (
-                    <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Sending…</>
-                  ) : (
-                    <><Send className="h-3.5 w-3.5 mr-1.5" />Send All Filled</>
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-border/40 p-4 space-y-3 bg-muted/10">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Generate Blank Codes
-                </label>
-                <Input
-                  type="number"
-                  min={2}
-                  max={200}
-                  value={inviteCount}
-                  onChange={(e) => setInviteCount(parseInt(e.target.value) || 2)}
-                  className="w-28"
-                />
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => generateMutation.mutate({ count: inviteCount })}
-                disabled={generateMutation.isPending}
-              >
-                {generateMutation.isPending && sendingDraftRowId === null ? (
-                  <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Generating…</>
-                ) : (
-                  "Generate Codes"
-                )}
-              </Button>
-            </div>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
 
         {/* Invite Code Table */}
         {invites.length > 0 && (
           <Card className="border-border/40">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
               <CardTitle className="text-base font-black">
                 Invite Codes ({invites.length})
               </CardTitle>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={copyAllCodes}>
-                {copied ? (
-                  <><CheckCheck className="h-3.5 w-3.5 text-emerald-500" /> Copied!</>
-                ) : (
-                  <><Copy className="h-3.5 w-3.5" /> Copy Unused</>
+              <div className="flex items-center gap-2 flex-wrap">
+                {selectedInvites.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => setShowBulkDeleteConfirm(true)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete {selectedInvites.size} Selected
+                  </Button>
                 )}
-              </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={copyAllCodes}>
+                  {copied ? (
+                    <><CheckCheck className="h-3.5 w-3.5 text-emerald-500" /> Copied!</>
+                  ) : (
+                    <><Copy className="h-3.5 w-3.5" /> Copy Unused</>
+                  )}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               {invitesLoading ? (
@@ -724,6 +941,15 @@ export default function AdminStudyDetail() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border/30 bg-muted/30">
+                        <th className="px-3 py-2.5 w-10">
+                          <input
+                            type="checkbox"
+                            className="rounded border-border accent-primary"
+                            checked={selectedInvites.size === invites.length && invites.length > 0}
+                            onChange={toggleSelectAll}
+                            title="Select all"
+                          />
+                        </th>
                         <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                           Code
                         </th>
@@ -750,11 +976,18 @@ export default function AdminStudyDetail() {
                           key={invite.id}
                           className={cn(
                             "border-b border-border/20 transition-colors",
-                            invite.used
-                              ? "bg-muted/20 text-muted-foreground"
-                              : "hover:bg-muted/10"
+                            selectedInvites.has(invite.id) ? "bg-primary/5" :
+                            invite.used ? "bg-muted/20 text-muted-foreground" : "hover:bg-muted/10"
                           )}
                         >
+                          <td className="px-3 py-2.5 text-center">
+                            <input
+                              type="checkbox"
+                              className="rounded border-border accent-primary"
+                              checked={selectedInvites.has(invite.id)}
+                              onChange={() => toggleSelectInvite(invite.id)}
+                            />
+                          </td>
                           <td className="px-4 py-2.5 font-mono tracking-widest font-bold text-xs">
                             {invite.code}
                           </td>
@@ -800,25 +1033,24 @@ export default function AdminStudyDetail() {
                           </td>
                           <td className="px-4 py-2.5 text-center">
                             <div className="flex items-center justify-center gap-1">
-                            {invite.participant_email && !invite.used ? (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 px-2 gap-1 text-[10px] font-black uppercase tracking-wide"
-                                disabled={sendingEmailId === invite.id || sendEmailMutation.isPending}
-                                onClick={() => {
-                                  setSendingEmailId(invite.id);
-                                  sendEmailMutation.mutate(invite.id);
-                                }}
-                              >
-                                {sendingEmailId === invite.id ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <><Mail className="h-3 w-3" /><span className="hidden sm:inline"> Resend</span></>
-                                )}
-                              </Button>
-                            ) : null}
-                            {!invite.used && (
+                              {invite.participant_email && !invite.used ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 gap-1 text-[10px] font-black uppercase tracking-wide"
+                                  disabled={sendingEmailId === invite.id || sendEmailMutation.isPending}
+                                  onClick={() => {
+                                    setSendingEmailId(invite.id);
+                                    sendEmailMutation.mutate(invite.id);
+                                  }}
+                                >
+                                  {sendingEmailId === invite.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <><Mail className="h-3 w-3" /><span className="hidden sm:inline"> Resend</span></>
+                                  )}
+                                </Button>
+                              ) : null}
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -828,10 +1060,6 @@ export default function AdminStudyDetail() {
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
-                            )}
-                            {invite.used && !invite.participant_email && (
-                              <span className="text-muted-foreground/30">—</span>
-                            )}
                             </div>
                           </td>
                         </tr>
@@ -879,6 +1107,60 @@ export default function AdminStudyDetail() {
                 <><Loader2 className="h-4 w-4 animate-spin mr-2" />Deleting…</>
               ) : (
                 "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk delete confirmation */}
+      <AlertDialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedInvites.size} Invite Code{selectedInvites.size !== 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the {selectedInvites.size} selected invite code{selectedInvites.size !== 1 ? "s" : ""}.
+              {" "}Any codes that have already been used will also be removed. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => bulkDeleteMutation.mutate(Array.from(selectedInvites))}
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Deleting…</>
+              ) : (
+                `Delete ${selectedInvites.size} Code${selectedInvites.size !== 1 ? "s" : ""}`
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Disable public link confirmation */}
+      <AlertDialog open={showDisableLinkConfirm} onOpenChange={setShowDisableLinkConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disable Public Join Link?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Anyone who currently has the link will no longer be able to use it to join the study.
+              Existing participants who joined via this link are not affected. You can generate a new link at any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => disablePublicLinkMutation.mutate()}
+              disabled={disablePublicLinkMutation.isPending}
+            >
+              {disablePublicLinkMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Disabling…</>
+              ) : (
+                "Disable Link"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

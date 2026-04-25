@@ -22,6 +22,7 @@ import Team from "@/pages/Team";
 import Privacy from "@/pages/Privacy";
 import StudyLanding from "@/pages/StudyLanding";
 import StudySession from "@/pages/StudySession";
+import StudyJoinPublic from "@/pages/StudyJoinPublic";
 import AdminStudies from "@/pages/AdminStudies";
 import AdminStudyDetail from "@/pages/AdminStudyDetail";
 import AdminExperimentAnalysis from "@/pages/AdminExperimentAnalysis";
@@ -38,6 +39,9 @@ function App() {
             <Route path="study" element={<StudyLanding />} />
             <Route path="study/:inviteCode" element={<StudyLanding />} />
             <Route path="study/:inviteCode/session" element={<StudySession />} />
+
+            {/* Public join link — full-screen, no nav shell */}
+            <Route path="join/:publicToken" element={<StudyJoinPublic />} />
 
             {/* Admin login — standalone page */}
             <Route path="admin/login" element={<AdminLogin />} />

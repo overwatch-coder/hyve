@@ -235,6 +235,7 @@ class ExperimentStudyOut(BaseModel):
     instructions_hyve: Optional[str] = None
     instructions_traditional: Optional[str] = None
     status: str
+    public_token: Optional[str] = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -275,6 +276,28 @@ class SessionStartOut(BaseModel):
     assigned_platform: str  # "hyve" | "traditional"
     product_id: int
     instructions: str  # platform-specific instructions
+
+
+class PublicStudyInfoOut(BaseModel):
+    """Lightweight study info shown on the public join landing page."""
+    title: str
+    description: Optional[str] = None
+    consent_text: Optional[str] = None
+    status: str
+
+
+class PublicJoinOut(BaseModel):
+    """Returned when a participant joins via public link."""
+    invite_code: str
+    session_token: str
+    assigned_platform: str  # "hyve" | "traditional"
+    product_id: int
+    instructions: str
+
+
+class PublicLinkOut(BaseModel):
+    """Returned after generating/fetching the public link token."""
+    public_token: str
 
 
 class StudyAnalyticsOut(BaseModel):
