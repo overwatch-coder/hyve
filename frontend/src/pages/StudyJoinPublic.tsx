@@ -27,6 +27,7 @@ type PublicStudyInfo = {
   description?: string;
   consent_text?: string;
   status: string;
+  public_link_active: boolean;
 };
 
 type PublicJoinResponse = {
@@ -91,6 +92,7 @@ export default function StudyJoinPublic() {
 
   const studyNotActive =
     studyInfo && studyInfo.status !== "active";
+  const linkInactive = studyInfo && !studyInfo.public_link_active;
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
@@ -147,6 +149,24 @@ export default function StudyJoinPublic() {
           </Card>
         )}
 
+        {/* Link inactive */}
+        {linkInactive && (
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <CardContent className="p-5 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-amber-500">
+                  This Link Is Inactive
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  The research team has temporarily disabled this public join link.
+                  Please contact the study organizer for an active link.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Study not active */}
         {studyNotActive && (
           <Card className="border-amber-500/30 bg-amber-500/5">
@@ -166,7 +186,7 @@ export default function StudyJoinPublic() {
         )}
 
         {/* Study info + consent */}
-        {studyInfo && studyInfo.status === "active" && (
+        {studyInfo && studyInfo.status === "active" && studyInfo.public_link_active && (
           <>
             {/* Study details card */}
             <Card className="border-border/50">

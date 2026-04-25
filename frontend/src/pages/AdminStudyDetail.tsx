@@ -62,6 +62,7 @@ type Study = {
   instructions_traditional?: string;
   status: string;
   public_token?: string;
+  public_link_active?: boolean;
   created_at: string;
 };
 
@@ -149,6 +150,7 @@ export default function AdminStudyDetail() {
   const [aiInstruction, setAiInstruction] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
   const [showDisableLinkConfirm, setShowDisableLinkConfirm] = useState(false);
+  const [showDeleteLinkConfirm, setShowDeleteLinkConfirm] = useState(false);
 
   // Local edit state for study config
   const [editing, setEditing] = useState(false);
@@ -385,7 +387,7 @@ export default function AdminStudyDetail() {
 
   const disablePublicLinkMutation = useMutation({
     mutationFn: async () => {
-      await api.delete(`/experiments/studies/${studyId}/public-link`, {
+      await api.patch(`/experiments/studies/${studyId}/public-link/disable`, {}, {
         headers: getAuthHeaders(),
       });
     },
@@ -395,6 +397,20 @@ export default function AdminStudyDetail() {
       toast.success("Public link disabled");
     },
     onError: () => toast.error("Failed to disable public link"),
+  });
+
+  const deletePublicLinkMutation = useMutation({
+    mutationFn: async () => {
+      await api.delete(`/experiments/studies/${studyId}/public-link`, {
+        headers: getAuthHeaders(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-study", studyId] });
+      setShowDeleteLinkConfirm(false);
+      toast.success("Public link deleted");
+    },
+    onError: () => toast.error("Failed to delete public link"),
   });
 
   const publicJoinUrl = study?.public_token
@@ -686,6 +702,18 @@ export default function AdminStudyDetail() {
           <CardContent className="space-y-4">
             {publicJoinUrl ? (
               <>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    className={cn(
+                      "text-[10px] font-black uppercase",
+                      study.public_link_active
+                        ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                        : "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                    )}
+                  >
+                    {study.public_link_active ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
                 <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/20 p-3">
                   <Link2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <span className="font-mono text-xs text-muted-foreground truncate flex-1">
@@ -734,15 +762,26 @@ export default function AdminStudyDetail() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    className="gap-1.5 text-amber-500 hover:text-amber-500 hover:bg-amber-500/10"
                     onClick={() => setShowDisableLinkConfirm(true)}
+                    disabled={!study.public_link_active || disablePublicLinkMutation.isPending}
                   >
                     <Link2Off className="h-3.5 w-3.5" />
                     Disable
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => setShowDeleteLinkConfirm(true)}
+                    disabled={deletePublicLinkMutation.isPending}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </Button>
                 </div>
                 <p className="text-[10px] text-muted-foreground/60">
-                  Rotating generates a new link; the old one stops working immediately. Disabling removes the link entirely.
+                  Disable keeps the same link token but blocks joins. Delete removes the link token entirely.
                 </p>
               </>
             ) : (
@@ -1146,14 +1185,14 @@ export default function AdminStudyDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>Disable Public Join Link?</AlertDialogTitle>
             <AlertDialogDescription>
-              Anyone who currently has the link will no longer be able to use it to join the study.
-              Existing participants who joined via this link are not affected. You can generate a new link at any time.
+              This keeps the same link URL but makes it inactive. Anyone opening it will see an inactive-link message and cannot proceed.
+              Existing participants are not affected.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-amber-500 text-white hover:bg-amber-500/90"
               onClick={() => disablePublicLinkMutation.mutate()}
               disabled={disablePublicLinkMutation.isPending}
             >
@@ -1161,6 +1200,33 @@ export default function AdminStudyDetail() {
                 <><Loader2 className="h-4 w-4 animate-spin mr-2" />Disabling…</>
               ) : (
                 "Disable Link"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete public link confirmation */}
+      <AlertDialog open={showDeleteLinkConfirm} onOpenChange={setShowDeleteLinkConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Public Join Link?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes the current public link token. The current URL will stop working and cannot be reactivated.
+              You can generate a brand-new public link later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deletePublicLinkMutation.mutate()}
+              disabled={deletePublicLinkMutation.isPending}
+            >
+              {deletePublicLinkMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Deleting…</>
+              ) : (
+                "Delete Link"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

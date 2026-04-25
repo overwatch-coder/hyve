@@ -726,21 +726,39 @@ def generate_public_link(
         raise HTTPException(status_code=404, detail="Study not found")
     token = str(uuid_lib.uuid4()).replace("-", "")
     study.public_token = token  # type: ignore[assignment]
+    study.public_link_active = True
     db.commit()
     return schemas.PublicLinkOut(public_token=token)
 
 
-@router.delete("/studies/{study_id}/public-link", status_code=204)
+@router.patch("/studies/{study_id}/public-link/disable", status_code=204)
 def disable_public_link(
     study_id: int,
     db: Session = Depends(get_db),
     admin: dict = Depends(admin_required),
 ):
-    """Disable the public join link by clearing the token."""
+    """Disable the public join link while keeping the token."""
+    study = db.query(models.ExperimentStudy).filter(models.ExperimentStudy.id == study_id).first()
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    if not study.public_token:
+        raise HTTPException(status_code=400, detail="No public link to disable")
+    study.public_link_active = False
+    db.commit()
+
+
+@router.delete("/studies/{study_id}/public-link", status_code=204)
+def delete_public_link(
+    study_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    """Delete the public join link token entirely."""
     study = db.query(models.ExperimentStudy).filter(models.ExperimentStudy.id == study_id).first()
     if not study:
         raise HTTPException(status_code=404, detail="Study not found")
     study.public_token = None  # type: ignore[assignment]
+    study.public_link_active = False
     db.commit()
 
 
@@ -755,12 +773,13 @@ def get_public_study_info(public_token: str, db: Session = Depends(get_db)):
         .first()
     )
     if not study:
-        raise HTTPException(status_code=404, detail="Study not found or link has been disabled")
+        raise HTTPException(status_code=404, detail="Study link not found")
     return schemas.PublicStudyInfoOut(
         title=study.title,
         description=study.description,
         consent_text=study.consent_text,
         status=study.status,
+        public_link_active=bool(study.public_link_active),
     )
 
 
@@ -776,7 +795,9 @@ def public_join_study(public_token: str, db: Session = Depends(get_db)):
         .first()
     )
     if not study:
-        raise HTTPException(status_code=404, detail="Study not found or link has been disabled")
+        raise HTTPException(status_code=404, detail="Study link not found")
+    if not study.public_link_active:
+        raise HTTPException(status_code=403, detail="This public link is inactive")
     if study.status != "active":
         raise HTTPException(status_code=403, detail="This study is not currently accepting participants")
 

@@ -236,6 +236,7 @@ class ExperimentStudyOut(BaseModel):
     instructions_traditional: Optional[str] = None
     status: str
     public_token: Optional[str] = None
+    public_link_active: bool = False
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
@@ -284,6 +285,7 @@ class PublicStudyInfoOut(BaseModel):
     description: Optional[str] = None
     consent_text: Optional[str] = None
     status: str
+    public_link_active: bool
 
 
 class PublicJoinOut(BaseModel):
