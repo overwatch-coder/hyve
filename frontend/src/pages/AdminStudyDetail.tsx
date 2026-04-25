@@ -399,6 +399,19 @@ export default function AdminStudyDetail() {
     onError: () => toast.error("Failed to disable public link"),
   });
 
+  const enablePublicLinkMutation = useMutation({
+    mutationFn: async () => {
+      await api.patch(`/experiments/studies/${studyId}/public-link/enable`, {}, {
+        headers: getAuthHeaders(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-study", studyId] });
+      toast.success("Public link enabled");
+    },
+    onError: () => toast.error("Failed to enable public link"),
+  });
+
   const deletePublicLinkMutation = useMutation({
     mutationFn: async () => {
       await api.delete(`/experiments/studies/${studyId}/public-link`, {
@@ -762,12 +775,27 @@ export default function AdminStudyDetail() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="gap-1.5 text-amber-500 hover:text-amber-500 hover:bg-amber-500/10"
-                    onClick={() => setShowDisableLinkConfirm(true)}
-                    disabled={!study.public_link_active || disablePublicLinkMutation.isPending}
+                    className={cn(
+                      "gap-1.5",
+                      study.public_link_active
+                        ? "text-amber-500 hover:text-amber-500 hover:bg-amber-500/10"
+                        : "text-emerald-500 hover:text-emerald-500 hover:bg-emerald-500/10"
+                    )}
+                    onClick={() => {
+                      if (study.public_link_active) {
+                        setShowDisableLinkConfirm(true);
+                      } else {
+                        enablePublicLinkMutation.mutate();
+                      }
+                    }}
+                    disabled={disablePublicLinkMutation.isPending || enablePublicLinkMutation.isPending}
                   >
-                    <Link2Off className="h-3.5 w-3.5" />
-                    Disable
+                    {study.public_link_active ? (
+                      <Link2Off className="h-3.5 w-3.5" />
+                    ) : (
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    )}
+                    {study.public_link_active ? "Disable" : "Enable"}
                   </Button>
                   <Button
                     size="sm"
@@ -781,7 +809,7 @@ export default function AdminStudyDetail() {
                   </Button>
                 </div>
                 <p className="text-[10px] text-muted-foreground/60">
-                  Disable keeps the same link token but blocks joins. Delete removes the link token entirely.
+                  Disable keeps the same link token but blocks joins. Enable reactivates the same link. Delete removes the link token entirely.
                 </p>
               </>
             ) : (

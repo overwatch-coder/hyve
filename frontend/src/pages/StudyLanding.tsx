@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ArrowLeft,
+  BookOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -212,6 +213,26 @@ export default function StudyLanding() {
                   </p>
                   <div className="text-sm text-muted-foreground leading-relaxed bg-muted/30 rounded-lg border border-border/40 p-4">
                     {study.consent_text}
+                  </div>
+                </div>
+              )}
+
+              {/* Arm-specific instructions */}
+              {study.instructions && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                      <BookOpen className="h-3.5 w-3.5" />
+                      Task Instructions
+                    </p>
+                    {study.assigned_platform && (
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                        {study.assigned_platform}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-muted-foreground leading-relaxed bg-muted/30 rounded-lg border border-border/40 p-4 whitespace-pre-wrap">
+                    {study.instructions}
                   </div>
                 </div>
               )}

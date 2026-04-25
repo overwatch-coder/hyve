@@ -267,6 +267,8 @@ class InviteResolveOut(BaseModel):
     title: str
     description: Optional[str] = None
     consent_text: Optional[str] = None
+    assigned_platform: Optional[str] = None  # "hyve" | "traditional"
+    instructions: Optional[str] = None
     valid: bool
     already_used: bool
 
@@ -284,6 +286,8 @@ class PublicStudyInfoOut(BaseModel):
     title: str
     description: Optional[str] = None
     consent_text: Optional[str] = None
+    instructions_hyve: Optional[str] = None
+    instructions_traditional: Optional[str] = None
     status: str
     public_link_active: bool
 

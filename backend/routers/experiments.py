@@ -747,6 +747,22 @@ def disable_public_link(
     db.commit()
 
 
+@router.patch("/studies/{study_id}/public-link/enable", status_code=204)
+def enable_public_link(
+    study_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    """Enable an existing public join link token."""
+    study = db.query(models.ExperimentStudy).filter(models.ExperimentStudy.id == study_id).first()
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    if not study.public_token:
+        raise HTTPException(status_code=400, detail="No public link to enable")
+    study.public_link_active = True
+    db.commit()
+
+
 @router.delete("/studies/{study_id}/public-link", status_code=204)
 def delete_public_link(
     study_id: int,
@@ -778,6 +794,8 @@ def get_public_study_info(public_token: str, db: Session = Depends(get_db)):
         title=study.title,
         description=study.description,
         consent_text=study.consent_text,
+        instructions_hyve=study.instructions_hyve,
+        instructions_traditional=study.instructions_traditional,
         status=study.status,
         public_link_active=bool(study.public_link_active),
     )
@@ -872,12 +890,19 @@ def resolve_invite(invite_code: str, db: Session = Depends(get_db)):
     if not invite:
         raise HTTPException(status_code=404, detail="Invite code not found")
     study = invite.study
+    instructions = (
+        study.instructions_hyve
+        if invite.assigned_platform == "hyve"
+        else study.instructions_traditional
+    ) or ""
     return schemas.InviteResolveOut(
         study_id=study.id,
         product_id=study.product_id,
         title=study.title,
         description=study.description,
         consent_text=study.consent_text,
+        assigned_platform=invite.assigned_platform,
+        instructions=instructions,
         valid=not invite.used and study.status == "active",
         already_used=invite.used,
     )
