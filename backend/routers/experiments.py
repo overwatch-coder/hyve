@@ -905,6 +905,7 @@ def resolve_invite(invite_code: str, db: Session = Depends(get_db)):
         instructions=instructions,
         valid=not invite.used and study.status == "active",
         already_used=invite.used,
+        study_status=study.status,
     )
 
 

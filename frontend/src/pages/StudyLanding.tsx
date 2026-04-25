@@ -81,6 +81,11 @@ export default function StudyLanding() {
           ?.data?.detail ?? "Invalid invite code")
       : null;
 
+  const studyNotActive =
+    study && study.valid === false && study.study_status !== "active";
+  const studyIsDraft = study && study.study_status === "draft";
+  const studyIsClosed = study && study.study_status === "closed";
+
   const handleBack = () => {
     if (window.history.length > 1) {
       navigate(-1);
@@ -152,6 +157,44 @@ export default function StudyLanding() {
               <p className="text-sm text-destructive font-medium">
                 {studyError}
               </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Study unavailable: in draft mode */}
+        {studyIsDraft && (
+          <Card className="border-blue-500/30 bg-blue-500/5">
+            <CardContent className="p-5 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                  Study Not Yet Active
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  This study is still in preparation and is not yet open for
+                  participation. Please check back later or contact the research
+                  team for more information.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Study unavailable: closed */}
+        {studyIsClosed && (
+          <Card className="border-destructive/30 bg-destructive/5">
+            <CardContent className="p-5 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-destructive">
+                  Study Closed
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  This study is no longer accepting new participants. Thank you
+                  for your interest. Please contact the research team if you have
+                  any questions.
+                </p>
+              </div>
             </CardContent>
           </Card>
         )}

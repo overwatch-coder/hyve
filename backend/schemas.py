@@ -271,6 +271,7 @@ class InviteResolveOut(BaseModel):
     instructions: Optional[str] = None
     valid: bool
     already_used: bool
+    study_status: str  # draft | active | closed — used to show why study is unavailable
 
 
 class SessionStartOut(BaseModel):
