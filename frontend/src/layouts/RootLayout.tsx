@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
-import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 import {
   Activity,
@@ -15,6 +14,7 @@ import {
   HelpCircle,
   Lock,
   Users,
+  Microscope,
 } from "lucide-react";
 import {
   Sheet,
@@ -209,6 +209,18 @@ export default function RootLayout() {
               <BarChart2 className="h-3.5 w-3.5" />
               A/B Results
             </Link>
+
+            <Link
+              to="/study"
+              className={`text-sm font-semibold transition-colors flex items-center gap-1.5 ${
+                location.pathname.startsWith("/study")
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Microscope className="h-3.5 w-3.5" />
+              Study
+            </Link>
           </nav>
 
           <div className="flex items-center gap-2 md:gap-4">
@@ -350,6 +362,20 @@ export default function RootLayout() {
                       <BarChart2 className="h-4 w-4" />
                       A/B Results
                     </Link>
+
+                    <Link
+                      to="/study"
+                      onClick={() => setSheetOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-bold text-sm",
+                        location.pathname.startsWith("/study")
+                          ? "bg-primary text-white"
+                          : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
+                      )}
+                    >
+                      <Microscope className="h-4 w-4" />
+                      Study
+                    </Link>
                   </div>
 
                   <div className="mt-4 shrink-0 p-4 rounded-2xl bg-primary/5 border border-primary/10 text-center">
@@ -398,7 +424,6 @@ export default function RootLayout() {
       )}
 
       <TourController />
-      <Toaster />
     </div>
   );
 }

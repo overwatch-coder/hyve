@@ -144,10 +144,16 @@ class SourceRef(BaseModel):
     id: str
 
 
+class RankedFinding(BaseModel):
+    text: str
+
+
 class ExperimentEvidence(BaseModel):
     platform: str
-    weakness_paraphrase: str
-    claim_paraphrase: str
+    strengths: Optional[List[RankedFinding]] = None
+    weaknesses: Optional[List[RankedFinding]] = None
+    weakness_paraphrase: Optional[str] = None
+    claim_paraphrase: Optional[str] = None
     positive_paraphrase: Optional[str] = None
     negative_paraphrase: Optional[str] = None
     strategy_paraphrase: Optional[str] = None
@@ -207,6 +213,17 @@ class ExperimentStudyUpdate(BaseModel):
     instructions_hyve: Optional[str] = None
     instructions_traditional: Optional[str] = None
     status: Optional[str] = None  # draft | active | closed
+
+
+class StudyCopyAssistRequest(BaseModel):
+    product_id: int
+    field: str  # description | consent_text | instructions_hyve | instructions_traditional
+    current_text: Optional[str] = None
+    instruction: Optional[str] = None
+
+
+class StudyCopyAssistResponse(BaseModel):
+    text: str
 
 
 class ExperimentStudyOut(BaseModel):

@@ -18,6 +18,6 @@ SQLAlchemy==2.0.48
 uvicorn==0.41.0
 python-multipart
 pg8000==1.31.2
-psycopg2-binary==2.9.9
+psycopg2
 openpyxl==3.1.5
 pytest==8.3.3

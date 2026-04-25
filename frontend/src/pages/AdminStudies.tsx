@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -27,6 +28,7 @@ import {
   FlaskConical,
   Loader2,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,6 +39,28 @@ type Study = {
   description?: string;
   status: string;
   created_at: string;
+};
+
+type ProductOption = {
+  id: number;
+  name: string;
+  category: string;
+  status: string;
+  image_url?: string;
+  summary?: string;
+};
+
+type StudyCopyField =
+  | "description"
+  | "consent_text"
+  | "instructions_hyve"
+  | "instructions_traditional";
+
+const FIELD_LABELS: Record<StudyCopyField, string> = {
+  description: "Description",
+  consent_text: "Consent Statement",
+  instructions_hyve: "Instructions — HYVE Arm",
+  instructions_traditional: "Instructions — Traditional Arm",
 };
 
 function statusBadge(status: string) {
@@ -53,6 +77,8 @@ export default function AdminStudies() {
   const queryClient = useQueryClient();
 
   const [showCreate, setShowCreate] = useState(false);
+  const [aiField, setAiField] = useState<StudyCopyField | null>(null);
+  const [aiInstruction, setAiInstruction] = useState("");
   const [form, setForm] = useState({
     product_id: "",
     title: "",
@@ -61,6 +87,22 @@ export default function AdminStudies() {
     instructions_hyve: "",
     instructions_traditional: "",
   });
+
+  const { data: productsResponse } = useQuery<{ items: ProductOption[] }>({
+    queryKey: ["study-product-options"],
+    queryFn: async () => {
+      const res = await api.get("/products?page=1&size=100");
+      return res.data;
+    },
+    enabled: isAdmin,
+  });
+
+  const readyProducts = (productsResponse?.items || []).filter(
+    (product) => product.status === "ready",
+  );
+  const selectedProduct = readyProducts.find(
+    (product) => String(product.id) === form.product_id,
+  );
 
   const { data: studies = [], isLoading } = useQuery<Study[]>({
     queryKey: ["admin-studies"],
@@ -102,6 +144,48 @@ export default function AdminStudies() {
       toast.error(msg);
     },
   });
+
+  const aiAssistMutation = useMutation({
+    mutationFn: async (field: StudyCopyField) => {
+      if (!form.product_id) {
+        throw new Error("Select a product first");
+      }
+      const res = await api.post(
+        "/experiments/studies/ai-assist",
+        {
+          product_id: parseInt(form.product_id),
+          field,
+          current_text: form[field],
+          instruction: aiInstruction || undefined,
+        },
+        { headers: getAuthHeaders() },
+      );
+      return { field, text: res.data.text as string };
+    },
+    onSuccess: ({ field, text }) => {
+      setForm((prev) => ({ ...prev, [field]: text }));
+      toast.success(`${FIELD_LABELS[field]} updated`);
+      setAiField(null);
+      setAiInstruction("");
+    },
+    onError: (err: unknown) => {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+            "AI generation failed";
+      toast.error(msg);
+    },
+  });
+
+  const openAiField = (field: StudyCopyField) => {
+    if (!form.product_id) {
+      toast.error("Select a product first");
+      return;
+    }
+    setAiField(field);
+    setAiInstruction("");
+  };
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -188,18 +272,55 @@ export default function AdminStudies() {
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                Product ID *
+                Analyzed Product *
               </label>
-              <Input
-                type="number"
-                placeholder="e.g. 3"
+              <select
+                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={form.product_id}
                 onChange={(e) => setForm({ ...form, product_id: e.target.value })}
-              />
+              >
+                <option value="">Select a ready product</option>
+                {readyProducts.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name} ({product.category})
+                  </option>
+                ))}
+              </select>
               <p className="text-[10px] text-muted-foreground/60">
-                Product must be in "ready" status.
+                Only products that finished analysis are available for studies.
               </p>
             </div>
+
+            {selectedProduct && (
+              <Card className="border-border/40 bg-muted/20">
+                <CardContent className="p-4 flex gap-4 items-start">
+                  <div className="h-20 w-20 rounded-xl overflow-hidden border border-border/30 bg-background shrink-0">
+                    {selectedProduct.image_url ? (
+                      <img
+                        src={selectedProduct.image_url}
+                        alt={selectedProduct.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                        No Image
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1 min-w-0">
+                    <p className="text-sm font-black truncate">{selectedProduct.name}</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      {selectedProduct.category}
+                    </p>
+                    {selectedProduct.summary && (
+                      <p className="text-xs text-muted-foreground line-clamp-3">
+                        {selectedProduct.summary}
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             <div className="space-y-1.5">
               <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
                 Study Title *
@@ -211,9 +332,14 @@ export default function AdminStudies() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                Description
-              </label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  Description
+                </label>
+                <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => openAiField("description")}> 
+                  <Sparkles className="h-3.5 w-3.5" /> AI Generate
+                </Button>
+              </div>
               <Textarea
                 placeholder="Brief description shown to participants on the landing page."
                 value={form.description}
@@ -222,9 +348,14 @@ export default function AdminStudies() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                Consent Statement
-              </label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  Consent Statement
+                </label>
+                <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => openAiField("consent_text")}> 
+                  <Sparkles className="h-3.5 w-3.5" /> AI Generate
+                </Button>
+              </div>
               <Textarea
                 placeholder="Informed consent text shown before participants begin."
                 value={form.consent_text}
@@ -233,9 +364,14 @@ export default function AdminStudies() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                Instructions — HYVE Arm
-              </label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  Instructions — HYVE Arm
+                </label>
+                <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => openAiField("instructions_hyve")}> 
+                  <Sparkles className="h-3.5 w-3.5" /> AI Generate
+                </Button>
+              </div>
               <Textarea
                 placeholder="Task instructions for participants assigned to HYVE."
                 value={form.instructions_hyve}
@@ -244,9 +380,14 @@ export default function AdminStudies() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                Instructions — Traditional Arm
-              </label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  Instructions — Traditional Arm
+                </label>
+                <Button size="sm" variant="outline" className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest" onClick={() => openAiField("instructions_traditional")}> 
+                  <Sparkles className="h-3.5 w-3.5" /> AI Generate
+                </Button>
+              </div>
               <Textarea
                 placeholder="Task instructions for participants assigned to Traditional."
                 value={form.instructions_traditional}
@@ -270,6 +411,51 @@ export default function AdminStudies() {
                 <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Creating…</>
               ) : (
                 "Create Study"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!aiField} onOpenChange={(open) => !open && setAiField(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-black">AI Copy Assist</DialogTitle>
+            <DialogDescription>
+              Generate or refine {aiField ? FIELD_LABELS[aiField].toLowerCase() : "study copy"} using the selected product context.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-xl border border-border/40 bg-muted/20 p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Current Text</p>
+              <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">
+                {aiField ? form[aiField] || "No existing text yet." : "No field selected."}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                Custom Instruction
+              </label>
+              <Textarea
+                rows={4}
+                placeholder="Optional: make it more formal, shorter, friendlier, more academic, emphasize anonymity, etc."
+                value={aiInstruction}
+                onChange={(e) => setAiInstruction(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAiField(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!aiField || aiAssistMutation.isPending}
+              onClick={() => aiField && aiAssistMutation.mutate(aiField)}
+            >
+              {aiAssistMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Generating…</>
+              ) : (
+                <><Sparkles className="h-4 w-4 mr-2" /> Generate</>
               )}
             </Button>
           </DialogFooter>

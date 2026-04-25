@@ -56,81 +56,63 @@ interface ExperimentModeProps {
 //   - HYVE:        from the AI decision tree (theme / claim / sentiment nodes)
 //   - Traditional: from raw reviews
 const getTasks = (platform: string) => {
-  if (platform === "traditional") {
-    return [
-      {
-        id: "weakness",
-        icon: Target,
-        label: "Identify Top Weakness",
-        field: "weakness_paraphrase",
-        refType: "review",
-        refId: "weakness_ref",
-      },
-      {
-        id: "claim",
-        icon: ClipboardCheck,
-        label: "Find Supporting Claim",
-        field: "claim_paraphrase",
-        refType: "review",
-        refId: "claim_ref",
-      },
-      {
-        id: "positive",
-        icon: Zap,
-        label: "Find Positive Aspect",
-        field: "positive_paraphrase",
-        refType: "review",
-        refId: "positive_ref",
-      },
-      {
-        id: "negative",
-        icon: Zap,
-        label: "Find Negative Aspect",
-        field: "negative_paraphrase",
-        refType: "review",
-        refId: "negative_ref",
-      },
-    ];
-  }
-  // HYVE: same 4 tasks, evidence sourced from the decision tree
   return [
     {
-      id: "weakness",
+      id: "strength-1",
+      icon: Star,
+      label: "Top Strength 1",
+      group: "strengths",
+      index: 0,
+      refType: platform === "traditional" ? "review" : "positive-claim",
+      refId: "strength_1_ref",
+    },
+    {
+      id: "strength-2",
+      icon: Star,
+      label: "Top Strength 2",
+      group: "strengths",
+      index: 1,
+      refType: platform === "traditional" ? "review" : "positive-claim",
+      refId: "strength_2_ref",
+    },
+    {
+      id: "strength-3",
+      icon: Star,
+      label: "Top Strength 3",
+      group: "strengths",
+      index: 2,
+      refType: platform === "traditional" ? "review" : "positive-claim",
+      refId: "strength_3_ref",
+    },
+    {
+      id: "weakness-1",
       icon: Target,
-      label: "Identify Top Weakness",
-      field: "weakness_paraphrase",
-      refType: "theme",
-      refId: "weakness_ref",
+      label: "Top Weakness 1",
+      group: "weaknesses",
+      index: 0,
+      refType: platform === "traditional" ? "review" : "negative-claim",
+      refId: "weakness_1_ref",
     },
     {
-      id: "claim",
-      icon: ClipboardCheck,
-      label: "Find Supporting Claim",
-      field: "claim_paraphrase",
-      refType: "claim",
-      refId: "claim_ref",
+      id: "weakness-2",
+      icon: Target,
+      label: "Top Weakness 2",
+      group: "weaknesses",
+      index: 1,
+      refType: platform === "traditional" ? "review" : "negative-claim",
+      refId: "weakness_2_ref",
     },
     {
-      id: "positive",
-      icon: Zap,
-      label: "Find Positive Aspect",
-      field: "positive_paraphrase",
-      refType: "sentiment",
-      refId: "positive_ref",
-    },
-    {
-      id: "negative",
-      icon: Zap,
-      label: "Find Negative Aspect",
-      field: "negative_paraphrase",
-      refType: "sentiment",
-      refId: "negative_ref",
+      id: "weakness-3",
+      icon: Target,
+      label: "Top Weakness 3",
+      group: "weaknesses",
+      index: 2,
+      refType: platform === "traditional" ? "review" : "negative-claim",
+      refId: "weakness_3_ref",
     },
   ];
 };
-
-const countWords = (t: string) =>
-  (t || "").trim().split(/\s+/).filter(Boolean).length;
 
 const ExperimentMode: React.FC<ExperimentModeProps> = ({
   open,
@@ -152,18 +134,12 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   const [openTaskForm, setOpenTaskForm] = useState<string | null>(null);
 
   const [evidence, setEvidence] = useState<{
-    weakness_paraphrase: string;
-    claim_paraphrase: string;
-    positive_paraphrase: string;
-    negative_paraphrase: string;
-    strategy_paraphrase: string;
+    strengths: string[];
+    weaknesses: string[];
     source_refs: Record<string, { type: string; id: string }>;
   }>({
-    weakness_paraphrase: "",
-    claim_paraphrase: "",
-    positive_paraphrase: "",
-    negative_paraphrase: "",
-    strategy_paraphrase: "",
+    strengths: ["", "", ""],
+    weaknesses: ["", "", ""],
     source_refs: {},
   });
 
@@ -213,19 +189,16 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
     setTasksState({});
     setOpenTaskForm(null);
     setEvidence({
-      weakness_paraphrase: "",
-      claim_paraphrase: "",
-      positive_paraphrase: "",
-      negative_paraphrase: "",
-      strategy_paraphrase: "",
+      strengths: ["", "", ""],
+      weaknesses: ["", "", ""],
       source_refs: {},
     });
     setHudExpanded(true);
   };
 
   const isTaskValid = (task: (typeof TASKS)[0]) => {
-    const text = (evidence as any)[task.field];
-    if (countWords(text) < 5) return false;
+    const text = evidence[task.group][task.index]?.trim();
+    if (!text) return false;
     if (!evidence.source_refs[task.refId]) return false;
     return true;
   };
@@ -261,10 +234,8 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
         confidence_rating: confidenceRating,
         evidence: {
           platform,
-          weakness_paraphrase: evidence.weakness_paraphrase,
-          claim_paraphrase: evidence.claim_paraphrase,
-          positive_paraphrase: evidence.positive_paraphrase,
-          negative_paraphrase: evidence.negative_paraphrase,
+          strengths: evidence.strengths.map((text) => ({ text })),
+          weaknesses: evidence.weaknesses.map((text) => ({ text })),
           source_refs: evidence.source_refs,
         },
       });
@@ -283,6 +254,12 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
     setIsActive(false);
     setShowCompletionModal(false);
     setParticipantName("");
+    setEvidence({
+      strengths: ["", "", ""],
+      weaknesses: ["", "", ""],
+      source_refs: {},
+    });
+    setTasksState({});
   };
 
   const formatTime = (s: number) => {
@@ -514,50 +491,29 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                         >
                           <div className="p-3 bg-muted/30 border border-border/40 rounded-xl space-y-3 mt-1">
                             <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                              Paraphrase Evidence (≥5 words)
+                              Response
                             </label>
                             <textarea
-                              maxLength={280}
                               rows={3}
                               className="w-full text-xs p-2 rounded-md border border-border bg-background"
-                              placeholder="Write in your own words..."
-                              value={(evidence as any)[task.field]}
-                              onChange={(e) =>
-                                setEvidence({
-                                  ...evidence,
-                                  [task.field]: e.target.value,
-                                })
-                              }
+                              placeholder={`Write ${task.label.toLowerCase()} in your own words...`}
+                              value={evidence[task.group][task.index]}
+                              onChange={(e) => {
+                                setEvidence((prev) => ({
+                                  ...prev,
+                                  [task.group]: prev[task.group].map((entry, index) =>
+                                    index === task.index ? e.target.value : entry,
+                                  ),
+                                }));
+                              }}
                             />
 
                             <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mt-2 block">
                               Source Reference
                             </label>
                             {platform === "hyve" &&
-                              task.refType === "theme" && (
-                                <select
-                                  className="w-full text-xs p-2 rounded-md border border-border bg-background"
-                                  value={
-                                    evidence.source_refs[task.refId]?.id || ""
-                                  }
-                                  onChange={(e) =>
-                                    handleSourceRefPick(
-                                      task.refId,
-                                      "theme",
-                                      e.target.value,
-                                    )
-                                  }
-                                >
-                                  <option value="">-- Choose Theme --</option>
-                                  {product?.themes?.map((t: any) => (
-                                    <option key={t.id} value={t.id}>
-                                      {t.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              )}
-                            {platform === "hyve" &&
-                              task.refType === "claim" && (
+                              (task.refType === "positive-claim" ||
+                                task.refType === "negative-claim") && (
                                 <select
                                   className="w-full text-xs p-2 rounded-md border border-border bg-background"
                                   value={
@@ -571,36 +527,11 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                                     )
                                   }
                                 >
-                                  <option value="">-- Choose Claim --</option>
-                                  {product?.themes
-                                    ?.flatMap((t: any) => t.claims || [])
-                                    .map((c: any) => (
-                                      <option key={c.id} value={c.id}>
-                                        {c.claim_text}
-                                      </option>
-                                    ))}
-                                </select>
-                              )}
-                            {platform === "hyve" &&
-                              task.refType === "sentiment" && (
-                                <select
-                                  className="w-full text-xs p-2 rounded-md border border-border bg-background"
-                                  value={
-                                    evidence.source_refs[task.refId]?.id || ""
-                                  }
-                                  onChange={(e) =>
-                                    handleSourceRefPick(
-                                      task.refId,
-                                      "claim",
-                                      e.target.value,
-                                    )
-                                  }
-                                >
-                                  <option value="">-- Choose a Claim --</option>
+                                  <option value="">-- Choose Supporting Claim --</option>
                                   {product?.themes
                                     ?.flatMap((t: any) =>
                                       (t.claims || []).filter((c: any) =>
-                                        task.id === "positive"
+                                        task.refType === "positive-claim"
                                           ? c.sentiment_polarity === "positive"
                                           : c.sentiment_polarity === "negative",
                                       ),
@@ -871,7 +802,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                     >
                       {evidence.source_refs[t.refId]?.id === String(review.id)
                         ? "Selected"
-                        : `Use for ${t.label.split(" ").slice(1).join(" ")}`}
+                        : `Use for ${t.label}`}
                     </Button>
                   ))}
                 </div>

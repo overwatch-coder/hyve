@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -58,8 +58,46 @@ type Result = {
   study_id?: number;
   created_at: string;
   similarity_scores?: Record<string, number>;
-  evidence?: Record<string, unknown>;
+  evidence?: {
+    strengths?: Array<{ text: string }>;
+    weaknesses?: Array<{ text: string }>;
+    weakness_paraphrase?: string;
+    claim_paraphrase?: string;
+    positive_paraphrase?: string;
+    negative_paraphrase?: string;
+  };
 };
+
+function extractFindingTexts(
+  evidence: Result["evidence"],
+  key: "strengths" | "weaknesses",
+) {
+  const ranked = evidence?.[key];
+  if (Array.isArray(ranked) && ranked.length > 0) {
+    return ranked.map((item) => item.text).filter(Boolean);
+  }
+
+  if (key === "strengths") {
+    return [evidence?.claim_paraphrase, evidence?.positive_paraphrase].filter(
+      Boolean,
+    ) as string[];
+  }
+
+  return [evidence?.weakness_paraphrase, evidence?.negative_paraphrase].filter(
+    Boolean,
+  ) as string[];
+}
+
+function averageScores(
+  scores: Record<string, number> | undefined,
+  keys: string[],
+) {
+  const values = keys
+    .map((key) => scores?.[key])
+    .filter((value): value is number => typeof value === "number");
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
 
 function formatTime(s?: number) {
   if (!s) return "—";
@@ -90,7 +128,17 @@ export default function AdminExperimentAnalysis() {
     },
   });
 
-  const { data: analytics, isLoading: analyticsLoading } = useQuery<Analytics>({
+  useEffect(() => {
+    if (!selectedStudyId && studies.length > 0) {
+      setSelectedStudyId(studies[0].id);
+    }
+  }, [studies, selectedStudyId]);
+
+  const {
+    data: analytics,
+    isLoading: analyticsLoading,
+    error: analyticsError,
+  } = useQuery<Analytics>({
     queryKey: ["admin-study-analytics-detail", selectedStudyId],
     queryFn: async () => {
       const res = await api.get(
@@ -102,7 +150,11 @@ export default function AdminExperimentAnalysis() {
     enabled: !!selectedStudyId,
   });
 
-  const { data: results = [] } = useQuery<Result[]>({
+  const {
+    data: results = [],
+    isLoading: resultsLoading,
+    error: resultsError,
+  } = useQuery<Result[]>({
     queryKey: ["admin-study-results", selectedStudyId],
     queryFn: async () => {
       const res = await api.get("/experiments/results", {
@@ -134,8 +186,22 @@ export default function AdminExperimentAnalysis() {
       a.click();
       URL.revokeObjectURL(url);
       toast.success("Export downloaded");
-    } catch {
-      toast.error("Export failed");
+    } catch (err) {
+      const maybeBlob = (err as { response?: { data?: Blob } })?.response?.data;
+      if (maybeBlob instanceof Blob) {
+        const text = await maybeBlob.text();
+        try {
+          const parsed = JSON.parse(text) as { detail?: string };
+          toast.error(parsed.detail || "Export failed");
+        } catch {
+          toast.error(text || "Export failed");
+        }
+      } else {
+        const detail =
+          (err as { response?: { data?: { detail?: string } } })?.response?.data
+            ?.detail || "Export failed";
+        toast.error(detail);
+      }
     } finally {
       setExporting(false);
     }
@@ -245,6 +311,14 @@ export default function AdminExperimentAnalysis() {
             <Loader2 className="h-5 w-5 animate-spin" />
             <span className="text-sm font-medium">Loading analytics…</span>
           </div>
+        )}
+
+        {selectedStudyId && analyticsError && (
+          <Card className="border-rose-500/20 bg-rose-500/5">
+            <CardContent className="p-5 text-sm text-rose-500">
+              Failed to load analytics for the selected study.
+            </CardContent>
+          </Card>
         )}
 
         {analytics && (
@@ -389,10 +463,10 @@ export default function AdminExperimentAnalysis() {
                           "Platform",
                           "Time",
                           "Confidence",
-                          "Weakness",
-                          "Claim",
-                          "Positive",
-                          "Negative",
+                          "Top Strengths",
+                          "Top Weaknesses",
+                          "Strength Match",
+                          "Weakness Match",
                           "Status",
                           "Date",
                         ].map((h) => (
@@ -412,62 +486,112 @@ export default function AdminExperimentAnalysis() {
                             colSpan={10}
                             className="px-4 py-12 text-center text-muted-foreground"
                           >
-                            No results match the current filters.
+                            {resultsLoading
+                              ? "Loading results…"
+                              : resultsError
+                                ? "Failed to load study results."
+                                : "No results match the current filters."}
                           </td>
                         </tr>
                       ) : (
-                        filteredResults.map((r) => (
-                          <tr
-                            key={r.id}
-                            className="border-b border-border/20 hover:bg-muted/10 transition-colors"
-                          >
-                            <td className="px-3 py-2.5 font-mono">{r.id}</td>
-                            <td className="px-3 py-2.5">
-                              <span
-                                className={cn(
-                                  "px-2 py-0.5 rounded-full font-black uppercase",
-                                  r.platform === "hyve"
-                                    ? "bg-primary/10 text-primary"
-                                    : "bg-muted text-muted-foreground"
-                                )}
-                              >
-                                {r.platform}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2.5 font-mono">
-                              {formatTime(r.time_seconds)}
-                            </td>
-                            <td className="px-3 py-2.5 text-center">
-                              {r.confidence_rating ?? "—"}
-                            </td>
-                            {["weakness_paraphrase", "claim_paraphrase", "positive_paraphrase", "negative_paraphrase"].map((k) => (
-                              <td key={k} className="px-3 py-2.5 font-mono text-center">
-                                {r.similarity_scores?.[k] !== undefined
-                                  ? r.similarity_scores[k].toFixed(2)
-                                  : "—"}
+                        filteredResults.map((r) => {
+                          const strengths = extractFindingTexts(r.evidence, "strengths");
+                          const weaknesses = extractFindingTexts(r.evidence, "weaknesses");
+                          const strengthScore = averageScores(r.similarity_scores, [
+                            "strength_1_score",
+                            "strength_2_score",
+                            "strength_3_score",
+                            "claim_paraphrase",
+                            "positive_paraphrase",
+                          ]);
+                          const weaknessScore = averageScores(r.similarity_scores, [
+                            "weakness_1_score",
+                            "weakness_2_score",
+                            "weakness_3_score",
+                            "weakness_paraphrase",
+                            "negative_paraphrase",
+                          ]);
+
+                          return (
+                            <tr
+                              key={r.id}
+                              className="border-b border-border/20 hover:bg-muted/10 transition-colors align-top"
+                            >
+                              <td className="px-3 py-2.5 font-mono">{r.id}</td>
+                              <td className="px-3 py-2.5">
+                                <span
+                                  className={cn(
+                                    "px-2 py-0.5 rounded-full font-black uppercase",
+                                    r.platform === "hyve"
+                                      ? "bg-primary/10 text-primary"
+                                      : "bg-muted text-muted-foreground"
+                                  )}
+                                >
+                                  {r.platform}
+                                </span>
                               </td>
-                            ))}
-                            <td className="px-3 py-2.5">
-                              <Badge
-                                className={cn(
-                                  "text-[9px]",
-                                  r.review_status === "approved" &&
-                                    "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-                                  r.review_status === "rejected" &&
-                                    "bg-rose-500/10 text-rose-500 border-rose-500/20"
-                                )}
-                                variant={
-                                  r.review_status === "pending" ? "secondary" : "outline"
-                                }
-                              >
-                                {r.review_status}
-                              </Badge>
-                            </td>
-                            <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">
-                              {new Date(r.created_at).toLocaleDateString()}
-                            </td>
-                          </tr>
-                        ))
+                              <td className="px-3 py-2.5 font-mono">
+                                {formatTime(r.time_seconds)}
+                              </td>
+                              <td className="px-3 py-2.5 text-center">
+                                {r.confidence_rating ?? "—"}
+                              </td>
+                              <td className="px-3 py-2.5 min-w-[220px]">
+                                <div className="space-y-1">
+                                  {strengths.length === 0 ? (
+                                    <span className="text-muted-foreground">—</span>
+                                  ) : (
+                                    strengths.map((text, index) => (
+                                      <p key={`${r.id}-strength-${index}`} className="leading-5">
+                                        <span className="font-black mr-1">{index + 1}.</span>
+                                        {text}
+                                      </p>
+                                    ))
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 min-w-[220px]">
+                                <div className="space-y-1">
+                                  {weaknesses.length === 0 ? (
+                                    <span className="text-muted-foreground">—</span>
+                                  ) : (
+                                    weaknesses.map((text, index) => (
+                                      <p key={`${r.id}-weakness-${index}`} className="leading-5">
+                                        <span className="font-black mr-1">{index + 1}.</span>
+                                        {text}
+                                      </p>
+                                    ))
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 font-mono text-center">
+                                {strengthScore !== null ? strengthScore.toFixed(2) : "—"}
+                              </td>
+                              <td className="px-3 py-2.5 font-mono text-center">
+                                {weaknessScore !== null ? weaknessScore.toFixed(2) : "—"}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <Badge
+                                  className={cn(
+                                    "text-[9px]",
+                                    r.review_status === "approved" &&
+                                      "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+                                    r.review_status === "rejected" &&
+                                      "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                                  )}
+                                  variant={
+                                    r.review_status === "pending" ? "secondary" : "outline"
+                                  }
+                                >
+                                  {r.review_status}
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">
+                                {new Date(r.created_at).toLocaleDateString()}
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>

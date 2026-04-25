@@ -22,6 +22,8 @@ import {
   BarChart2,
   Mail,
   Send,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -50,6 +52,25 @@ type Invite = {
   created_at: string;
 };
 
+type EmailRow = {
+  id: number;
+  email: string;
+};
+
+function maskEmail(email?: string) {
+  if (!email) return "—";
+  const [localPart, domain] = email.split("@");
+  if (!localPart || !domain) return email;
+  const visibleLocal = localPart.length <= 2
+    ? `${localPart[0] || ""}*`
+    : `${localPart.slice(0, 2)}${"*".repeat(Math.max(localPart.length - 2, 2))}`;
+  const [domainName, ...rest] = domain.split(".");
+  const visibleDomain = domainName.length <= 2
+    ? `${domainName[0] || ""}*`
+    : `${domainName.slice(0, 2)}${"*".repeat(Math.max(domainName.length - 2, 2))}`;
+  return `${visibleLocal}@${visibleDomain}${rest.length ? `.${rest.join(".")}` : ""}`;
+}
+
 function statusBadge(status: string) {
   if (status === "active")
     return (
@@ -72,9 +93,10 @@ export default function AdminStudyDetail() {
   const queryClient = useQueryClient();
 
   const [inviteCount, setInviteCount] = useState(20);
-  const [emailList, setEmailList] = useState(""); // newline-separated emails
+  const [emailRows, setEmailRows] = useState<EmailRow[]>([{ id: 1, email: "" }]);
   const [copied, setCopied] = useState(false);
   const [sendingEmailId, setSendingEmailId] = useState<number | null>(null);
+  const [sendingDraftRowId, setSendingDraftRowId] = useState<number | null>(null);
 
   // Local edit state for study config
   const [editing, setEditing] = useState(false);
@@ -125,14 +147,11 @@ export default function AdminStudyDetail() {
   });
 
   const generateMutation = useMutation({
-    mutationFn: async () => {
-      const emails = emailList
-        .split("\n")
-        .map((e) => e.trim())
-        .filter((e) => e.length > 0);
+    mutationFn: async (payload?: { emails?: string[]; count?: number }) => {
+      const emails = payload?.emails?.filter((e) => e.trim().length > 0) || [];
       const body = emails.length > 0
         ? { emails, count: emails.length }
-        : { count: inviteCount };
+        : { count: payload?.count ?? inviteCount };
       const res = await api.post(
         `/experiments/studies/${studyId}/invites`,
         body,
@@ -140,20 +159,30 @@ export default function AdminStudyDetail() {
       );
       return { data: res.data, emailCount: emails.length };
     },
-    onSuccess: ({ emailCount }) => {
+    onSuccess: ({ emailCount }, variables) => {
       queryClient.invalidateQueries({ queryKey: ["admin-study-invites", studyId] });
       queryClient.invalidateQueries({ queryKey: ["admin-study-analytics", studyId] });
       const msg = emailCount > 0
         ? `Generated ${emailCount} codes and queued ${emailCount} emails`
         : `Generated ${inviteCount} invite codes`;
       toast.success(msg);
-      setEmailList("");
+      if ((variables?.emails?.length || 0) > 0) {
+        if ((variables?.emails?.length || 0) === 1 && sendingDraftRowId !== null) {
+          setEmailRows((prev) => prev.map((row) => (
+            row.id === sendingDraftRowId ? { ...row, email: "" } : row
+          )));
+        } else {
+          setEmailRows([{ id: Date.now(), email: "" }]);
+        }
+      }
+      setSendingDraftRowId(null);
     },
     onError: (err: unknown) => {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data
           ?.detail || "Failed to generate invites";
       toast.error(msg);
+      setSendingDraftRowId(null);
     },
   });
 
@@ -207,6 +236,25 @@ export default function AdminStudyDetail() {
       });
       setEditing(true);
     }
+  };
+
+  const filledEmailRows = emailRows.filter((row) => row.email.trim().length > 0);
+
+  const addEmailRow = () => {
+    setEmailRows((prev) => [...prev, { id: Date.now(), email: "" }]);
+  };
+
+  const updateEmailRow = (id: number, email: string) => {
+    setEmailRows((prev) => prev.map((row) => (row.id === id ? { ...row, email } : row)));
+  };
+
+  const removeEmailRow = (id: number) => {
+    setEmailRows((prev) => {
+      if (prev.length === 1) {
+        return [{ id: prev[0].id, email: "" }];
+      }
+      return prev.filter((row) => row.id !== id);
+    });
   };
 
   if (studyLoading) {
@@ -398,30 +446,88 @@ export default function AdminStudyDetail() {
               Codes are balanced 50/50 between HYVE and Traditional arms. Each code is single-use.
             </p>
 
-            {/* Email list (optional) */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-                <Mail className="h-3 w-3" />
-                Participant Emails (one per line)
-              </label>
-              <Textarea
-                placeholder={`alice@example.com\nbob@example.com\ncarol@example.com`}
-                value={emailList}
-                onChange={(e) => setEmailList(e.target.value)}
-                rows={5}
-                className="font-mono text-xs"
-              />
-              <p className="text-[10px] text-muted-foreground/70">
-                If emails are provided, one code is generated per address and invite links are
-                sent automatically. Leave blank to generate codes without emailing.
-              </p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                  <Mail className="h-3 w-3" />
+                  Participant Emails
+                </label>
+                <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={addEmailRow}>
+                  <Plus className="h-3.5 w-3.5" /> Add Row
+                </Button>
+              </div>
+
+              <div className="rounded-xl border border-border/40 overflow-hidden">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-0 bg-muted/30 border-b border-border/30 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  <div className="px-3 py-2.5">Email</div>
+                  <div className="px-3 py-2.5 text-center">Action</div>
+                </div>
+                <div className="divide-y divide-border/20">
+                  {emailRows.map((row) => (
+                    <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-0 items-center bg-background">
+                      <div className="px-3 py-2.5">
+                        <Input
+                          type="email"
+                          placeholder="participant@example.com"
+                          value={row.email}
+                          onChange={(e) => updateEmailRow(row.id, e.target.value)}
+                          className="font-mono text-xs"
+                        />
+                      </div>
+                      <div className="px-3 py-2.5 flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-wide"
+                          disabled={generateMutation.isPending || row.email.trim().length === 0}
+                          onClick={() => {
+                            setSendingDraftRowId(row.id);
+                            generateMutation.mutate({ emails: [row.email.trim()] });
+                          }}
+                        >
+                          {generateMutation.isPending && sendingDraftRowId === row.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Send className="h-3.5 w-3.5" />
+                          )}
+                          <span className="hidden sm:inline">Send Now</span>
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={() => removeEmailRow(row.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <p className="text-[10px] text-muted-foreground/70">
+                  Fill any number of rows, then send them one by one or send all filled rows at once.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() => generateMutation.mutate({ emails: filledEmailRows.map((row) => row.email.trim()) })}
+                  disabled={generateMutation.isPending || filledEmailRows.length === 0}
+                >
+                  {generateMutation.isPending && sendingDraftRowId === null ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Sending…</>
+                  ) : (
+                    <><Send className="h-3.5 w-3.5 mr-1.5" />Send All Filled</>
+                  )}
+                </Button>
+              </div>
             </div>
 
-            {/* Count (only shown when no emails) */}
-            {emailList.trim().length === 0 && (
+            <div className="rounded-xl border border-border/40 p-4 space-y-3 bg-muted/10">
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Count
+                  Generate Blank Codes
                 </label>
                 <Input
                   type="number"
@@ -432,21 +538,19 @@ export default function AdminStudyDetail() {
                   className="w-28"
                 />
               </div>
-            )}
-
-            <Button
-              size="sm"
-              onClick={() => generateMutation.mutate()}
-              disabled={generateMutation.isPending}
-            >
-              {generateMutation.isPending ? (
-                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Generating…</>
-              ) : emailList.trim().length > 0 ? (
-                <><Send className="h-3.5 w-3.5 mr-1.5" />Generate & Send Emails</>
-              ) : (
-                "Generate Codes"
-              )}
-            </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => generateMutation.mutate({ count: inviteCount })}
+                disabled={generateMutation.isPending}
+              >
+                {generateMutation.isPending && sendingDraftRowId === null ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Generating…</>
+                ) : (
+                  "Generate Codes"
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -526,7 +630,7 @@ export default function AdminStudyDetail() {
                             {invite.participant_email ? (
                               <div className="flex items-center gap-1.5">
                                 <span className="text-xs text-muted-foreground truncate max-w-[160px] lg:max-w-[220px]">
-                                  {invite.participant_email}
+                                  {maskEmail(invite.participant_email)}
                                 </span>
                                 {invite.email_sent && (
                                   <span className="text-[9px] font-black uppercase text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full shrink-0">

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import RootLayout from "@/layouts/RootLayout";
+import { Toaster } from "@/components/ui/sonner";
 import Home from "@/pages/Home";
 import Products from "@/pages/Products";
 import Explore from "@/pages/Explore";
@@ -94,6 +95,7 @@ function App() {
               <Route path="team" element={<Team />} />
             </Route>
           </Routes>
+          <Toaster />
         </BrowserRouter>
       </ThemeProvider>
     </QueryClientProvider>

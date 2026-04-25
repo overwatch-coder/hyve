@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ReactFlowProvider } from "@xyflow/react";
@@ -12,16 +12,14 @@ export default function StudySession() {
   const { inviteCode } = useParams<{ inviteCode: string }>();
   const navigate = useNavigate();
   const { session, clearSession } = useStudySession();
+  const [submitted, setSubmitted] = useState(false);
 
   // Guard: must have a valid session for this specific invite code
   useEffect(() => {
-    if (
-      !session ||
-      session.invite_code !== (inviteCode ?? "").toUpperCase()
-    ) {
+    if (!submitted && (!session || session.invite_code !== (inviteCode ?? "").toUpperCase())) {
       navigate(`/study/${inviteCode}`, { replace: true });
     }
-  }, [session, inviteCode, navigate]);
+  }, [session, inviteCode, navigate, submitted]);
 
   const { data: product, isLoading: productLoading } = useQuery({
     queryKey: ["study-product", session?.product_id],
@@ -74,12 +72,6 @@ export default function StudySession() {
     <ReactFlowProvider>
       <ExperimentMode
         open={true}
-        onOpenChange={(open) => {
-          if (!open) {
-            clearSession();
-            navigate("/");
-          }
-        }}
         product={product}
         analytics={analytics}
         locked={true}
@@ -87,7 +79,17 @@ export default function StudySession() {
         sessionToken={session.session_token}
         studyInstructions={session.instructions}
         onExperimentComplete={() => {
+          setSubmitted(true);
           clearSession();
+        }}
+        onOpenChange={(open) => {
+          if (!open) {
+            clearSession();
+            navigate(
+              submitted ? `/study/${inviteCode}?submitted=1` : `/study/${inviteCode}`,
+              { replace: true },
+            );
+          }
         }}
       />
     </ReactFlowProvider>

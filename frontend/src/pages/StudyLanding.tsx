@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useStudySession } from "@/hooks/useStudySession";
@@ -18,16 +18,19 @@ import {
   FlaskConical,
   ShieldCheck,
   AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function StudyLanding() {
   const { inviteCode: urlCode } = useParams<{ inviteCode?: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { saveSession } = useStudySession();
 
   const [manualCode, setManualCode] = useState("");
   const [consentChecked, setConsentChecked] = useState(false);
+  const wasSubmitted = searchParams.get("submitted") === "1";
 
   const activeCode = (urlCode || manualCode).trim().toUpperCase();
 
@@ -132,7 +135,7 @@ export default function StudyLanding() {
         )}
 
         {/* Already used */}
-        {study?.already_used && (
+        {study?.already_used && !wasSubmitted && (
           <Card className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="p-4 flex items-center gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0" />
@@ -144,8 +147,32 @@ export default function StudyLanding() {
           </Card>
         )}
 
+        {study?.already_used && wasSubmitted && (
+          <Card className="border-emerald-500/30 bg-emerald-500/5">
+            <CardContent className="p-5 flex items-start gap-3">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1.5">
+                <p className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
+                  Study submitted successfully.
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Your response has been recorded. Thank you for participating in this research study.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => navigate("/")}
+                >
+                  Return Home
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Study info + consent */}
-        {study && study.valid && (
+        {study && study.valid && !wasSubmitted && (
           <Card className="border-border/50">
             <CardHeader className="pb-4">
               <CardTitle className="text-xl font-black">{study.title}</CardTitle>

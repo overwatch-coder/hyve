@@ -386,7 +386,7 @@ function ExploreInner() {
           viewMode={viewMode}
           setViewMode={setViewMode}
           onRefresh={refetch}
-          onStartExperiment={() => setIsExperimentMode(true)}
+          hideExperimentTrigger={true}
           resetTrigger={resetTrigger}
         />
       </div>

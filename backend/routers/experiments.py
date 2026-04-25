@@ -6,6 +6,7 @@ from typing import List, Optional, Any
 import uuid as uuid_lib
 import csv
 import io as io_lib
+import os
 import schemas
 import models
 from database import get_db
@@ -17,75 +18,172 @@ from datetime import datetime
 router = APIRouter(prefix="/experiments", tags=["Experiments"])
 
 
-@router.post("/results")
-def record_experiment_result(payload: schemas.ExperimentResultCreate, db: Session = Depends(get_db)):
-    """Record the result of an A/B testing session."""
-    source_texts = {}
-    if payload.evidence and payload.evidence.source_refs:
-        for key, ref in payload.evidence.source_refs.items():
-            if ref.type == "review":
-                rev = db.query(models.Review).filter(
-                    models.Review.id == int(ref.id)).first()
-                if rev:
-                    source_texts[key] = rev.original_text
-            elif ref.type == "theme":
-                thm = db.query(models.Theme).filter(
-                    models.Theme.id == int(ref.id)).first()
-                if thm:
-                    source_texts[key] = thm.name
-            elif ref.type == "claim":
-                clm = db.query(models.Claim).filter(
-                    models.Claim.id == int(ref.id)).first()
-                if clm:
-                    source_texts[key] = clm.claim_text
-            elif ref.type == "strategy":
-                thm = db.query(models.Theme).filter(
-                    models.Theme.id == int(ref.id)).first()
-                if thm:
-                    source_texts[key] = thm.recommendation
+def _evidence_uses_ranked_lists(evidence: Optional[schemas.ExperimentEvidence]) -> bool:
+    if not evidence:
+        return False
+    return bool(evidence.strengths or evidence.weaknesses)
 
-    similarity_scores = {}
+
+def _extract_source_texts(
+    source_refs: dict[str, Any],
+    db: Session,
+) -> dict[str, str]:
+    source_texts: dict[str, str] = {}
+    for key, ref in source_refs.items():
+        if ref.type == "review":
+            rev = db.query(models.Review).filter(models.Review.id == int(ref.id)).first()
+            if rev:
+                source_texts[key] = rev.original_text
+        elif ref.type == "theme":
+            thm = db.query(models.Theme).filter(models.Theme.id == int(ref.id)).first()
+            if thm:
+                source_texts[key] = thm.name
+        elif ref.type == "claim":
+            clm = db.query(models.Claim).filter(models.Claim.id == int(ref.id)).first()
+            if clm:
+                source_texts[key] = clm.claim_text
+        elif ref.type == "strategy":
+            thm = db.query(models.Theme).filter(models.Theme.id == int(ref.id)).first()
+            if thm:
+                source_texts[key] = thm.recommendation
+    return source_texts
+
+
+def _compute_similarity_scores(
+    payload: schemas.ExperimentResultCreate,
+    source_texts: dict[str, str],
+) -> tuple[dict[str, float], str]:
+    similarity_scores: dict[str, float] = {}
     review_status = "approved"
-    LOW = 0.35
     HIGH = 0.55
 
-    evidence_dict = payload.evidence.model_dump() if payload.evidence else {}
-    evidence_dict["source_texts"] = source_texts
+    if not payload.evidence:
+        return similarity_scores, "pending"
+
+    if _evidence_uses_ranked_lists(payload.evidence):
+        for group_name, items in (("strength", payload.evidence.strengths or []), ("weakness", payload.evidence.weaknesses or [])):
+            for index, item in enumerate(items, start=1):
+                field_key = f"{group_name}_{index}"
+                ref_key = f"{field_key}_ref"
+                item_text = (item.text or "").strip()
+                src = source_texts.get(ref_key, "")
+                score = score_similarity(item_text, src)
+                similarity_scores[field_key] = score
+
+                if not item_text or not src or score < HIGH:
+                    review_status = "pending"
+
+        expected_count = 3
+        if len(payload.evidence.strengths or []) < expected_count or len(payload.evidence.weaknesses or []) < expected_count:
+            review_status = "pending"
+        return similarity_scores, review_status
 
     platform = payload.evidence.platform if payload.evidence else payload.platform
     fields_to_check = []
     refs_to_check = []
 
-    if platform == "traditional":
-        # Traditional and HYVE now share the same 4 tasks so results are
-        # directly comparable across platforms.
-        fields_to_check = ["weakness_paraphrase", "claim_paraphrase",
-                           "positive_paraphrase", "negative_paraphrase"]
-        refs_to_check = ["weakness_ref", "claim_ref",
-                         "positive_ref", "negative_ref"]
-    elif platform == "hyve":
-        fields_to_check = ["weakness_paraphrase", "claim_paraphrase",
-                           "positive_paraphrase", "negative_paraphrase"]
-        refs_to_check = ["weakness_ref", "claim_ref",
-                         "positive_ref", "negative_ref"]
+    if platform in {"traditional", "hyve"}:
+        fields_to_check = [
+            "weakness_paraphrase",
+            "claim_paraphrase",
+            "positive_paraphrase",
+            "negative_paraphrase",
+        ]
+        refs_to_check = [
+            "weakness_ref",
+            "claim_ref",
+            "positive_ref",
+            "negative_ref",
+        ]
 
-    if payload.evidence:
-        for field, ref_key in zip(fields_to_check, refs_to_check):
-            phr = getattr(payload.evidence, field)
-            if not phr:
-                phr = ""
+    for field, ref_key in zip(fields_to_check, refs_to_check):
+        phr = getattr(payload.evidence, field) or ""
+        src = source_texts.get(ref_key, "")
+        score = score_similarity(phr, src)
+        similarity_scores[field] = score
 
-            src = source_texts.get(ref_key, "")
-            score = score_similarity(phr, src)
-            similarity_scores[field] = score
+        if word_count(phr) < 5 or score < HIGH:
+            review_status = "pending"
 
-            if word_count(phr) < 5:
-                review_status = "pending"
+    return similarity_scores, review_status
 
-            if score < HIGH:
-                review_status = "pending"
-    else:
-        review_status = "pending"
+
+def _csv_cell_for_ranked_items(items: Any) -> str:
+    if not isinstance(items, list):
+        return ""
+    texts = []
+    for item in items:
+        if isinstance(item, dict):
+            text = str(item.get("text", "")).strip()
+        else:
+            text = str(getattr(item, "text", "")).strip()
+        if text:
+            texts.append(text)
+    return " | ".join(texts)
+
+
+def _generate_study_copy(payload: schemas.StudyCopyAssistRequest, product: models.Product) -> str:
+    field_guidance = {
+        "description": "Write a concise participant-facing study description in 2-4 sentences. State the product, the purpose of the study, and what the participant will do.",
+        "consent_text": "Write a short academic informed-consent paragraph for an anonymous product-understanding study. Mention voluntary participation, anonymous responses, and research use only.",
+        "instructions_hyve": "Write participant instructions for the HYVE arm. The task is to identify the top 3 strengths and top 3 weaknesses of the product using the HYVE decision map.",
+        "instructions_traditional": "Write participant instructions for the Traditional arm. The task is to identify the top 3 strengths and top 3 weaknesses of the product by reading raw reviews.",
+    }
+    if payload.field not in field_guidance:
+        raise HTTPException(status_code=400, detail="Unsupported study copy field")
+
+    base_prompt = f"""
+You are helping an admin create copy for a controlled A/B product-understanding study.
+
+Product name: {product.name}
+Category: {product.category}
+Product summary: {product.summary or 'No summary available.'}
+
+Target field: {payload.field}
+Task guidance: {field_guidance[payload.field]}
+
+Current text:
+{payload.current_text or '[empty]'}
+
+Custom instruction:
+{payload.instruction or '[none]'}
+
+Return only the final text for the field. Do not use markdown fences, bullet labels, or explanations.
+""".strip()
+
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    if provider == "gemini":
+        from google import genai as _ggenai
+
+        client = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        response = client.models.generate_content(
+            model=os.getenv("STUDY_COPY_MODEL", "gemini-2.0-flash"),
+            contents=base_prompt,
+        )
+        return (response.text or "").strip()
+
+    import openai
+
+    client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    response = client.chat.completions.create(
+        model=os.getenv("STUDY_COPY_MODEL", "gpt-4o-mini"),
+        messages=[
+            {"role": "system", "content": "You write concise, clear academic study copy."},
+            {"role": "user", "content": base_prompt},
+        ],
+        timeout=30.0,
+    )
+    return (response.choices[0].message.content or "").strip()
+
+
+@router.post("/results")
+def record_experiment_result(payload: schemas.ExperimentResultCreate, db: Session = Depends(get_db)):
+    """Record the result of an A/B testing session."""
+    source_texts = _extract_source_texts(payload.evidence.source_refs if payload.evidence else {}, db)
+
+    evidence_dict = payload.evidence.model_dump() if payload.evidence else {}
+    evidence_dict["source_texts"] = source_texts
+    similarity_scores, review_status = _compute_similarity_scores(payload, source_texts)
 
     db_result = models.ExperimentResult(
         product_id=payload.product_id,
@@ -218,6 +316,29 @@ def create_study(
     db.commit()
     db.refresh(study)
     return study
+
+
+@router.post("/studies/ai-assist", response_model=schemas.StudyCopyAssistResponse)
+def ai_assist_study_copy(
+    payload: schemas.StudyCopyAssistRequest,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    product = db.query(models.Product).filter(models.Product.id == payload.product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    try:
+        text = _generate_study_copy(payload, product)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"AI generation failed: {exc}") from exc
+
+    if not text:
+        raise HTTPException(status_code=502, detail="AI generation returned empty text")
+
+    return schemas.StudyCopyAssistResponse(text=text)
 
 
 @router.get("/studies", response_model=List[schemas.ExperimentStudyOut])
@@ -471,9 +592,11 @@ def export_study_results(
     writer = csv.writer(output)
     writer.writerow([
         "result_id", "study_id", "platform", "time_seconds", "confidence_rating",
-        "review_status", "weakness_paraphrase", "claim_paraphrase",
-        "positive_paraphrase", "negative_paraphrase",
-        "weakness_score", "claim_score", "positive_score", "negative_score",
+        "review_status", "top_strengths", "top_weaknesses",
+        "strength_1_score", "strength_2_score", "strength_3_score",
+        "weakness_1_score", "weakness_2_score", "weakness_3_score",
+        "legacy_weakness_paraphrase", "legacy_claim_paraphrase",
+        "legacy_positive_paraphrase", "legacy_negative_paraphrase",
         "created_at",
     ])
     for r in results:
@@ -482,14 +605,18 @@ def export_study_results(
         writer.writerow([
             r.id, r.study_id, r.platform, r.time_seconds, r.confidence_rating,
             r.review_status,
+            _csv_cell_for_ranked_items(ev.get("strengths")),
+            _csv_cell_for_ranked_items(ev.get("weaknesses")),
+            sc.get("strength_1", ""),
+            sc.get("strength_2", ""),
+            sc.get("strength_3", ""),
+            sc.get("weakness_1", ""),
+            sc.get("weakness_2", ""),
+            sc.get("weakness_3", ""),
             ev.get("weakness_paraphrase", ""),
             ev.get("claim_paraphrase", ""),
             ev.get("positive_paraphrase", ""),
             ev.get("negative_paraphrase", ""),
-            sc.get("weakness_paraphrase", ""),
-            sc.get("claim_paraphrase", ""),
-            sc.get("positive_paraphrase", ""),
-            sc.get("negative_paraphrase", ""),
             r.created_at.isoformat() if r.created_at else "",
         ])
 
