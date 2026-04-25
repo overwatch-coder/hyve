@@ -47,7 +47,7 @@ import {
   Link2,
   Globe,
   RefreshCw,
-  LinkOff,
+  Link2Off,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -737,7 +737,7 @@ export default function AdminStudyDetail() {
                     className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => setShowDisableLinkConfirm(true)}
                   >
-                    <LinkOff className="h-3.5 w-3.5" />
+                    <Link2Off className="h-3.5 w-3.5" />
                     Disable
                   </Button>
                 </div>

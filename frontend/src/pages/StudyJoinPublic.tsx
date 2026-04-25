@@ -32,7 +32,7 @@ type PublicStudyInfo = {
 type PublicJoinResponse = {
   invite_code: string;
   session_token: string;
-  assigned_platform: string;
+  assigned_platform: "hyve" | "traditional";
   product_id: number;
   instructions: string;
 };
