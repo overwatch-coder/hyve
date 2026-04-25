@@ -14,6 +14,24 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   ArrowLeft,
   FlaskConical,
   Loader2,
@@ -24,6 +42,7 @@ import {
   Send,
   Plus,
   Trash2,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -55,6 +74,19 @@ type Invite = {
 type EmailRow = {
   id: number;
   email: string;
+};
+
+type StudyCopyField =
+  | "description"
+  | "consent_text"
+  | "instructions_hyve"
+  | "instructions_traditional";
+
+const FIELD_LABELS: Record<StudyCopyField, string> = {
+  description: "Description",
+  consent_text: "Consent Statement",
+  instructions_hyve: "Instructions \u2014 HYVE Arm",
+  instructions_traditional: "Instructions \u2014 Traditional Arm",
 };
 
 function maskEmail(email?: string) {
@@ -97,6 +129,9 @@ export default function AdminStudyDetail() {
   const [copied, setCopied] = useState(false);
   const [sendingEmailId, setSendingEmailId] = useState<number | null>(null);
   const [sendingDraftRowId, setSendingDraftRowId] = useState<number | null>(null);
+  const [inviteToDelete, setInviteToDelete] = useState<Invite | null>(null);
+  const [aiField, setAiField] = useState<StudyCopyField | null>(null);
+  const [aiInstruction, setAiInstruction] = useState("");
 
   // Local edit state for study config
   const [editing, setEditing] = useState(false);
@@ -209,6 +244,63 @@ export default function AdminStudyDetail() {
     },
   });
 
+  const deleteInviteMutation = useMutation({
+    mutationFn: async (inviteId: number) => {
+      await api.delete(`/experiments/studies/${studyId}/invites/${inviteId}`, {
+        headers: getAuthHeaders(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-study-invites", studyId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-study-analytics", studyId] });
+      toast.success("Invite code deleted");
+      setInviteToDelete(null);
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || "Failed to delete invite";
+      toast.error(msg);
+      setInviteToDelete(null);
+    },
+  });
+
+  const aiAssistMutation = useMutation({
+    mutationFn: async (field: StudyCopyField) => {
+      if (!study?.product_id) throw new Error("Study has no linked product");
+      const res = await api.post(
+        "/experiments/studies/ai-assist",
+        {
+          product_id: study.product_id,
+          field,
+          current_text: (editForm[field as keyof typeof editForm] as string) || undefined,
+          instruction: aiInstruction || undefined,
+        },
+        { headers: getAuthHeaders() },
+      );
+      return { field, text: res.data.text as string };
+    },
+    onSuccess: ({ field, text }) => {
+      setEditForm((prev) => ({ ...prev, [field]: text }));
+      toast.success(`${FIELD_LABELS[field]} updated`);
+      setAiField(null);
+      setAiInstruction("");
+    },
+    onError: (err: unknown) => {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : (err as { response?: { data?: { detail?: string } } })?.response?.data
+              ?.detail || "AI generation failed";
+      toast.error(msg);
+    },
+  });
+
+  const openAiField = (field: StudyCopyField) => {
+    setAiField(field);
+    setAiInstruction("");
+  };
+
   const setStatus = (status: string) => {
     updateMutation.mutate({ status });
   };
@@ -269,61 +361,50 @@ export default function AdminStudyDetail() {
   if (!study) return null;
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      {/* Header */}
-      <div className="border-b bg-background sticky top-0 z-30">
-        <div className="max-w-5xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild className="h-8 w-8 -ml-2">
-              <Link to="/admin/experiments/studies">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
-                <FlaskConical className="h-4 w-4 text-primary" />
-              </div>
-              <div>
-                <h1 className="font-bold tracking-tight leading-tight text-sm">
-                  {study.title}
-                </h1>
-                <div className="flex items-center gap-1.5">{statusBadge(study.status)}</div>
-              </div>
-            </div>
+    <div className="flex flex-col gap-6 animate-fade-in pb-12">
+      {/* Page header */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
+            <FlaskConical className="h-4 w-4 text-primary" />
           </div>
-          <div className="flex items-center gap-2">
-            {study.status === "draft" && (
-              <Button
-                size="sm"
-                className="bg-emerald-500 hover:bg-emerald-600 text-white"
-                onClick={() => setStatus("active")}
-                disabled={updateMutation.isPending}
-              >
-                Activate Study
-              </Button>
-            )}
-            {study.status === "active" && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-rose-500/40 text-rose-500 hover:bg-rose-500/5"
-                onClick={() => setStatus("closed")}
-                disabled={updateMutation.isPending}
-              >
-                Close Study
-              </Button>
-            )}
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/admin/experiments/analysis">
-                <BarChart2 className="h-4 w-4 mr-2" />
-                Analysis
-              </Link>
-            </Button>
+          <div>
+            <h2 className="text-xl font-black tracking-tight leading-tight">{study.title}</h2>
+            <div className="flex items-center gap-1.5 mt-0.5">{statusBadge(study.status)}</div>
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {study.status === "draft" && (
+            <Button
+              size="sm"
+              className="bg-emerald-500 hover:bg-emerald-600 text-white"
+              onClick={() => setStatus("active")}
+              disabled={updateMutation.isPending}
+            >
+              Activate Study
+            </Button>
+          )}
+          {study.status === "active" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-rose-500/40 text-rose-500 hover:bg-rose-500/5"
+              onClick={() => setStatus("closed")}
+              disabled={updateMutation.isPending}
+            >
+              Close Study
+            </Button>
+          )}
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/admin/experiments/analysis">
+              <BarChart2 className="h-4 w-4 mr-2" />
+              Analysis
+            </Link>
+          </Button>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-8 space-y-8">
+      <div className="space-y-8">
         {/* Quick stats */}
         {analytics && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -655,6 +736,7 @@ export default function AdminStudyDetail() {
                               : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-center">
+                            <div className="flex items-center justify-center gap-1">
                             {invite.participant_email && !invite.used ? (
                               <Button
                                 size="sm"
@@ -672,9 +754,22 @@ export default function AdminStudyDetail() {
                                   <><Mail className="h-3 w-3" /><span className="hidden sm:inline"> Resend</span></>
                                 )}
                               </Button>
-                            ) : (
+                            ) : null}
+                            {!invite.used && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                title="Delete invite code"
+                                onClick={() => setInviteToDelete(invite)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            {invite.used && !invite.participant_email && (
                               <span className="text-muted-foreground/30">—</span>
                             )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -687,21 +782,116 @@ export default function AdminStudyDetail() {
         )}
       </div>
     </div>
+
+      {/* Delete invite confirmation */}
+      <AlertDialog open={!!inviteToDelete} onOpenChange={(open) => !open && setInviteToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Invite Code?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the invite code{" "}
+              <span className="font-mono font-bold text-foreground">
+                {inviteToDelete?.code}
+              </span>
+              {inviteToDelete?.participant_email && (
+                <>
+                  {" "}(assigned to{" "}
+                  <span className="font-medium text-foreground">
+                    {maskEmail(inviteToDelete.participant_email)}
+                  </span>
+                  )
+                </>
+              )}.
+              {" "}This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => inviteToDelete && deleteInviteMutation.mutate(inviteToDelete.id)}
+              disabled={deleteInviteMutation.isPending}
+            >
+              {deleteInviteMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Deleting…</>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AI Generate Dialog */}
+      <Dialog open={!!aiField} onOpenChange={(open) => !open && setAiField(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-black">
+              AI Generate — {aiField ? FIELD_LABELS[aiField] : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Optionally add instructions to guide the AI (e.g. "Keep it under 3 sentences.").
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Textarea
+              placeholder="e.g. Professional tone. Mention the product name. Keep it concise."
+              value={aiInstruction}
+              onChange={(e) => setAiInstruction(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAiField(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={aiAssistMutation.isPending || !aiField}
+              onClick={() => aiField && aiAssistMutation.mutate(aiField)}
+            >
+              {aiAssistMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Generating…</>
+              ) : (
+                <><Sparkles className="h-4 w-4 mr-2" />Generate</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
   );
 }
 
 function Field({
   label,
   children,
+  onAiClick,
 }: {
   label: string;
   children: React.ReactNode;
+  onAiClick?: () => void;
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-        {label}
-      </label>
+      {onAiClick ? (
+        <div className="flex items-center justify-between gap-3">
+          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+            {label}
+          </label>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 text-[10px] font-black uppercase tracking-widest"
+            onClick={onAiClick}
+          >
+            <Sparkles className="h-3.5 w-3.5" /> AI Generate
+          </Button>
+        </div>
+      ) : (
+        <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+          {label}
+        </label>
+      )}
       {children}
     </div>
   );

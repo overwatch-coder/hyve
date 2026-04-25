@@ -415,9 +415,12 @@ export default function RootLayout() {
               <span className="hover:text-foreground cursor-pointer transition-colors">
                 v1.0.0
               </span>
-              <span className="hover:text-foreground cursor-pointer transition-colors">
+              <Link to="/privacy" className="hover:text-foreground transition-colors">
                 Privacy
-              </span>
+              </Link>
+              <Link to="/admin" className="hover:text-foreground transition-colors">
+                Admin
+              </Link>
             </div>
           </div>
         </footer>

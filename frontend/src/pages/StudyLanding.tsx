@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   CheckCircle2,
+  ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -79,9 +80,29 @@ export default function StudyLanding() {
           ?.data?.detail ?? "Invalid invite code")
       : null;
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/");
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-lg space-y-6">
+        <div className="flex justify-start">
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-10 px-3 gap-2 text-xs font-black uppercase tracking-widest"
+            onClick={handleBack}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+        </div>
+
         {/* Header */}
         <div className="text-center space-y-2">
           <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 mb-2">

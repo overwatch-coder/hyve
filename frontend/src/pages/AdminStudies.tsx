@@ -29,7 +29,19 @@ import {
   Loader2,
   ChevronRight,
   Sparkles,
+  Trash2,
+  Package,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
 type Study = {
@@ -187,32 +199,48 @@ export default function AdminStudies() {
     setAiInstruction("");
   };
 
+  const [studyToDelete, setStudyToDelete] = useState<Study | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (studyId: number) => {
+      await api.delete(`/experiments/studies/${studyId}`, {
+        headers: getAuthHeaders(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-studies"] });
+      toast.success("Study deleted");
+      setStudyToDelete(null);
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || "Failed to delete study";
+      toast.error(msg);
+      setStudyToDelete(null);
+    },
+  });
+
   return (
-    <div className="min-h-screen bg-muted/30">
-      {/* Header */}
-      <div className="border-b bg-background sticky top-0 z-30">
-        <div className="max-w-5xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild className="h-8 w-8 -ml-2">
-              <Link to="/admin">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
-                <FlaskConical className="h-4 w-4 text-primary" />
-              </div>
-              <h1 className="font-bold tracking-tight">Research Studies</h1>
-            </div>
+    <div className="flex flex-col gap-6 animate-fade-in pb-12">
+      {/* Page header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
+            <FlaskConical className="h-4 w-4 text-primary" />
           </div>
-          <Button size="sm" className="gap-2" onClick={() => setShowCreate(true)}>
-            <Plus className="h-4 w-4" />
-            New Study
-          </Button>
+          <div>
+            <h2 className="text-2xl font-black tracking-tight">Research Studies</h2>
+            <p className="text-xs text-muted-foreground font-medium">Create and manage controlled research studies.</p>
+          </div>
         </div>
+        <Button size="sm" className="gap-2" onClick={() => setShowCreate(true)}>
+          <Plus className="h-4 w-4" />
+          New Study
+        </Button>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-8 space-y-4">
+      <div className="space-y-4">
         {isLoading ? (
           <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -254,7 +282,20 @@ export default function AdminStudies() {
                       {new Date(study.created_at).toLocaleDateString()}
                     </p>
                   </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setStudyToDelete(study);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -282,7 +323,10 @@ export default function AdminStudies() {
                 <option value="">Select a ready product</option>
                 {readyProducts.map((product) => (
                   <option key={product.id} value={product.id}>
-                    {product.name} ({product.category})
+                    {product.name.length > 55
+                      ? `${product.name.slice(0, 55)}\u2026`
+                      : product.name}{" "}
+                    ({product.category})
                   </option>
                 ))}
               </select>
@@ -294,17 +338,18 @@ export default function AdminStudies() {
             {selectedProduct && (
               <Card className="border-border/40 bg-muted/20">
                 <CardContent className="p-4 flex gap-4 items-start">
-                  <div className="h-20 w-20 rounded-xl overflow-hidden border border-border/30 bg-background shrink-0">
+                  <div className="h-20 w-20 rounded-xl overflow-hidden border border-border/30 bg-muted/30 shrink-0 flex items-center justify-center">
                     {selectedProduct.image_url ? (
                       <img
                         src={selectedProduct.image_url}
                         alt={selectedProduct.name}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain p-1"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = "none";
+                        }}
                       />
                     ) : (
-                      <div className="h-full w-full flex items-center justify-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                        No Image
-                      </div>
+                      <Package className="h-8 w-8 text-muted-foreground/30" />
                     )}
                   </div>
                   <div className="space-y-1 min-w-0">
@@ -461,6 +506,40 @@ export default function AdminStudies() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete study confirmation */}
+      <AlertDialog
+        open={!!studyToDelete}
+        onOpenChange={(open) => { if (!open) setStudyToDelete(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Study</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete{" "}
+              <strong className="text-foreground">{studyToDelete?.title}</strong>?
+              This will permanently remove all associated invites and participant responses.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+              onClick={() => studyToDelete && deleteMutation.mutate(studyToDelete.id)}
+            >
+              {deleteMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Deleting…</>
+              ) : (
+                "Delete Study"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

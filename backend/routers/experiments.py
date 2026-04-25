@@ -378,6 +378,19 @@ def update_study(
     return study
 
 
+@router.delete("/studies/{study_id}", status_code=204)
+def delete_study(
+    study_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    study = db.query(models.ExperimentStudy).filter(models.ExperimentStudy.id == study_id).first()
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    db.delete(study)
+    db.commit()
+
+
 @router.post("/studies/{study_id}/invites", response_model=List[schemas.ExperimentInviteOut])
 def generate_invites(
     study_id: int,
@@ -517,6 +530,30 @@ def send_invite_email_endpoint(
 
     # Optimistically mark as sent in the response (background will confirm in DB)
     return invite
+
+
+@router.delete("/studies/{study_id}/invites/{invite_id}", status_code=204)
+def delete_invite(
+    study_id: int,
+    invite_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    """Delete an unused invite code. Returns 409 if the code has already been used."""
+    invite = (
+        db.query(models.ExperimentInvite)
+        .filter(
+            models.ExperimentInvite.id == invite_id,
+            models.ExperimentInvite.study_id == study_id,
+        )
+        .first()
+    )
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    if invite.used:
+        raise HTTPException(status_code=409, detail="Cannot delete an invite that has already been used")
+    db.delete(invite)
+    db.commit()
 
 
 # ─── Study Analytics + Export (Admin) ─────────────────────────────────────────

@@ -1,5 +1,4 @@
-import { useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAdmin } from "@/hooks/useAdmin";
 import api from "@/lib/api";
@@ -14,10 +13,7 @@ import {
   MessageSquare,
   Layers,
   ShieldCheck,
-  LogOut,
   AlertTriangle,
-  FlaskConical,
-  BarChart2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,21 +30,8 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function AdminDashboard() {
-  const {
-    isAdmin,
-    isLoading: authLoading,
-    logout,
-    getAuthHeaders,
-  } = useAdmin();
-  const navigate = useNavigate();
+  const { isAdmin, getAuthHeaders } = useAdmin();
   const queryClient = useQueryClient();
-
-  // Redirect if not admin
-  useEffect(() => {
-    if (!authLoading && !isAdmin) {
-      navigate("/admin/login", { replace: true });
-    }
-  }, [authLoading, isAdmin, navigate]);
 
   // Fetch products
   const { data: productsData, isLoading: productsLoading } = useQuery({
@@ -88,64 +71,19 @@ export default function AdminDashboard() {
     },
   });
 
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center h-[60vh] text-muted-foreground gap-3">
-        <div className="h-8 w-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-        <span className="font-semibold">Verifying credentials...</span>
-      </div>
-    );
-  }
-
   if (!isAdmin) return null;
-
-  const handleLogout = () => {
-    logout();
-    navigate("/admin/login");
-    toast.success("Logged out");
-  };
 
   return (
     <div className="flex flex-col gap-8 animate-fade-in pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-primary" />
-            <h2 className="text-3xl font-black tracking-tight">
-              Admin Dashboard
-            </h2>
-          </div>
-          <p className="text-sm text-muted-foreground font-medium">
-            Manage products, view analytics, and oversee the platform.
-          </p>
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-primary" />
+          <h2 className="text-3xl font-black tracking-tight">Dashboard</h2>
         </div>
-
-        <div className="flex items-center gap-3">
-          <Button variant="outline" asChild className="gap-2 h-10">
-            <Link to="/admin/experiments/studies">
-              <FlaskConical className="h-4 w-4" /> Studies
-            </Link>
-          </Button>
-          <Button variant="outline" asChild className="gap-2 h-10">
-            <Link to="/admin/experiments/analysis">
-              <BarChart2 className="h-4 w-4" /> Analysis
-            </Link>
-          </Button>
-          <Button variant="default" asChild className="gap-2 h-10">
-            <Link to="/admin/experiments/review">
-              <ShieldCheck className="h-4 w-4" /> Experiment QC
-            </Link>
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2 border-border/40 h-10"
-            onClick={handleLogout}
-          >
-            <LogOut className="h-4 w-4" />
-            Sign Out
-          </Button>
-        </div>
+        <p className="text-sm text-muted-foreground font-medium">
+          Manage products, view analytics, and oversee the platform.
+        </p>
       </div>
 
       {/* Stats Cards */}

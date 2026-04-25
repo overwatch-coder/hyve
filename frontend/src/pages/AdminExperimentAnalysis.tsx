@@ -222,51 +222,45 @@ export default function AdminExperimentAnalysis() {
       : "—";
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      {/* Header */}
-      <div className="border-b bg-background sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild className="h-8 w-8 -ml-2">
-              <Link to="/admin">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
-                <BarChart2 className="h-4 w-4 text-primary" />
-              </div>
-              <h1 className="font-bold tracking-tight">Experiment Analysis</h1>
-            </div>
+    <div className="flex flex-col gap-6 animate-fade-in pb-12">
+      {/* Page header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
+            <BarChart2 className="h-4 w-4 text-primary" />
           </div>
-          <div className="flex items-center gap-3">
-            {selectedStudyId && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={handleExport}
-                disabled={exporting}
-              >
-                {exporting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Download className="h-3.5 w-3.5" />
-                )}
-                Export CSV
-              </Button>
-            )}
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/admin/experiments/studies">
-                <FlaskConical className="h-4 w-4 mr-2" />
-                Studies
-              </Link>
-            </Button>
+          <div>
+            <h2 className="text-2xl font-black tracking-tight">Experiment Analysis</h2>
+            <p className="text-xs text-muted-foreground font-medium">Review study results and export data.</p>
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {selectedStudyId && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={handleExport}
+              disabled={exporting}
+            >
+              {exporting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              Export CSV
+            </Button>
+          )}
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/admin/experiments/studies">
+              <FlaskConical className="h-4 w-4 mr-2" />
+              Studies
+            </Link>
+          </Button>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 md:px-8 py-8 space-y-8">
+      <div className="space-y-8">
         {/* Study Selector */}
         <Card className="border-border/40">
           <CardContent className="p-5">

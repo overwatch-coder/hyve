@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import RootLayout from "@/layouts/RootLayout";
+import AdminLayout from "@/layouts/AdminLayout";
 import { Toaster } from "@/components/ui/sonner";
 import Home from "@/pages/Home";
 import Products from "@/pages/Products";
@@ -18,6 +19,7 @@ import AmazonProductPage from "@/pages/AmazonProductPage";
 import About from "@/pages/About";
 import FAQ from "@/pages/FAQ";
 import Team from "@/pages/Team";
+import Privacy from "@/pages/Privacy";
 import StudyLanding from "@/pages/StudyLanding";
 import StudySession from "@/pages/StudySession";
 import AdminStudies from "@/pages/AdminStudies";
@@ -36,6 +38,18 @@ function App() {
             <Route path="study" element={<StudyLanding />} />
             <Route path="study/:inviteCode" element={<StudyLanding />} />
             <Route path="study/:inviteCode/session" element={<StudySession />} />
+
+            {/* Admin login — standalone page */}
+            <Route path="admin/login" element={<AdminLogin />} />
+
+            {/* Admin section — sidebar layout */}
+            <Route path="admin" element={<AdminLayout />}>
+              <Route index element={<AdminDashboard />} />
+              <Route path="experiments/review" element={<AdminExperimentReview />} />
+              <Route path="experiments/studies" element={<AdminStudies />} />
+              <Route path="experiments/studies/:studyId" element={<AdminStudyDetail />} />
+              <Route path="experiments/analysis" element={<AdminExperimentAnalysis />} />
+            </Route>
 
             <Route path="/" element={<RootLayout />}>
               {/* Public/Landing */}
@@ -65,34 +79,15 @@ function App() {
               {/* Test Analytics */}
               <Route path="test-analytics" element={<TestAnalytics />} />
 
-              {/* Admin */}
-              <Route path="admin/login" element={<AdminLogin />} />
-              <Route path="admin" element={<AdminDashboard />} />
-              <Route
-                path="admin/experiments/review"
-                element={<AdminExperimentReview />}
-              />
-              <Route
-                path="admin/experiments/studies"
-                element={<AdminStudies />}
-              />
-              <Route
-                path="admin/experiments/studies/:studyId"
-                element={<AdminStudyDetail />}
-              />
-              <Route
-                path="admin/experiments/analysis"
-                element={<AdminExperimentAnalysis />}
-              />
-
               {/* Amazon Product Search & Native Reviews */}
               <Route path="amazon" element={<AmazonSearch />} />
               <Route path="amazon/:asin" element={<AmazonProductPage />} />
 
-              {/* About & FAQ */}
+              {/* About, FAQ & Legal */}
               <Route path="about" element={<About />} />
               <Route path="faq" element={<FAQ />} />
               <Route path="team" element={<Team />} />
+              <Route path="privacy" element={<Privacy />} />
             </Route>
           </Routes>
           <Toaster />

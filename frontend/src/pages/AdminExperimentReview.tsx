@@ -51,44 +51,38 @@ export default function AdminExperimentReview() {
   };
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <div className="border-b bg-background sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild className="h-8 w-8 -ml-2">
-              <Link to="/admin">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
-                <Beaker className="h-4 w-4 text-orange-500" />
-              </div>
-              <h1 className="font-bold tracking-tight">Experiment QC</h1>
-            </div>
+    <div className="flex flex-col gap-6 animate-fade-in pb-12">
+      {/* Page header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
+            <Beaker className="h-4 w-4 text-orange-500" />
           </div>
-          
-          <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/admin/experiments/analysis">
-                <BarChart2 className="h-4 w-4 mr-2" />
-                Analysis
-              </Link>
-            </Button>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-[180px] h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-              <option value="pending">Pending Review</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-            </select>
-            <Button variant="outline" size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: ["experiment-review-queue"] })}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
+          <div>
+            <h2 className="text-2xl font-black tracking-tight">Experiment QC</h2>
+            <p className="text-xs text-muted-foreground font-medium">Review and approve participant submissions.</p>
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/admin/experiments/analysis">
+              <BarChart2 className="h-4 w-4 mr-2" />
+              Analysis
+            </Link>
+          </Button>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="flex-1 sm:flex-none w-full sm:w-[180px] h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+            <option value="pending">Pending Review</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <Button variant="outline" size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: ["experiment-review-queue"] })}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-6">
+      <div className="space-y-6">
         <div className="grid gap-6 md:grid-cols-3">
           <Card>
             <CardContent className="p-6">
@@ -118,8 +112,8 @@ export default function AdminExperimentReview() {
               <div className="space-y-8">
                 {queue?.map((item: any) => (
                   <div key={item.id} className="border border-border/50 rounded-xl overflow-hidden bg-card shadow-sm">
-                    <div className="bg-muted/50 px-4 py-3 flex items-center justify-between border-b border-border/50">
-                      <div className="flex items-center gap-4">
+                    <div className="bg-muted/50 px-4 py-3 flex flex-wrap items-start sm:items-center justify-between gap-2 border-b border-border/50">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline" className="font-mono text-xs">{String(item.id).slice(0,8)}</Badge>
                         <span className="text-sm font-bold flex items-center gap-2">
                           <User className="h-3.5 w-3.5 text-muted-foreground" />
