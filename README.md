@@ -208,6 +208,14 @@ nano backend/.env.production
 docker compose up -d --build
 ```
 
+Run schema migrations before first API start (and after pulling backend schema changes):
+
+```bash
+cd backend
+python migrate.py
+cd ..
+```
+
 This starts:
 
 | Service      | Port  | Description                |
@@ -217,7 +225,7 @@ This starts:
 | `postgres`   | 5432  | PostgreSQL 15              |
 | `redis`      | 6379  | Redis 7 (cache + broker)   |
 
-> **First run:** The backend auto-creates all tables on startup. No manual migration step needed.
+> **Migrations:** Database schema is managed by Alembic (`backend/alembic/`) and applied with `python backend/migrate.py`.
 
 ---
 

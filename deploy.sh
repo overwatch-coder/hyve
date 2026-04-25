@@ -30,9 +30,9 @@ echo "▶ Step 1/3 — Pushing $BRANCH to GitHub..."
 git push origin "$BRANCH"
 
 echo "▶ Step 2/3 — Connecting to $EC2_HOST..."
-echo "▶ Step 3/3 — Pulling latest code and rebuilding..."
+echo "▶ Step 3/3 — Pulling latest code, migrating DB, and rebuilding..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$EC2_HOST" \
-  "cd ~/hyve && git pull origin $BRANCH && docker compose down --remove-orphans && docker compose up -d --build"
+  "set -e; cd ~/hyve && git pull origin $BRANCH && docker compose build backend && docker compose up -d db redis && docker compose run --rm backend python migrate.py && docker compose up -d --build --remove-orphans"
 
 echo ""
 echo "✓ Deployment complete."

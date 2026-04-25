@@ -164,6 +164,8 @@ Save and exit: `Ctrl+X`, `Y`, `Enter`
 ## Step 8: Build and Start
 
 ```bash
+docker compose up -d db redis
+docker compose run --rm backend python migrate.py
 docker compose up -d --build
 ```
 
@@ -473,7 +475,9 @@ What it does in order:
 1. `git push origin main` — pushes your latest code to GitHub
 2. SSHs into EC2
 3. `git pull` — pulls the latest code on the server
-4. `docker compose up -d --build` — rebuilds changed images and restarts
+4. `docker compose up -d db redis` — ensures database dependencies are running
+5. `docker compose run --rm backend python migrate.py` — applies schema migrations
+6. `docker compose up -d --build` — rebuilds changed images and restarts
 
 Docker layer caching keeps rebuilds fast (1–3 minutes unless Python or npm dependencies changed).
 

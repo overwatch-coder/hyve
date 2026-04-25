@@ -16,47 +16,9 @@ if sys.platform == "win32":
 load_dotenv()
 
 import models
-from database import engine
 
-# Create the database tables
-models.Base.metadata.create_all(bind=engine)
-
-# Ad-hoc migration for SQLite: Add processing_step to products if missing
-from sqlalchemy import text
-with engine.connect() as conn:
-    try:
-        conn.execute(text("ALTER TABLE products ADD COLUMN processing_step VARCHAR"))
-        conn.commit()
-        print("MIGRATION: Added processing_step column to products table.")
-    except Exception:
-        pass
-    try:
-        conn.execute(text("ALTER TABLE products ADD COLUMN summary_seller TEXT"))
-        conn.commit()
-    except Exception: pass
-    try:
-        conn.execute(text("ALTER TABLE products ADD COLUMN advices_seller TEXT"))
-        conn.commit()
-    except Exception: pass
-    try:
-        conn.execute(text("ALTER TABLE products ADD COLUMN image_url VARCHAR"))
-        conn.commit()
-        print("MIGRATION: Added image_url column to products table.")
-    except Exception: pass
-    # Study / invite / participant / confidence migration
-    for stmt in [
-        "ALTER TABLE experiment_results ADD COLUMN study_id INTEGER REFERENCES experiment_studies(id)",
-        "ALTER TABLE experiment_results ADD COLUMN participant_id INTEGER UNIQUE REFERENCES experiment_participants(id)",
-        "ALTER TABLE experiment_results ADD COLUMN confidence_rating INTEGER",
-        "ALTER TABLE experiment_invites ADD COLUMN participant_email VARCHAR",
-        "ALTER TABLE experiment_invites ADD COLUMN email_sent BOOLEAN DEFAULT 0",
-        "ALTER TABLE experiment_invites ADD COLUMN email_sent_at DATETIME",
-    ]:
-        try:
-            conn.execute(text(stmt))
-            conn.commit()
-        except Exception:
-            pass
+# Schema changes are managed by Alembic via backend/migrate.py.
+# Keep API startup side-effect free: no DDL/migration logic in this file.
 
 app = FastAPI(
     title="HYVE API",
