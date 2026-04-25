@@ -531,15 +531,26 @@ export default function AdminStudyDetail() {
             </Button>
           )}
           {study.status === "active" && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-rose-500/40 text-rose-500 hover:bg-rose-500/5"
-              onClick={() => setStatus("closed")}
-              disabled={updateMutation.isPending}
-            >
-              Close Study
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-amber-500/40 text-amber-600 hover:bg-amber-500/5"
+                onClick={() => setStatus("draft")}
+                disabled={updateMutation.isPending}
+              >
+                Deactivate Study
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-rose-500/40 text-rose-500 hover:bg-rose-500/5"
+                onClick={() => setStatus("closed")}
+                disabled={updateMutation.isPending}
+              >
+                Close Study
+              </Button>
+            </>
           )}
           <Button variant="outline" size="sm" asChild>
             <Link to="/admin/experiments/analysis">
