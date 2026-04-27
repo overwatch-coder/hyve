@@ -1,7 +1,11 @@
+import logging
 import os
+import re
 import requests as http_requests
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+logger = logging.getLogger("hyve.aliexpress")
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 import schemas
@@ -18,9 +22,15 @@ ITEM_SEARCH_ENDPOINTS = [
     "item_search_4",
     "item_search_5",
 ]
+ITEM_REVIEW_ENDPOINTS = [
+    "item_review",
+    "item_review_2",
+    "item_review_3",
+]
 
 # Process-local optimization: once an endpoint works, try it first on next calls.
 _PREFERRED_ITEM_SEARCH_ENDPOINT = ITEM_SEARCH_ENDPOINTS[0]
+_PREFERRED_ITEM_REVIEW_ENDPOINT = ITEM_REVIEW_ENDPOINTS[0]
 
 
 def _to_int(value) -> Optional[int]:
@@ -51,8 +61,15 @@ def _normalize_aliexpress_url(item_url: Optional[str], item_id: Optional[str] = 
     if "aliexpress.com" in candidate and not candidate.startswith("http"):
         return f"https://{candidate}"
     if candidate.startswith("http://"):
-        return candidate.replace("http://", "https://", 1)
+        candidate = candidate.replace("http://", "https://", 1)
     if candidate.startswith("https://"):
+        # Fix double-domain: https://www.aliexpress.com//www.aliexpress.com/item/...
+        # or https://www.aliexpress.com/www.aliexpress.com/item/...
+        candidate = re.sub(
+            r'^(https://(?:www\.)?aliexpress\.com)/+(?:www\.)?aliexpress\.com/',
+            r'\1/',
+            candidate,
+        )
         return candidate
 
     if candidate.startswith("item/"):
@@ -431,96 +448,125 @@ def get_aliexpress_reviews(
         aliexpress_product = aliexpress_product_detail(item_id, db)
 
     # Fetch the requested page from RapidAPI and upsert into cache.
-    # We still return cache results even if RapidAPI fails.
-    try:
-        resp = http_requests.get(
-            f"{RAPIDAPI_BASE}/item_review",
-            headers=_rapidapi_headers(),
-            params={"itemId": item_id, "page": page},
-            timeout=20,
+    # Tries multiple endpoint variants (item_review, item_review_2, item_review_3) until one
+    # returns usable data. Falls back to DB cache if all endpoints fail.
+    global _PREFERRED_ITEM_REVIEW_ENDPOINT
+    ordered_review_endpoints = [_PREFERRED_ITEM_REVIEW_ENDPOINT] + [
+        ep for ep in ITEM_REVIEW_ENDPOINTS if ep != _PREFERRED_ITEM_REVIEW_ENDPOINT
+    ]
+
+    def _parse_reviews_from_json(json_data: dict) -> list:
+        result_obj = json_data.get("result", json_data)
+        raw = (
+            result_obj.get("resultList")
+            or result_obj.get("reviews")
+            or json_data.get("reviews")
+            or []
         )
-        if resp.status_code == 200:
-            json_data = resp.json()
-            result_obj = json_data.get("result", json_data)
-            reviews_raw = result_obj.get("resultList", []) or result_obj.get("reviews", []) or json_data.get("reviews", [])
+        seen_ids: set[str] = set()
+        out = []
+        for entry in raw:
+            review_obj = entry.get("review", entry) if isinstance(entry, dict) else {}
+            buyer_obj = entry.get("buyer", {}) if isinstance(entry, dict) else {}
+            rid = (
+                review_obj.get("reviewId")
+                or review_obj.get("id")
+                or review_obj.get("evaluationId")
+            )
+            if not rid:
+                continue
+            rid = str(rid)
+            if rid in seen_ids:
+                continue
+            seen_ids.add(rid)
+            body = (
+                review_obj.get("reviewContent")
+                or review_obj.get("reviewAdditional")
+                or review_obj.get("body")
+                or review_obj.get("reviewText")
+                or review_obj.get("text")
+                or ""
+            )
+            rating = (
+                _to_int(review_obj.get("reviewStarts"))
+                or _to_int(review_obj.get("rating"))
+                or _to_int(review_obj.get("stars"))
+                or 0
+            )
+            if not str(body).strip() and rating > 0:
+                body = f"Buyer left a {rating}-star rating without written text."
+            if not str(body).strip():
+                continue
+            helpful_yes = (
+                _to_int(review_obj.get("reviewHelpfulYes"))
+                or _to_int(review_obj.get("helpfulVotes"))
+                or 0
+            )
+            buyer_title = buyer_obj.get("buyerTitle") if isinstance(buyer_obj, dict) else None
+            buyer_country = buyer_obj.get("buyerCountry") if isinstance(buyer_obj, dict) else None
+            reviewer_name = buyer_title or (f"Buyer ({buyer_country})" if buyer_country else "Anonymous")
+            out.append({
+                "rapidapi_id": rid,
+                "title": None,
+                "body": str(body),
+                "rating": float(rating),
+                "reviewer_name": reviewer_name,
+                "helpful_votes": int(helpful_yes),
+            })
+        return out
 
-            seen_ids: set[str] = set()
-            normalized_reviews = []
-            for entry in reviews_raw:
-                review_obj = entry.get("review", entry) if isinstance(entry, dict) else {}
-                buyer_obj = entry.get("buyer", {}) if isinstance(entry, dict) else {}
-
-                rid = (
-                    review_obj.get("reviewId")
-                    or review_obj.get("id")
-                    or review_obj.get("evaluationId")
+    for endpoint in ordered_review_endpoints:
+        try:
+            resp = http_requests.get(
+                f"{RAPIDAPI_BASE}/{endpoint}",
+                headers=_rapidapi_headers(),
+                params={"itemId": item_id, "page": page},
+                timeout=20,
+            )
+            if resp.status_code != 200:
+                logger.warning(
+                    "[AliExpress reviews] %s returned HTTP %s for item_id=%s",
+                    endpoint, resp.status_code, item_id,
                 )
-                if not rid:
-                    continue
+                continue
 
-                rid = str(rid)
-                if rid in seen_ids:
-                    continue
-                seen_ids.add(rid)
-
-                body = (
-                    review_obj.get("reviewContent")
-                    or review_obj.get("reviewAdditional")
-                    or review_obj.get("body")
-                    or review_obj.get("reviewText")
-                    or review_obj.get("text")
-                    or ""
+            normalized_reviews = _parse_reviews_from_json(resp.json())
+            if not normalized_reviews:
+                logger.info(
+                    "[AliExpress reviews] %s returned 0 parseable reviews for item_id=%s (raw keys: %s)",
+                    endpoint, item_id, list(resp.json().keys()),
                 )
-                rating = _to_int(review_obj.get("reviewStarts")) or _to_int(review_obj.get("rating")) or _to_int(review_obj.get("stars")) or 0
-                if not str(body).strip() and rating > 0:
-                    body = f"Buyer left a {rating}-star rating without written text."
-                if not str(body).strip():
+                continue
+
+            # Found reviews — record preferred endpoint and upsert into DB.
+            _PREFERRED_ITEM_REVIEW_ENDPOINT = endpoint
+            id_set = {r["rapidapi_id"] for r in normalized_reviews}
+            existing_ids = {
+                row.rapidapi_id
+                for row in db.query(models.AliExpressReview.rapidapi_id).filter(
+                    models.AliExpressReview.rapidapi_id.in_(id_set)
+                ).all()
+            }
+            inserted_any = False
+            for r in normalized_reviews:
+                if r["rapidapi_id"] in existing_ids:
                     continue
-                helpful_yes = _to_int(review_obj.get("reviewHelpfulYes")) or _to_int(review_obj.get("helpfulVotes")) or 0
-
-                buyer_title = buyer_obj.get("buyerTitle") if isinstance(buyer_obj, dict) else None
-                buyer_country = buyer_obj.get("buyerCountry") if isinstance(buyer_obj, dict) else None
-                reviewer_name = buyer_title or (f"Buyer ({buyer_country})" if buyer_country else "Anonymous")
-
-                normalized_reviews.append(
-                    {
-                        "rapidapi_id": rid,
-                        "title": None,
-                        "body": str(body),
-                        "rating": float(rating),
-                        "reviewer_name": reviewer_name,
-                        "helpful_votes": int(helpful_yes),
-                    }
-                )
-
-            if normalized_reviews:
-                id_set = {r["rapidapi_id"] for r in normalized_reviews}
-                existing_ids = {
-                    row.rapidapi_id
-                    for row in db.query(models.AliExpressReview.rapidapi_id).filter(
-                        models.AliExpressReview.rapidapi_id.in_(id_set)
-                    ).all()
-                }
-
-                inserted_any = False
-                for r in normalized_reviews:
-                    if r["rapidapi_id"] in existing_ids:
-                        continue
-                    db.add(models.AliExpressReview(
-                        aliexpress_product_item_id=item_id,
-                        rapidapi_id=r["rapidapi_id"],
-                        title=r["title"],
-                        body=r["body"],
-                        rating=r["rating"],
-                        reviewer_name=r["reviewer_name"],
-                        helpful_votes=r["helpful_votes"],
-                    ))
-                    inserted_any = True
-
-                if inserted_any:
-                    db.commit()
-    except http_requests.RequestException:
-        pass
+                db.add(models.AliExpressReview(
+                    aliexpress_product_item_id=item_id,
+                    rapidapi_id=r["rapidapi_id"],
+                    title=r["title"],
+                    body=r["body"],
+                    rating=r["rating"],
+                    reviewer_name=r["reviewer_name"],
+                    helpful_votes=r["helpful_votes"],
+                ))
+                inserted_any = True
+            if inserted_any:
+                db.commit()
+            break  # Stop trying more endpoints once one succeeds.
+        except http_requests.RequestException as exc:
+            logger.warning("[AliExpress reviews] %s request failed for item_id=%s: %s", endpoint, item_id, exc)
+            continue
 
     query = db.query(models.AliExpressReview).filter(
         models.AliExpressReview.aliexpress_product_item_id == item_id

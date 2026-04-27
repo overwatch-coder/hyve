@@ -234,8 +234,12 @@ export default function AliExpressProductPage() {
   );
 
   // Fetch AliExpress (platform) reviews
-  const { data: aliexpressReviewsData, isLoading: aliexpressReviewsLoading } =
-    useQuery<PaginatedResponse<AliExpressReview>>({
+  const {
+    data: aliexpressReviewsData,
+    isLoading: aliexpressReviewsLoading,
+    isError: aliexpressReviewsError,
+    refetch: refetchAliexpressReviews,
+  } = useQuery<PaginatedResponse<AliExpressReview>>({
       queryKey: ["aliexpress-reviews", item_id, aliexpressPage],
       queryFn: async () => {
         const res = await api.get(`/aliexpress/products/${item_id}/reviews`, {
@@ -244,7 +248,8 @@ export default function AliExpressProductPage() {
         return res.data;
       },
       enabled: !!item_id,
-      retry: false,
+      staleTime: 0,
+      retry: 1,
       refetchOnWindowFocus: false,
     });
 
@@ -564,6 +569,19 @@ export default function AliExpressProductPage() {
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground space-y-4">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p>Fetching AliExpress reviews...</p>
+            </div>
+          ) : aliexpressReviewsError ? (
+            <div className="text-center py-12 space-y-3">
+              <p className="text-muted-foreground text-sm">
+                Could not load AliExpress reviews. The source may be temporarily unavailable.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchAliexpressReviews()}
+              >
+                Retry
+              </Button>
             </div>
           ) : !aliexpressReviewsData ||
             aliexpressReviewsData.items.length === 0 ? (
