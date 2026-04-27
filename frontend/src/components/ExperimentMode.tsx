@@ -22,6 +22,7 @@ import {
   CheckSquare,
   Square,
   Loader2,
+  PartyPopper,
 } from "lucide-react";
 import {
   Dialog,
@@ -161,6 +162,8 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   const [hudExpanded, setHudExpanded] = useState(true);
   const [checklistExpanded, setChecklistExpanded] = useState(true);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [thankYouOpen, setThankYouOpen] = useState(false);
+  const [isSubmittingResults, setIsSubmittingResults] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const TASKS = getTasks();
@@ -229,6 +232,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   };
 
   const submitResults = async () => {
+    setIsSubmittingResults(true);
     try {
       await api.post("/experiments/results", {
         product_id: product.id,
@@ -244,11 +248,13 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
           weaknesses: evidence.weaknesses.map((text) => ({ text })),
         },
       });
-      toast.success("Experiment results submitted successfully!");
-      onExperimentComplete?.();
-      handleClose();
+      setIsActive(false);
+      setShowCompletionModal(false);
+      setThankYouOpen(true);
     } catch {
       toast.error("Failed to submit results. Please try again.");
+    } finally {
+      setIsSubmittingResults(false);
     }
   };
 
@@ -258,6 +264,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
     setSeconds(0);
     setIsActive(false);
     setShowCompletionModal(false);
+    setThankYouOpen(false);
     setParticipantName("");
     setConfidenceRating(null);
     setHelpfulnessResponse(null);
@@ -267,6 +274,11 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
     });
     setTasksState({});
     setLeaveDialogOpen(false);
+  };
+
+  const completeAndClose = () => {
+    onExperimentComplete?.();
+    closeExperiment();
   };
 
   const handleClose = () => {
@@ -678,11 +690,19 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
           helpfulnessResponse={helpfulnessResponse}
           setHelpfulnessResponse={setHelpfulnessResponse}
           locked={locked}
+          isSubmitting={isSubmittingResults}
         />
         <LeaveStudyDialog
           open={leaveDialogOpen}
           onOpenChange={setLeaveDialogOpen}
           onConfirmLeave={closeExperiment}
+        />
+        <ThankYouDialog
+          open={thankYouOpen}
+          platform={platform}
+          seconds={seconds}
+          formatTime={formatTime}
+          onDone={completeAndClose}
         />
       </div>
     );
@@ -825,11 +845,19 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
         helpfulnessResponse={helpfulnessResponse}
         setHelpfulnessResponse={setHelpfulnessResponse}
         locked={locked}
+        isSubmitting={isSubmittingResults}
       />
       <LeaveStudyDialog
         open={leaveDialogOpen}
         onOpenChange={setLeaveDialogOpen}
         onConfirmLeave={closeExperiment}
+      />
+      <ThankYouDialog
+        open={thankYouOpen}
+        platform={platform}
+        seconds={seconds}
+        formatTime={formatTime}
+        onDone={completeAndClose}
       />
     </div>
   );
@@ -889,6 +917,7 @@ function CompletionModal({
   helpfulnessResponse,
   setHelpfulnessResponse,
   locked,
+  isSubmitting,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -903,6 +932,7 @@ function CompletionModal({
   helpfulnessResponse: "yes" | "no" | null;
   setHelpfulnessResponse: (v: "yes" | "no" | null) => void;
   locked?: boolean;
+  isSubmitting: boolean;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1015,13 +1045,73 @@ function CompletionModal({
           <Button
             className="font-black text-xs uppercase tracking-widest h-10 px-8 gap-2"
             onClick={submitResults}
+            disabled={isSubmitting}
           >
-            <Trophy className="h-3.5 w-3.5" />
-            Submit & Close
+            {isSubmitting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trophy className="h-3.5 w-3.5" />
+            )}
+            {isSubmitting ? "Submitting..." : "Submit & Close"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ThankYouDialog({
+  open,
+  platform,
+  seconds,
+  formatTime,
+  onDone,
+}: {
+  open: boolean;
+  platform: string;
+  seconds: number;
+  formatTime: (s: number) => string;
+  onDone: () => void;
+}) {
+  return (
+    <AlertDialog open={open}>
+      <AlertDialogContent className="sm:max-w-md rounded-2xl border-border/40 bg-card shadow-2xl">
+        <AlertDialogHeader className="flex flex-col items-center gap-4 text-center">
+          <motion.div
+            initial={{ scale: 0.86, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="h-16 w-16 rounded-full border-2 border-emerald-500/20 bg-emerald-500/10 text-emerald-500 flex items-center justify-center"
+          >
+            <PartyPopper className="h-8 w-8" />
+          </motion.div>
+          <AlertDialogTitle className="text-2xl font-black tracking-tight">
+            Thank You
+          </AlertDialogTitle>
+          <AlertDialogDescription className="text-sm leading-6">
+            Your {platform === "hyve" ? "HYVE" : "Traditional"} study response
+            has been submitted successfully.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <div className="rounded-xl border border-border/40 bg-muted/20 p-4 text-center">
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+            Completion Time
+          </p>
+          <p className="mt-2 text-2xl font-black tabular-nums">
+            {formatTime(seconds)}
+          </p>
+        </div>
+
+        <AlertDialogFooter className="sm:justify-center">
+          <AlertDialogAction
+            className="h-10 px-8 rounded-xl font-black uppercase tracking-widest text-xs"
+            onClick={onDone}
+          >
+            Finish
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

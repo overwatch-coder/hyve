@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ReactFlowProvider } from "@xyflow/react";
@@ -13,6 +13,7 @@ export default function StudySession() {
   const navigate = useNavigate();
   const { session, clearSession } = useStudySession();
   const [submitted, setSubmitted] = useState(false);
+  const submittedRef = useRef(false);
 
   // Guard: must have a valid session for this specific invite code
   useEffect(() => {
@@ -91,6 +92,7 @@ export default function StudySession() {
         sessionToken={session.session_token}
         studyInstructions={session.instructions}
         onExperimentComplete={() => {
+          submittedRef.current = true;
           setSubmitted(true);
           clearSession();
         }}
@@ -98,7 +100,9 @@ export default function StudySession() {
           if (!open) {
             clearSession();
             navigate(
-              submitted ? `/study/${inviteCode}?submitted=1` : `/study/${inviteCode}`,
+              submittedRef.current || submitted
+                ? `/study/${inviteCode}?submitted=1`
+                : `/study/${inviteCode}`,
               { replace: true },
             );
           }
