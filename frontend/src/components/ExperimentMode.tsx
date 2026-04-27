@@ -75,7 +75,7 @@ type TaskDef = {
 // The only difference is HOW the participant locates evidence:
 //   - HYVE:        from the AI decision tree (theme / claim / sentiment nodes)
 //   - Traditional: from raw reviews
-const getTasks = (platform: string) => {
+const getTasks = () => {
   return [
     {
       id: "strength-1",
@@ -163,7 +163,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const TASKS = getTasks(platform);
+  const TASKS = getTasks();
 
   const { data: reviews, isLoading: reviewsLoading, isError: reviewsError } = useQuery({
     queryKey: ["product-reviews-traditional", product?.id],
