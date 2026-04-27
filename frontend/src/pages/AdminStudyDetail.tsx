@@ -59,11 +59,31 @@ type Study = {
   consent_text?: string;
   instructions_hyve?: string;
   instructions_traditional?: string;
+  ground_truth_strengths?: string[];
+  ground_truth_weaknesses?: string[];
   status: string;
   public_token?: string;
   public_link_active?: boolean;
   created_at: string;
 };
+
+type StudyEditForm = Partial<
+  Omit<Study, "ground_truth_strengths" | "ground_truth_weaknesses">
+> & {
+  ground_truth_strengths?: string;
+  ground_truth_weaknesses?: string;
+};
+
+function parseGroundTruthLines(value?: string) {
+  return (value || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function formatGroundTruthLines(value?: string[]) {
+  return (value || []).join("\n");
+}
 
 type ProductOption = {
   id: number;
@@ -154,7 +174,7 @@ export default function AdminStudyDetail() {
 
   // Local edit state for study config
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState<Partial<Study>>({});
+  const [editForm, setEditForm] = useState<StudyEditForm>({});
 
   const { data: productsResponse } = useQuery<{ items: ProductOption[] }>({
     queryKey: ["study-product-options"],
@@ -470,6 +490,12 @@ export default function AdminStudyDetail() {
         consent_text: study.consent_text,
         instructions_hyve: study.instructions_hyve,
         instructions_traditional: study.instructions_traditional,
+        ground_truth_strengths: formatGroundTruthLines(
+          study.ground_truth_strengths,
+        ),
+        ground_truth_weaknesses: formatGroundTruthLines(
+          study.ground_truth_weaknesses,
+        ),
       });
       setEditing(true);
     }
@@ -679,11 +705,47 @@ export default function AdminStudyDetail() {
                     rows={3}
                   />
                 </Field>
+                <Field label="Ground Truth Strengths">
+                  <Textarea
+                    value={editForm.ground_truth_strengths ?? ""}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        ground_truth_strengths: e.target.value,
+                      })
+                    }
+                    rows={4}
+                    placeholder={"One strength per line\nFast charging\nClear sound"}
+                  />
+                </Field>
+                <Field label="Ground Truth Weaknesses">
+                  <Textarea
+                    value={editForm.ground_truth_weaknesses ?? ""}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        ground_truth_weaknesses: e.target.value,
+                      })
+                    }
+                    rows={4}
+                    placeholder={"One weakness per line\nHigh price\nNo carrying case"}
+                  />
+                </Field>
                 <div className="flex gap-2 pt-2">
                   <Button
                     size="sm"
                     disabled={updateMutation.isPending}
-                    onClick={() => updateMutation.mutate(editForm)}
+                    onClick={() =>
+                      updateMutation.mutate({
+                        ...editForm,
+                        ground_truth_strengths: parseGroundTruthLines(
+                          editForm.ground_truth_strengths,
+                        ),
+                        ground_truth_weaknesses: parseGroundTruthLines(
+                          editForm.ground_truth_weaknesses,
+                        ),
+                      })
+                    }
                   >
                     {updateMutation.isPending ? (
                       <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Saving…</>
@@ -706,6 +768,14 @@ export default function AdminStudyDetail() {
                 <Row
                   label="Traditional Instructions"
                   value={study.instructions_traditional}
+                />
+                <Row
+                  label="Ground Truth Strengths"
+                  value={(study.ground_truth_strengths || []).join(" | ")}
+                />
+                <Row
+                  label="Ground Truth Weaknesses"
+                  value={(study.ground_truth_weaknesses || []).join(" | ")}
                 />
                 <Row
                   label="Created"

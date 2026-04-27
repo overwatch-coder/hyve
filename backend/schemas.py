@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict
-from typing import List, Optional, Generic, TypeVar, Dict
+from pydantic import BaseModel, ConfigDict, field_validator
+from typing import List, Optional, Generic, TypeVar, Dict, Any
 from datetime import datetime
 
 T = TypeVar('T')
@@ -168,6 +168,7 @@ class ExperimentResultBase(BaseModel):
     evidence: Optional[ExperimentEvidence] = None
     # Study session linkage (set by client, resolved server-side)
     session_token: Optional[str] = None
+    helpfulness_response: Optional[str] = None
     confidence_rating: Optional[int] = None  # 1–5 self-reported
 
 
@@ -182,6 +183,8 @@ class ExperimentResult(ExperimentResultBase):
     participant_id: Optional[int] = None
     similarity_scores: Optional[Dict[str, float]] = None
     review_status: str = "pending"
+    participant_helpful: Optional[bool] = None
+    admin_analysis: Optional[Dict[str, Any]] = None
     review_notes: Optional[str] = None
     reviewed_by: Optional[str] = None
     reviewed_at: Optional[datetime] = None
@@ -197,6 +200,12 @@ class ExperimentAnalytics(BaseModel):
 
 # --- Experiment Studies ---
 
+
+def _normalize_string_list(value: Optional[List[str]]) -> Optional[List[str]]:
+    if value is None:
+        return None
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
 class ExperimentStudyCreate(BaseModel):
     product_id: int
     title: str
@@ -204,6 +213,13 @@ class ExperimentStudyCreate(BaseModel):
     consent_text: Optional[str] = None
     instructions_hyve: Optional[str] = None
     instructions_traditional: Optional[str] = None
+    ground_truth_strengths: Optional[List[str]] = None
+    ground_truth_weaknesses: Optional[List[str]] = None
+
+    @field_validator("ground_truth_strengths", "ground_truth_weaknesses", mode="before")
+    @classmethod
+    def normalize_ground_truth_lists(cls, value: Optional[List[str]]) -> Optional[List[str]]:
+        return _normalize_string_list(value)
 
 
 class ExperimentStudyUpdate(BaseModel):
@@ -212,7 +228,14 @@ class ExperimentStudyUpdate(BaseModel):
     consent_text: Optional[str] = None
     instructions_hyve: Optional[str] = None
     instructions_traditional: Optional[str] = None
+    ground_truth_strengths: Optional[List[str]] = None
+    ground_truth_weaknesses: Optional[List[str]] = None
     status: Optional[str] = None  # draft | active | closed
+
+    @field_validator("ground_truth_strengths", "ground_truth_weaknesses", mode="before")
+    @classmethod
+    def normalize_ground_truth_lists(cls, value: Optional[List[str]]) -> Optional[List[str]]:
+        return _normalize_string_list(value)
 
 
 class StudyCopyAssistRequest(BaseModel):
@@ -234,6 +257,8 @@ class ExperimentStudyOut(BaseModel):
     consent_text: Optional[str] = None
     instructions_hyve: Optional[str] = None
     instructions_traditional: Optional[str] = None
+    ground_truth_strengths: Optional[List[str]] = None
+    ground_truth_weaknesses: Optional[List[str]] = None
     status: str
     public_token: Optional[str] = None
     public_link_active: bool = False

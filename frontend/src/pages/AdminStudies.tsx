@@ -48,9 +48,18 @@ type Study = {
   product_id: number;
   title: string;
   description?: string;
+  ground_truth_strengths?: string[];
+  ground_truth_weaknesses?: string[];
   status: string;
   created_at: string;
 };
+
+function parseGroundTruthLines(value: string) {
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
 
 type ProductOption = {
   id: number;
@@ -97,6 +106,8 @@ export default function AdminStudies() {
     consent_text: "",
     instructions_hyve: "",
     instructions_traditional: "",
+    ground_truth_strengths: "",
+    ground_truth_weaknesses: "",
   });
 
   const { data: productsResponse } = useQuery<{ items: ProductOption[] }>({
@@ -137,6 +148,8 @@ export default function AdminStudies() {
           consent_text: form.consent_text || undefined,
           instructions_hyve: form.instructions_hyve || undefined,
           instructions_traditional: form.instructions_traditional || undefined,
+          ground_truth_strengths: parseGroundTruthLines(form.ground_truth_strengths),
+          ground_truth_weaknesses: parseGroundTruthLines(form.ground_truth_weaknesses),
         },
         { headers: getAuthHeaders() }
       );
@@ -447,6 +460,38 @@ export default function AdminStudies() {
                 }
                 rows={3}
               />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                Ground Truth Strengths
+              </label>
+              <Textarea
+                placeholder={"One strength per line\nFast charging\nClear sound"}
+                value={form.ground_truth_strengths}
+                onChange={(e) =>
+                  setForm({ ...form, ground_truth_strengths: e.target.value })
+                }
+                rows={4}
+              />
+              <p className="text-[10px] text-muted-foreground/60">
+                Add up to 5 reference strengths for later admin analysis.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                Ground Truth Weaknesses
+              </label>
+              <Textarea
+                placeholder={"One weakness per line\nHigh price\nNo carrying case"}
+                value={form.ground_truth_weaknesses}
+                onChange={(e) =>
+                  setForm({ ...form, ground_truth_weaknesses: e.target.value })
+                }
+                rows={4}
+              />
+              <p className="text-[10px] text-muted-foreground/60">
+                Add up to 5 reference weaknesses for later admin analysis.
+              </p>
             </div>
           </div>
 

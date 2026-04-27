@@ -322,6 +322,124 @@ def _decode_vector_bytes(blob: bytes):
     return np.frombuffer(payload, dtype=np.float32)
 
 
+def _get_embedding_provider_and_model() -> tuple[str, str]:
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    default_model = (
+        "gemini-embedding-001"
+        if provider == "gemini"
+        else "text-embedding-3-small"
+    )
+    model_name = os.getenv("EMBEDDING_MODEL_NAME", default_model)
+    return provider, model_name
+
+
+def embed_texts(texts: list[str], task_type: str = "SEMANTIC_SIMILARITY"):
+    """
+    Return embeddings for a list of texts using the configured provider.
+
+    Uses the same in-process and Redis-backed cache as clustering so repeated
+    experiment analysis calls do not keep paying for the same vectors.
+    Raises RuntimeError when the configured embedding provider is unavailable.
+    """
+    import numpy as np
+
+    if not texts:
+        return np.empty((0, 0), dtype=np.float32)
+
+    provider, model_name = _get_embedding_provider_and_model()
+    normalized = [_normalize_claim_text(text) for text in texts]
+    redis_client = _redis_get_client()
+
+    cached_vectors = [None] * len(normalized)
+    keys = []
+    missing = []
+    for i, txt in enumerate(normalized):
+        key = _embedding_cache_key(model_name, txt)
+        keys.append(key)
+        vec = _EMBEDDING_VECTOR_CACHE.get(key)
+        if vec is not None:
+            cached_vectors[i] = vec
+        else:
+            missing.append(i)
+
+    if redis_client and missing:
+        try:
+            blobs = redis_client.mget([keys[i] for i in missing])
+            still_missing = []
+            for k, blob in enumerate(blobs):
+                original_i = missing[k]
+                if not blob:
+                    still_missing.append(original_i)
+                    continue
+                decoded = _decode_vector_bytes(blob)
+                if decoded is None:
+                    still_missing.append(original_i)
+                    continue
+                cached_vectors[original_i] = decoded
+                _EMBEDDING_VECTOR_CACHE[keys[original_i]] = decoded
+            missing = still_missing
+        except Exception:
+            pass
+
+    if missing:
+        batch_size = int(os.getenv("EMBEDDING_BATCH_SIZE", "64"))
+        missing_texts = [normalized[i] for i in missing]
+        all_vecs = []
+
+        if provider == "gemini":
+            api_key = os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                raise RuntimeError("GEMINI_API_KEY is not configured")
+            from google import genai as _ggenai
+            from google.genai import types as _gtypes
+
+            _gclient = _ggenai.Client(api_key=api_key)
+            for i in range(0, len(missing_texts), batch_size):
+                result = _gclient.models.embed_content(
+                    model=model_name,
+                    contents=missing_texts[i:i + batch_size],
+                    config=_gtypes.EmbedContentConfig(task_type=task_type),
+                )
+                all_vecs.append(
+                    np.array([e.values for e in result.embeddings], dtype=np.float32)
+                )
+        else:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise RuntimeError("OPENAI_API_KEY is not configured")
+            import openai
+
+            _oclient = openai.OpenAI(api_key=api_key)
+            for i in range(0, len(missing_texts), batch_size):
+                response = _oclient.embeddings.create(
+                    model=model_name,
+                    input=missing_texts[i:i + batch_size],
+                )
+                all_vecs.append(
+                    np.array([e.embedding for e in response.data], dtype=np.float32)
+                )
+
+        new_vecs = np.vstack(all_vecs) if len(all_vecs) > 1 else all_vecs[0]
+        for local_idx, original_i in enumerate(missing):
+            vec = new_vecs[local_idx]
+            cached_vectors[original_i] = vec
+            _EMBEDDING_VECTOR_CACHE[keys[original_i]] = vec
+
+        if redis_client:
+            try:
+                pipe = redis_client.pipeline()
+                for original_i in missing:
+                    pipe.set(
+                        keys[original_i],
+                        _encode_vector_bytes(cached_vectors[original_i]),
+                    )
+                pipe.execute()
+            except Exception:
+                pass
+
+    return np.vstack([np.asarray(v, dtype=np.float32) for v in cached_vectors])
+
+
 def cluster_claims(claims_texts: list[str]) -> list[int]:
     """
     Groups claims into thematic clusters using embeddings (OpenAI or Gemini,

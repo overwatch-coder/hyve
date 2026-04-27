@@ -427,6 +427,7 @@ export interface ExploreContentProps {
   setViewMode: (mode: "accordion" | "graph" | "traditional") => void;
   hideExperimentTrigger?: boolean;
   hideTraditionalTrigger?: boolean;
+  hideRegenerateTrigger?: boolean;
   isExperiment?: boolean;
   onStartExperiment?: () => void;
   resetTrigger?: number;
@@ -578,6 +579,7 @@ export function ExploreContentImpl({
   setViewMode,
   hideExperimentTrigger = false,
   hideTraditionalTrigger = false,
+  hideRegenerateTrigger = false,
   isExperiment = false,
   onStartExperiment,
   resetTrigger,
@@ -1014,7 +1016,9 @@ export function ExploreContentImpl({
               </Tabs>
 
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-                {productData && productData.status !== "processing" && (
+                {!hideRegenerateTrigger &&
+                  productData &&
+                  productData.status !== "processing" && (
                   <Button
                     variant="outline"
                     size="sm"

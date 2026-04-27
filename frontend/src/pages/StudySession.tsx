@@ -21,6 +21,18 @@ export default function StudySession() {
     }
   }, [session, inviteCode, navigate, submitted]);
 
+  useEffect(() => {
+    if (!session || submitted) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [session, submitted]);
+
   const { data: product, isLoading: productLoading } = useQuery({
     queryKey: ["study-product", session?.product_id],
     queryFn: async () => {

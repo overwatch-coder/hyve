@@ -31,6 +31,16 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import api from "@/lib/api";
@@ -59,8 +69,6 @@ type TaskDef = {
   label: string;
   group: TaskGroup;
   index: number;
-  refType: "review" | "positive-claim" | "negative-claim";
-  refId: string;
 };
 
 // Both platforms use identical task labels so results are directly comparable.
@@ -75,8 +83,6 @@ const getTasks = (platform: string) => {
       label: "Top Strength 1",
       group: "strengths",
       index: 0,
-      refType: platform === "traditional" ? "review" : "positive-claim",
-      refId: "strength_1_ref",
     },
     {
       id: "strength-2",
@@ -84,8 +90,6 @@ const getTasks = (platform: string) => {
       label: "Top Strength 2",
       group: "strengths",
       index: 1,
-      refType: platform === "traditional" ? "review" : "positive-claim",
-      refId: "strength_2_ref",
     },
     {
       id: "strength-3",
@@ -93,8 +97,6 @@ const getTasks = (platform: string) => {
       label: "Top Strength 3",
       group: "strengths",
       index: 2,
-      refType: platform === "traditional" ? "review" : "positive-claim",
-      refId: "strength_3_ref",
     },
     {
       id: "weakness-1",
@@ -102,8 +104,6 @@ const getTasks = (platform: string) => {
       label: "Top Weakness 1",
       group: "weaknesses",
       index: 0,
-      refType: platform === "traditional" ? "review" : "negative-claim",
-      refId: "weakness_1_ref",
     },
     {
       id: "weakness-2",
@@ -111,8 +111,6 @@ const getTasks = (platform: string) => {
       label: "Top Weakness 2",
       group: "weaknesses",
       index: 1,
-      refType: platform === "traditional" ? "review" : "negative-claim",
-      refId: "weakness_2_ref",
     },
     {
       id: "weakness-3",
@@ -120,8 +118,6 @@ const getTasks = (platform: string) => {
       label: "Top Weakness 3",
       group: "weaknesses",
       index: 2,
-      refType: platform === "traditional" ? "review" : "negative-claim",
-      refId: "weakness_3_ref",
     },
   ] satisfies TaskDef[];
 };
@@ -148,20 +144,23 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   const [evidence, setEvidence] = useState<{
     strengths: string[];
     weaknesses: string[];
-    source_refs: Record<string, { type: string; id: string }>;
   }>({
     strengths: ["", "", ""],
     weaknesses: ["", "", ""],
-    source_refs: {},
   });
 
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [participantName, setParticipantName] = useState("");
   const [confidenceRating, setConfidenceRating] = useState<number | null>(null);
+  const [helpfulnessResponse, setHelpfulnessResponse] = useState<
+    "yes" | "no" | null
+  >(null);
   const [viewMode, setViewMode] = useState<
     "accordion" | "graph" | "traditional"
   >("graph");
   const [hudExpanded, setHudExpanded] = useState(true);
+  const [checklistExpanded, setChecklistExpanded] = useState(true);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const TASKS = getTasks(platform);
@@ -203,16 +202,15 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
     setEvidence({
       strengths: ["", "", ""],
       weaknesses: ["", "", ""],
-      source_refs: {},
     });
     setHudExpanded(true);
+    setChecklistExpanded(true);
+    setHelpfulnessResponse(null);
   };
 
   const isTaskValid = (task: TaskDef) => {
     const text = evidence[task.group][task.index]?.trim();
-    if (!text) return false;
-    if (!evidence.source_refs[task.refId]) return false;
-    return true;
+    return Boolean(text);
   };
 
   const handleTaskToggle = (taskId: string) => {
@@ -228,11 +226,6 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
     // Auto collapse form when marked done
     if (newTasks[taskId]) setOpenTaskForm(null);
 
-    const allDone = TASKS.every((t) => newTasks[t.id]);
-    if (allDone) {
-      setIsActive(false);
-      setShowCompletionModal(true);
-    }
   };
 
   const submitResults = async () => {
@@ -244,11 +237,11 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
         participant_name: participantName || "Anonymous Participant",
         session_token: sessionToken,
         confidence_rating: confidenceRating,
+        helpfulness_response: helpfulnessResponse,
         evidence: {
           platform,
           strengths: evidence.strengths.map((text) => ({ text })),
           weaknesses: evidence.weaknesses.map((text) => ({ text })),
-          source_refs: evidence.source_refs,
         },
       });
       toast.success("Experiment results submitted successfully!");
@@ -259,35 +252,36 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
     }
   };
 
-  const handleClose = () => {
+  const closeExperiment = () => {
     onOpenChange(false);
     setPlatform("select");
     setSeconds(0);
     setIsActive(false);
     setShowCompletionModal(false);
     setParticipantName("");
+    setConfidenceRating(null);
+    setHelpfulnessResponse(null);
     setEvidence({
       strengths: ["", "", ""],
       weaknesses: ["", "", ""],
-      source_refs: {},
     });
     setTasksState({});
+    setLeaveDialogOpen(false);
+  };
+
+  const handleClose = () => {
+    if (locked && !showCompletionModal && completedCount < TASKS.length) {
+      setLeaveDialogOpen(true);
+      return;
+    }
+
+    closeExperiment();
   };
 
   const formatTime = (s: number) => {
     const mins = Math.floor(s / 60);
     const secs = s % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const handleSourceRefPick = (refId: string, type: string, id: string) => {
-    setEvidence((prev) => ({
-      ...prev,
-      source_refs: {
-        ...prev.source_refs,
-        [refId]: { type, id },
-      },
-    }));
   };
 
   const completedCount = TASKS.filter((t) => tasksState[t.id]).length;
@@ -438,182 +432,171 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
               </div>
             </div>
 
-            <div className="p-4 space-y-2 overflow-y-auto flex-1">
-              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-3">
-                Mission Checklist
-              </p>
-              {TASKS.map((task) => {
-                const done = tasksState[task.id];
-                const valid = isTaskValid(task);
-                const isOpen = openTaskForm === task.id;
-
-                return (
-                  <div key={task.id} className="space-y-1">
-                    <button
-                      className={cn(
-                        "w-full flex justify-between items-center px-3 py-2.5 rounded-xl border text-left transition-all",
-                        done
-                          ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-400"
-                          : "bg-background border-border/30 text-muted-foreground hover:border-border hover:text-foreground",
-                      )}
-                      onClick={() =>
-                        !done
-                          ? setOpenTaskForm(isOpen ? null : task.id)
-                          : handleTaskToggle(task.id)
-                      }
-                    >
-                      <div className="flex items-center gap-3">
-                        {done ? (
-                          <CheckSquare className="h-4 w-4 shrink-0 text-emerald-500" />
-                        ) : (
-                          <Square className="h-4 w-4 shrink-0 opacity-40" />
-                        )}
-                        <span
-                          className={cn(
-                            "text-xs font-bold",
-                            done ? "" : valid ? "text-primary" : "",
-                          )}
-                        >
-                          {task.label}
-                        </span>
-                      </div>
-                      {!done && (
-                        <div className="flex gap-2 items-center">
-                          {valid && (
-                            <div
-                              className="h-1.5 w-1.5 bg-emerald-500 rounded-full"
-                              title="Valid"
-                            ></div>
-                          )}
-                          {isOpen ? (
-                            <ChevronUp className="w-4 h-4" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4" />
-                          )}
-                        </div>
-                      )}
-                    </button>
-                    <AnimatePresence>
-                      {isOpen && !done && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="p-3 bg-muted/30 border border-border/40 rounded-xl space-y-3 mt-1">
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                              Response
-                            </label>
-                            <textarea
-                              rows={3}
-                              className="w-full text-xs p-2 rounded-md border border-border bg-background"
-                              placeholder={`Write ${task.label.toLowerCase()} in your own words...`}
-                              value={evidence[task.group][task.index]}
-                              onChange={(e) => {
-                                setEvidence((prev) => ({
-                                  ...prev,
-                                  [task.group]: prev[task.group].map((entry, index) =>
-                                    index === task.index ? e.target.value : entry,
-                                  ),
-                                }));
-                              }}
-                            />
-
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mt-2 block">
-                              Source Reference
-                            </label>
-                            {platform === "hyve" &&
-                              (task.refType === "positive-claim" ||
-                                task.refType === "negative-claim") && (
-                                <select
-                                  className="w-full text-xs p-2 rounded-md border border-border bg-background"
-                                  value={
-                                    evidence.source_refs[task.refId]?.id || ""
-                                  }
-                                  onChange={(e) =>
-                                    handleSourceRefPick(
-                                      task.refId,
-                                      "claim",
-                                      e.target.value,
-                                    )
-                                  }
-                                >
-                                  <option value="">-- Choose Supporting Claim --</option>
-                                  {product?.themes
-                                    ?.flatMap((t: any) =>
-                                      (t.claims || []).filter((c: any) =>
-                                        task.refType === "positive-claim"
-                                          ? c.sentiment_polarity === "positive"
-                                          : c.sentiment_polarity === "negative",
-                                      ),
-                                    )
-                                    .map((c: any) => (
-                                      <option key={c.id} value={c.id}>
-                                        {c.claim_text}
-                                      </option>
-                                    ))}
-                                </select>
-                              )}
-                            {platform === "traditional" && (
-                              <div className="text-[10px] text-muted-foreground">
-                                {evidence.source_refs[task.refId] ? (
-                                  <span className="text-emerald-500 font-bold">
-                                    Review Selected
-                                  </span>
-                                ) : (
-                                  <span className="text-amber-500 font-bold">
-                                    Please click a "Use for..." button on a
-                                    review to select it as evidence.
-                                  </span>
-                                )}
-                              </div>
-                            )}
-
-                            <Button
-                              className="w-full text-[10px] h-7 uppercase tracking-wider font-bold"
-                              disabled={!valid}
-                              onClick={() => handleTaskToggle(task.id)}
-                            >
-                              Mark Complete
-                            </Button>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="px-4 pb-4 space-y-3 shrink-0 bg-card/60">
-              <div>
-                <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">
-                  <span>Progress</span>
-                  <span className="text-primary">
-                    {Math.round((completedCount / TASKS.length) * 100)}%
+            <div className="p-4 space-y-3 overflow-y-auto flex-1">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-xl border border-border/30 bg-background/60 px-3 py-2 text-left transition-colors hover:border-border hover:bg-background"
+                onClick={() => setChecklistExpanded((value) => !value)}
+                aria-expanded={checklistExpanded}
+              >
+                <div className="flex items-center gap-2">
+                  <ListIcon className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground">
+                    Mission Checklist
                   </span>
                 </div>
-                <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full bg-primary rounded-full"
-                    animate={{
-                      width: `${(completedCount / TASKS.length) * 100}%`,
-                    }}
-                  />
+                <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground">
+                  <span>
+                    {completedCount}/{TASKS.length}
+                  </span>
+                  {checklistExpanded ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
                 </div>
-              </div>
-              <Button
-                className="w-full h-9 font-black text-[10px] uppercase tracking-widest gap-2"
-                disabled={completedCount < TASKS.length}
-                onClick={() => {
-                  setIsActive(false);
-                  setShowCompletionModal(true);
-                }}
-              >
-                <Trophy className="h-3.5 w-3.5" />
-                Submit Results
-              </Button>
+              </button>
+
+              <AnimatePresence initial={false}>
+                {checklistExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="space-y-2 pt-1">
+                      {TASKS.map((task) => {
+                        const done = tasksState[task.id];
+                        const valid = isTaskValid(task);
+                        const isOpen = openTaskForm === task.id;
+
+                        return (
+                          <div key={task.id} className="space-y-1">
+                            <button
+                              className={cn(
+                                "w-full flex justify-between items-center px-3 py-2.5 rounded-xl border text-left transition-all",
+                                done
+                                  ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-400"
+                                  : "bg-background border-border/30 text-muted-foreground hover:border-border hover:text-foreground",
+                              )}
+                              onClick={() =>
+                                !done
+                                  ? setOpenTaskForm(isOpen ? null : task.id)
+                                  : handleTaskToggle(task.id)
+                              }
+                            >
+                              <div className="flex items-center gap-3">
+                                {done ? (
+                                  <CheckSquare className="h-4 w-4 shrink-0 text-emerald-500" />
+                                ) : (
+                                  <Square className="h-4 w-4 shrink-0 opacity-40" />
+                                )}
+                                <span
+                                  className={cn(
+                                    "text-xs font-bold",
+                                    done ? "" : valid ? "text-primary" : "",
+                                  )}
+                                >
+                                  {task.label}
+                                </span>
+                              </div>
+                              {!done && (
+                                <div className="flex gap-2 items-center">
+                                  {valid && (
+                                    <div
+                                      className="h-1.5 w-1.5 bg-emerald-500 rounded-full"
+                                      title="Valid"
+                                    ></div>
+                                  )}
+                                  {isOpen ? (
+                                    <ChevronUp className="w-4 h-4" />
+                                  ) : (
+                                    <ChevronDown className="w-4 h-4" />
+                                  )}
+                                </div>
+                              )}
+                            </button>
+                            <AnimatePresence>
+                              {isOpen && !done && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: "auto", opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="p-3 bg-muted/30 border border-border/40 rounded-xl space-y-3 mt-1">
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                                      Response
+                                    </label>
+                                    <textarea
+                                      rows={3}
+                                      className="w-full text-xs p-2 rounded-md border border-border bg-background"
+                                      placeholder={`Write ${task.label.toLowerCase()} in your own words...`}
+                                      value={evidence[task.group][task.index]}
+                                      onChange={(e) => {
+                                        setEvidence((prev) => ({
+                                          ...prev,
+                                          [task.group]: prev[task.group].map((entry, index) =>
+                                            index === task.index ? e.target.value : entry,
+                                          ),
+                                        }));
+                                      }}
+                                    />
+
+                                    <p className="text-[10px] text-muted-foreground">
+                                      Focus on the top insight only. Source references
+                                      are no longer required here.
+                                    </p>
+
+                                    <Button
+                                      className="w-full text-[10px] h-7 uppercase tracking-wider font-bold"
+                                      disabled={!valid}
+                                      onClick={() => handleTaskToggle(task.id)}
+                                    >
+                                      Mark Complete
+                                    </Button>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        );
+                      })}
+
+                      <div className="px-1 pt-2 space-y-3 shrink-0 bg-card/60">
+                        <div>
+                          <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">
+                            <span>Progress</span>
+                            <span className="text-primary">
+                              {Math.round((completedCount / TASKS.length) * 100)}%
+                            </span>
+                          </div>
+                          <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
+                            <motion.div
+                              className="h-full bg-primary rounded-full"
+                              animate={{
+                                width: `${(completedCount / TASKS.length) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          className="w-full h-9 font-black text-[10px] uppercase tracking-widest gap-2"
+                          disabled={completedCount < TASKS.length}
+                          onClick={() => {
+                            setIsActive(false);
+                            setShowCompletionModal(true);
+                          }}
+                        >
+                          <Trophy className="h-3.5 w-3.5" />
+                          Submit Results
+                        </Button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         )}
@@ -671,13 +654,19 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
             onRefresh={() => {}}
             hideExperimentTrigger={true}
             hideTraditionalTrigger={true}
+            hideRegenerateTrigger={true}
             isExperiment={false}
           />
         </div>
         {HUDPanel}
         <CompletionModal
           open={showCompletionModal}
-          onOpenChange={setShowCompletionModal}
+          onOpenChange={(nextOpen) => {
+            setShowCompletionModal(nextOpen);
+            if (!nextOpen && completedCount >= TASKS.length) {
+              setIsActive(true);
+            }
+          }}
           platform={platform}
           seconds={seconds}
           formatTime={formatTime}
@@ -686,7 +675,14 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
           submitResults={submitResults}
           confidenceRating={confidenceRating}
           setConfidenceRating={setConfidenceRating}
+          helpfulnessResponse={helpfulnessResponse}
+          setHelpfulnessResponse={setHelpfulnessResponse}
           locked={locked}
+        />
+        <LeaveStudyDialog
+          open={leaveDialogOpen}
+          onOpenChange={setLeaveDialogOpen}
+          onConfirmLeave={closeExperiment}
         />
       </div>
     );
@@ -788,37 +784,6 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                   {review.source || "Amazon"} Verified Purchase
                 </div>
 
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {TASKS.map((t) => (
-                    <Button
-                      key={t.id}
-                      size="sm"
-                      variant={
-                        evidence.source_refs[t.refId]?.id === String(review.id)
-                          ? "secondary"
-                          : "outline"
-                      }
-                      className={cn(
-                        "text-[10px] uppercase font-bold tracking-wider h-6 px-2",
-                        evidence.source_refs[t.refId]?.id === String(review.id)
-                          ? "border-primary text-primary bg-primary/10 hover:bg-primary/20"
-                          : "",
-                      )}
-                      onClick={() => {
-                        handleSourceRefPick(
-                          t.refId,
-                          "review",
-                          String(review.id),
-                        );
-                        setOpenTaskForm(t.id);
-                      }}
-                    >
-                      {evidence.source_refs[t.refId]?.id === String(review.id)
-                        ? "Selected"
-                        : `Use for ${t.label}`}
-                    </Button>
-                  ))}
-                </div>
               </div>
             ))}
 
@@ -843,7 +808,12 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
       {HUDPanel}
       <CompletionModal
         open={showCompletionModal}
-        onOpenChange={setShowCompletionModal}
+        onOpenChange={(nextOpen) => {
+          setShowCompletionModal(nextOpen);
+          if (!nextOpen && completedCount >= TASKS.length) {
+            setIsActive(true);
+          }
+        }}
         platform={platform}
         seconds={seconds}
         formatTime={formatTime}
@@ -852,11 +822,58 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
         submitResults={submitResults}
         confidenceRating={confidenceRating}
         setConfidenceRating={setConfidenceRating}
+        helpfulnessResponse={helpfulnessResponse}
+        setHelpfulnessResponse={setHelpfulnessResponse}
         locked={locked}
+      />
+      <LeaveStudyDialog
+        open={leaveDialogOpen}
+        onOpenChange={setLeaveDialogOpen}
+        onConfirmLeave={closeExperiment}
       />
     </div>
   );
 };
+
+function LeaveStudyDialog({
+  open,
+  onOpenChange,
+  onConfirmLeave,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirmLeave: () => void;
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent className="rounded-2xl border-border/40 bg-card shadow-2xl">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-xl font-black tracking-tight">
+            Leave This Study?
+          </AlertDialogTitle>
+          <AlertDialogDescription className="text-sm leading-6">
+            You have not finished the study yet. If you leave now, this attempt
+            will not be counted and you will need to start again later.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+          Any unfinished responses from this session will be discarded.
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel className="rounded-xl font-black uppercase tracking-widest">
+            Stay in Study
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={onConfirmLeave}
+            className="rounded-xl bg-rose-500 font-black uppercase tracking-widest text-white hover:bg-rose-600"
+          >
+            Leave Study
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 function CompletionModal({
   open,
@@ -869,6 +886,8 @@ function CompletionModal({
   submitResults,
   confidenceRating,
   setConfidenceRating,
+  helpfulnessResponse,
+  setHelpfulnessResponse,
   locked,
 }: {
   open: boolean;
@@ -881,6 +900,8 @@ function CompletionModal({
   submitResults: () => void;
   confidenceRating: number | null;
   setConfidenceRating: (v: number | null) => void;
+  helpfulnessResponse: "yes" | "no" | null;
+  setHelpfulnessResponse: (v: "yes" | "no" | null) => void;
   locked?: boolean;
 }) {
   return (
@@ -931,6 +952,37 @@ function CompletionModal({
             <div className="flex justify-between text-[9px] text-muted-foreground/50 font-medium px-0.5">
               <span>Not confident</span>
               <span>Very confident</span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+              {platform === "hyve"
+                ? "Did HYVE help you find the recommendations you need to decide whether to purchase?"
+                : "Did the traditional review experience help you find the recommendations you need to decide whether to purchase?"}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setHelpfulnessResponse("yes")}
+                className={cn(
+                  "h-10 rounded-lg border font-black text-sm transition-all",
+                  helpfulnessResponse === "yes"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-muted/30 hover:border-primary/50",
+                )}
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setHelpfulnessResponse("no")}
+                className={cn(
+                  "h-10 rounded-lg border font-black text-sm transition-all",
+                  helpfulnessResponse === "no"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-muted/30 hover:border-primary/50",
+                )}
+              >
+                No
+              </button>
             </div>
           </div>
           {/* Participant ID — hide in locked/study mode */}

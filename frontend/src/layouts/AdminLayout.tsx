@@ -21,7 +21,6 @@ import {
   LayoutDashboard,
   FlaskConical,
   BarChart2,
-  ShieldCheck,
   LogOut,
   ChevronDown,
   Menu,
@@ -49,7 +48,6 @@ const NAV_GROUPS = [
     items: [
       { label: "Studies", icon: FlaskConical, href: "/admin/experiments/studies", exact: false },
       { label: "Analysis", icon: BarChart2, href: "/admin/experiments/analysis", exact: false },
-      { label: "QC Review", icon: ShieldCheck, href: "/admin/experiments/review", exact: false },
     ],
   },
 ];
@@ -60,7 +58,7 @@ function usePageTitle(pathname: string) {
   if (pathname === "/admin") return "Dashboard";
   if (pathname.startsWith("/admin/experiments/studies")) return "Studies";
   if (pathname.startsWith("/admin/experiments/analysis")) return "Analysis";
-  if (pathname.startsWith("/admin/experiments/review")) return "QC Review";
+  if (pathname.startsWith("/admin/experiments/review")) return "Analysis";
   return "Admin";
 }
 

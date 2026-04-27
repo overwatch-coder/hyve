@@ -18,6 +18,17 @@ from datetime import datetime
 router = APIRouter(prefix="/experiments", tags=["Experiments"])
 
 
+def _parse_helpfulness_response(value: Optional[str]) -> Optional[bool]:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"yes", "true", "1"}:
+        return True
+    if normalized in {"no", "false", "0"}:
+        return False
+    return None
+
+
 def _evidence_uses_ranked_lists(evidence: Optional[schemas.ExperimentEvidence]) -> bool:
     if not evidence:
         return False
@@ -122,6 +133,108 @@ def _csv_cell_for_ranked_items(items: Any) -> str:
     return " | ".join(texts)
 
 
+def _csv_cell_for_string_list(items: Any) -> str:
+    if not isinstance(items, list):
+        return ""
+    texts = [str(item).strip() for item in items if str(item).strip()]
+    return " | ".join(texts)
+
+
+def _ranked_finding_texts(evidence: Any, key: str) -> list[str]:
+    if not isinstance(evidence, dict):
+        return []
+    items = evidence.get(key)
+    if not isinstance(items, list):
+        return []
+
+    texts: list[str] = []
+    for item in items:
+        if isinstance(item, dict):
+            text = str(item.get("text", "")).strip()
+        else:
+            text = str(getattr(item, "text", "")).strip()
+        if text:
+            texts.append(text)
+    return texts
+
+
+def _average_best_similarity(participant_items: list[str], ground_truth_items: list[str]) -> float:
+    if not participant_items or not ground_truth_items:
+        return 0.0
+
+    scores: list[float] = []
+    for item in participant_items:
+        best = max(score_similarity(item, truth) for truth in ground_truth_items)
+        scores.append(best)
+
+    return sum(scores) / len(scores)
+
+
+def _build_admin_analysis(
+    result: models.ExperimentResult,
+    study: models.ExperimentStudy,
+    custom_prompt: Optional[str] = None,
+    existing_analysis: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    evidence = result.evidence or {}
+    participant_strengths = _ranked_finding_texts(evidence, "strengths")
+    participant_weaknesses = _ranked_finding_texts(evidence, "weaknesses")
+    ground_truth_strengths = study.ground_truth_strengths or []
+    ground_truth_weaknesses = study.ground_truth_weaknesses or []
+    prior_analysis = existing_analysis or {}
+
+    strength_avg = _average_best_similarity(participant_strengths, ground_truth_strengths)
+    weakness_avg = _average_best_similarity(participant_weaknesses, ground_truth_weaknesses)
+    overall_avg = (strength_avg + weakness_avg) / 2
+
+    strength_pct = round(strength_avg * 100, 1)
+    weakness_pct = round(weakness_avg * 100, 1)
+    overall_pct = round(overall_avg * 100, 1)
+
+    if strength_pct > weakness_pct:
+        alignment_note = "The participant captured strengths more accurately than weaknesses."
+    elif weakness_pct > strength_pct:
+        alignment_note = "The participant captured weaknesses more accurately than strengths."
+    else:
+        alignment_note = "The participant showed similar accuracy across strengths and weaknesses."
+
+    confidence_note = (
+        f"Confidence was {result.confidence_rating}/5."
+        if result.confidence_rating is not None
+        else "Confidence was not provided."
+    )
+    helpfulness_note = (
+        "They reported the platform was helpful."
+        if result.participant_helpful is True
+        else "They reported the platform was not helpful."
+        if result.participant_helpful is False
+        else "They did not answer the helpfulness question."
+    )
+
+    summary_parts = [alignment_note, confidence_note, helpfulness_note]
+    normalized_prompt = (custom_prompt or "").strip()
+    if normalized_prompt:
+        summary_parts.insert(0, f"Prompt focus: {normalized_prompt}.")
+    summary = " ".join(summary_parts)
+
+    return {
+        "summary": summary,
+        "strength_match_pct": strength_pct,
+        "weakness_match_pct": weakness_pct,
+        "overall_accuracy_pct": overall_pct,
+        "custom_prompt": normalized_prompt or None,
+        "participant_strengths": participant_strengths,
+        "participant_weaknesses": participant_weaknesses,
+        "ground_truth_strengths": ground_truth_strengths,
+        "ground_truth_weaknesses": ground_truth_weaknesses,
+        "manual_strength_match_pct": prior_analysis.get("manual_strength_match_pct"),
+        "manual_weakness_match_pct": prior_analysis.get("manual_weakness_match_pct"),
+        "manual_overall_accuracy_pct": prior_analysis.get("manual_overall_accuracy_pct"),
+        "manual_override_updated_at": prior_analysis.get("manual_override_updated_at"),
+        "generated_at": datetime.utcnow().isoformat(),
+    }
+
+
 def _generate_study_copy(payload: schemas.StudyCopyAssistRequest, product: models.Product) -> str:
     field_guidance = {
         "description": "Write a concise participant-facing study description in 2-4 sentences. State the product, the purpose of the study, and what the participant will do.",
@@ -179,11 +292,7 @@ Return only the final text for the field. Do not use markdown fences, bullet lab
 @router.post("/results")
 def record_experiment_result(payload: schemas.ExperimentResultCreate, db: Session = Depends(get_db)):
     """Record the result of an A/B testing session."""
-    source_texts = _extract_source_texts(payload.evidence.source_refs if payload.evidence else {}, db)
-
     evidence_dict = payload.evidence.model_dump() if payload.evidence else {}
-    evidence_dict["source_texts"] = source_texts
-    similarity_scores, review_status = _compute_similarity_scores(payload, source_texts)
 
     db_result = models.ExperimentResult(
         product_id=payload.product_id,
@@ -191,9 +300,10 @@ def record_experiment_result(payload: schemas.ExperimentResultCreate, db: Sessio
         time_seconds=payload.time_seconds,
         participant_name=payload.participant_name,
         evidence=evidence_dict,
-        similarity_scores=similarity_scores,
-        review_status=review_status,
+        similarity_scores=None,
+        review_status="pending",
         confidence_rating=payload.confidence_rating,
+        participant_helpful=_parse_helpfulness_response(payload.helpfulness_response),
     )
 
     # Link to study participant via session_token
@@ -218,6 +328,16 @@ def record_experiment_result(payload: schemas.ExperimentResultCreate, db: Sessio
 class ReviewUpdatePayload(schemas.BaseModel):
     review_status: str
     review_notes: Optional[str] = None
+
+
+class AnalyzeRequest(schemas.BaseModel):
+    custom_prompt: Optional[str] = None
+
+
+class ManualAnalysisOverridePayload(schemas.BaseModel):
+    manual_strength_match_pct: Optional[float] = None
+    manual_weakness_match_pct: Optional[float] = None
+    manual_overall_accuracy_pct: Optional[float] = None
 
 
 @router.get("/review-queue")
@@ -262,6 +382,90 @@ def update_review_status(
     return result
 
 
+@router.post("/results/{result_id}/analyze", response_model=schemas.ExperimentResult)
+def analyze_experiment_result(
+    result_id: int,
+    payload: Optional[AnalyzeRequest] = None,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    result = (
+        db.query(models.ExperimentResult)
+        .filter(models.ExperimentResult.id == result_id)
+        .first()
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    if not result.study_id:
+        raise HTTPException(status_code=400, detail="Result is not linked to a study")
+
+    study = (
+        db.query(models.ExperimentStudy)
+        .filter(models.ExperimentStudy.id == result.study_id)
+        .first()
+    )
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    if not (study.ground_truth_strengths and study.ground_truth_weaknesses):
+        raise HTTPException(status_code=400, detail="Study ground truth is incomplete")
+
+    result.admin_analysis = _build_admin_analysis(
+        result,
+        study,
+        custom_prompt=payload.custom_prompt if payload else None,
+        existing_analysis=result.admin_analysis or {},
+    )
+    db.commit()
+    db.refresh(result)
+    return result
+
+
+@router.patch("/results/{result_id}/analysis", response_model=schemas.ExperimentResult)
+def update_manual_analysis_override(
+    result_id: int,
+    payload: ManualAnalysisOverridePayload,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    result = (
+        db.query(models.ExperimentResult)
+        .filter(models.ExperimentResult.id == result_id)
+        .first()
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+
+    analysis = dict(result.admin_analysis or {})
+    if not analysis:
+        raise HTTPException(
+            status_code=400,
+            detail="Analyze results before saving a manual override",
+        )
+
+    analysis["manual_strength_match_pct"] = payload.manual_strength_match_pct
+    analysis["manual_weakness_match_pct"] = payload.manual_weakness_match_pct
+    if payload.manual_overall_accuracy_pct is not None:
+        manual_overall = payload.manual_overall_accuracy_pct
+    elif (
+        payload.manual_strength_match_pct is not None
+        and payload.manual_weakness_match_pct is not None
+    ):
+        manual_overall = round(
+            (payload.manual_strength_match_pct + payload.manual_weakness_match_pct) / 2,
+            1,
+        )
+    else:
+        manual_overall = analysis.get("manual_overall_accuracy_pct")
+
+    analysis["manual_overall_accuracy_pct"] = manual_overall
+    analysis["manual_override_updated_at"] = datetime.utcnow().isoformat()
+
+    result.admin_analysis = analysis
+    db.commit()
+    db.refresh(result)
+    return result
+
+
 @router.get("/analytics", response_model=schemas.ExperimentAnalytics)
 def get_experiment_analytics(db: Session = Depends(get_db)):
     """Get aggregated analytics for A/B testing."""
@@ -270,6 +474,8 @@ def get_experiment_analytics(db: Session = Depends(get_db)):
         models.ExperimentResult.platform,
         func.avg(models.ExperimentResult.time_seconds).label("avg_time"),
         func.count(models.ExperimentResult.id).label("count")
+    ).filter(
+        models.ExperimentResult.review_status == "approved"
     ).group_by(models.ExperimentResult.platform).all()
 
     platform_stats = [
@@ -279,11 +485,20 @@ def get_experiment_analytics(db: Session = Depends(get_db)):
     ]
 
     # Total participants
-    total = db.query(func.count(models.ExperimentResult.id)).scalar()
+    total = (
+        db.query(func.count(models.ExperimentResult.id))
+        .filter(models.ExperimentResult.review_status == "approved")
+        .scalar()
+    )
 
     # Recent activity
-    recent = db.query(models.ExperimentResult).order_by(
-        models.ExperimentResult.created_at.desc()).limit(10).all()
+    recent = (
+        db.query(models.ExperimentResult)
+        .filter(models.ExperimentResult.review_status == "approved")
+        .order_by(models.ExperimentResult.created_at.desc())
+        .limit(10)
+        .all()
+    )
 
     return {
         "platform_stats": platform_stats,
@@ -295,7 +510,28 @@ def get_experiment_analytics(db: Session = Depends(get_db)):
 @router.get("/results", response_model=List[schemas.ExperimentResult])
 def list_experiment_results(db: Session = Depends(get_db)):
     """List all experiment results for the detailed table."""
-    return db.query(models.ExperimentResult).order_by(models.ExperimentResult.created_at.desc()).all()
+    return (
+        db.query(models.ExperimentResult)
+        .filter(models.ExperimentResult.review_status == "approved")
+        .order_by(models.ExperimentResult.created_at.desc())
+        .all()
+    )
+
+
+@router.get("/studies/{study_id}/results", response_model=List[schemas.ExperimentResult])
+def list_study_results(
+    study_id: int,
+    platform: Optional[str] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    query = db.query(models.ExperimentResult).filter(models.ExperimentResult.study_id == study_id)
+    if platform:
+        query = query.filter(models.ExperimentResult.platform == platform)
+    if status:
+        query = query.filter(models.ExperimentResult.review_status == status)
+    return query.order_by(models.ExperimentResult.created_at.desc()).all()
 
 
 # ─── Study Management (Admin) ────────────────────────────────────────────────
@@ -674,8 +910,14 @@ def export_study_results(
     output = io_lib.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "result_id", "study_id", "platform", "time_seconds", "confidence_rating",
-        "review_status", "top_strengths", "top_weaknesses",
+        "result_id", "study_id", "platform", "participant_name", "time_seconds",
+        "confidence_rating", "participant_helpful", "review_status",
+        "top_strengths", "top_weaknesses",
+        "study_ground_truth_strengths", "study_ground_truth_weaknesses",
+        "admin_analysis_summary", "strength_match_pct", "weakness_match_pct",
+        "overall_accuracy_pct", "manual_strength_match_pct",
+        "manual_weakness_match_pct", "manual_overall_accuracy_pct",
+        "analysis_generated_at", "manual_override_updated_at", "review_notes",
         "strength_1_score", "strength_2_score", "strength_3_score",
         "weakness_1_score", "weakness_2_score", "weakness_3_score",
         "legacy_weakness_paraphrase", "legacy_claim_paraphrase",
@@ -685,11 +927,30 @@ def export_study_results(
     for r in results:
         ev = r.evidence or {}
         sc = r.similarity_scores or {}
+        analysis = r.admin_analysis or {}
         writer.writerow([
-            r.id, r.study_id, r.platform, r.time_seconds, r.confidence_rating,
+            r.id,
+            r.study_id,
+            r.platform,
+            r.participant_name or "",
+            r.time_seconds,
+            r.confidence_rating,
+            r.participant_helpful,
             r.review_status,
             _csv_cell_for_ranked_items(ev.get("strengths")),
             _csv_cell_for_ranked_items(ev.get("weaknesses")),
+            _csv_cell_for_string_list(study.ground_truth_strengths),
+            _csv_cell_for_string_list(study.ground_truth_weaknesses),
+            analysis.get("summary", ""),
+            analysis.get("strength_match_pct", ""),
+            analysis.get("weakness_match_pct", ""),
+            analysis.get("overall_accuracy_pct", ""),
+            analysis.get("manual_strength_match_pct", ""),
+            analysis.get("manual_weakness_match_pct", ""),
+            analysis.get("manual_overall_accuracy_pct", ""),
+            analysis.get("generated_at", ""),
+            analysis.get("manual_override_updated_at", ""),
+            r.review_notes or "",
             sc.get("strength_1", ""),
             sc.get("strength_2", ""),
             sc.get("strength_3", ""),

@@ -266,6 +266,8 @@ class ExperimentResult(Base):
     evidence = Column(JSON, nullable=True)
     similarity_scores = Column(JSON, nullable=True)
     review_status = Column(String, default="pending")
+    participant_helpful = Column(Boolean, nullable=True)
+    admin_analysis = Column(JSON, nullable=True)
     review_notes = Column(Text, nullable=True)
     reviewed_by = Column(String, nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
@@ -284,6 +286,8 @@ class ExperimentStudy(Base):
     consent_text = Column(Text, nullable=True)
     instructions_hyve = Column(Text, nullable=True)
     instructions_traditional = Column(Text, nullable=True)
+    ground_truth_strengths = Column(JSON, nullable=True)
+    ground_truth_weaknesses = Column(JSON, nullable=True)
     status = Column(String, default="draft")  # draft | active | closed
     public_token = Column(String, unique=True, nullable=True, index=True)  # public join link token
     public_link_active = Column(Boolean, default=False, nullable=False)
