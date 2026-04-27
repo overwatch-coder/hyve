@@ -19,6 +19,7 @@ SQLAlchemy==2.0.48
 uvicorn==0.41.0
 python-multipart
 pg8000==1.31.2
-psycopg2-binary==2.9.6
+psycopg2==2.9.6; sys_platform == "win32"
+psycopg2-binary==2.9.6; sys_platform != "win32"
 openpyxl==3.1.5
 pytest==8.3.3

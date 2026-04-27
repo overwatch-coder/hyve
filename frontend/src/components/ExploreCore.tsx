@@ -425,6 +425,7 @@ export interface ExploreContentProps {
   viewMode: "accordion" | "graph" | "traditional";
   setViewMode: (mode: "accordion" | "graph" | "traditional") => void;
   hideExperimentTrigger?: boolean;
+  hideTraditionalTrigger?: boolean;
   isExperiment?: boolean;
   onStartExperiment?: () => void;
   resetTrigger?: number;
@@ -573,6 +574,7 @@ export function ExploreContentImpl({
   viewMode,
   setViewMode,
   hideExperimentTrigger = false,
+  hideTraditionalTrigger = false,
   isExperiment = false,
   onStartExperiment,
   resetTrigger,
@@ -996,7 +998,7 @@ export function ExploreContentImpl({
                     <ListTree className="h-3.5 w-3.5" />
                     Accordion
                   </TabsTrigger>
-                  {!hideExperimentTrigger && (
+                  {!hideTraditionalTrigger && (
                     <TabsTrigger
                       value="traditional"
                       className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wide px-4"

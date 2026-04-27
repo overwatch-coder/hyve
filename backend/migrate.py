@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
-
-from alembic import command
-from alembic.config import Config
 from dotenv import load_dotenv
 from sqlalchemy import inspect, text
 
@@ -13,6 +11,25 @@ from database import engine
 
 
 BASE_DIR = Path(__file__).resolve().parent
+
+
+def _import_alembic_modules():
+    """Import the installed Alembic package without shadowing it with backend/alembic/."""
+    original_sys_path = list(sys.path)
+    try:
+        sys.path = [
+            path
+            for path in sys.path
+            if Path(path or os.getcwd()).resolve() != BASE_DIR
+        ]
+        from alembic import command as alembic_command
+        from alembic.config import Config as AlembicConfig
+        return alembic_command, AlembicConfig
+    finally:
+        sys.path = original_sys_path
+
+
+command, Config = _import_alembic_modules()
 
 
 def build_alembic_config() -> Config:

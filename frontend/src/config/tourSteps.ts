@@ -80,6 +80,22 @@ export const exploreSteps: IStepWithRoute[] = [
 ];
 
 // ─── AMAZON SEARCH PAGE ───
+export const aliExpressSteps: IStepWithRoute[] = [
+  {
+    target: "body",
+    content:
+      "When you click on Products -> AliExpress, you get to this product search page. Search for any product on AliExpress here. When you find one, HYVE will pull its reviews to help you make informed decisions.",
+    placement: "center",
+    disableBeacon: true,
+  },
+  {
+    target: '[data-tour="aliexpress-search"]',
+    content:
+      'Type a product name here (e.g. "wireless headphones") and press Search. HYVE will fetch the latest AliExpress listings for you.',
+  },
+];
+
+// ─── AMAZON SEARCH PAGE ───
 export const amazonSteps: IStepWithRoute[] = [
   {
     target: "body",
@@ -165,6 +181,7 @@ export const TOUR_ROUTE_KEYS = [
   "/products/:id",
   "/products/:id/theme/:id",
   "/amazon",
+  "/aliexpress",
   "/about",
   "/faq",
   "/test-analytics",
@@ -180,6 +197,7 @@ export function getStepsForRoute(pathname: string): IStepWithRoute[] {
   if (pathname === "/") return homeSteps;
   if (pathname === "/products") return productsSteps;
   if (pathname === "/amazon") return amazonSteps;
+  if (pathname === "/aliexpress") return aliExpressSteps;
   if (pathname === "/about") return aboutSteps;
   if (pathname === "/faq") return faqSteps;
   if (pathname === "/test-analytics") return abResultsSteps;
@@ -198,6 +216,7 @@ export const TOUR_SEQUENCE: string[] = [
   "/products",
   "DYNAMIC_PRODUCT",
   "/amazon",
+  "/aliexpress",
   "/about",
   "/faq",
   "/",  // return to home for the final completion step

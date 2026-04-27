@@ -670,6 +670,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
             setViewMode={setViewMode}
             onRefresh={() => {}}
             hideExperimentTrigger={true}
+            hideTraditionalTrigger={true}
             isExperiment={false}
           />
         </div>
