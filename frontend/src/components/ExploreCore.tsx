@@ -34,6 +34,7 @@ import {
   AlertTriangle,
   ThumbsUp,
   ThumbsDown,
+  Star,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AnimatePresence, motion } from "framer-motion";
@@ -502,7 +503,7 @@ function TraditionalReviewsView({ productId }: { productId: string }) {
 
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6 space-y-4">
-      {reviews.map((r: any) => (
+      {reviews.map((r: any, idx: number) => (
         <Card
           key={r.id}
           className="border-border/30 bg-card/40 rounded-xl shadow-sm"
@@ -512,7 +513,9 @@ function TraditionalReviewsView({ productId }: { productId: string }) {
               <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-1">
                 {r.source.includes("amazon")
                   ? "Amazon Review"
-                  : r.source || "Consumer"}
+                  : r.source.includes("synthetic_manual")
+                  ? `User Review ${idx + 1}`
+                  : "Consumer Review"}
               </span>
               <span className="text-[10px] text-muted-foreground font-medium">
                 {new Date(r.created_at).toLocaleDateString()}
@@ -521,7 +524,7 @@ function TraditionalReviewsView({ productId }: { productId: string }) {
             {r.star_rating != null && (
               <div className="flex gap-0.5 mt-1">
                 {[1, 2, 3, 4, 5].map((s) => (
-                  <Sparkles
+                  <Star
                     key={s}
                     className={cn(
                       "h-3 w-3",
