@@ -337,9 +337,9 @@ def cluster_claims(claims_texts: list[str]) -> list[int]:
     _default_model = "gemini-embedding-001" if provider == "gemini" else "text-embedding-3-small"
     model_name = os.getenv("EMBEDDING_MODEL_NAME", _default_model)
 
-    # Determine number of clusters (Roadmap requires 4-6 themes)
+    # Determine number of clusters (Roadmap requires 4-8 themes)
     total_n = len(claims_texts)
-    n_clusters = max(4, min(total_n // 4, 6))
+    n_clusters = max(4, min(total_n // 4, 8))
     if total_n < 4:
         n_clusters = 1  # Too few to cluster meaningfully
 
