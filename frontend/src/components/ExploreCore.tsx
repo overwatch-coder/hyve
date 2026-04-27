@@ -503,7 +503,7 @@ function TraditionalReviewsView({ productId }: { productId: string }) {
 
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6 space-y-4">
-      {reviews.map((r: any, idx: number) => (
+      {reviews.map((r: any) => (
         <Card
           key={r.id}
           className="border-border/30 bg-card/40 rounded-xl shadow-sm"
@@ -514,7 +514,7 @@ function TraditionalReviewsView({ productId }: { productId: string }) {
                 {r.source.includes("amazon")
                   ? "Amazon Review"
                   : r.source.includes("synthetic_manual")
-                  ? `User Review ${idx + 1}`
+                  ? `User Review ${r.id}`
                   : "Consumer Review"}
               </span>
               <span className="text-[10px] text-muted-foreground font-medium">
