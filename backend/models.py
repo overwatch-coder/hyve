@@ -172,6 +172,84 @@ class NativeReview(Base):
         "AmazonProduct", back_populates="native_reviews")
 
 
+class AliExpressCategory(Base):
+    """Caches top-level categories fetched from the RapidAPI."""
+    __tablename__ = "aliexpress_categories"
+    id = Column(Integer, primary_key=True, index=True)
+    rapidapi_id = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    url = Column(String, nullable=True)
+    has_children = Column(Boolean, default=False)
+
+
+class AliExpressProduct(Base):
+    """Caches AliExpress product metadata fetched from the RapidAPI.
+    Always check this table first before hitting the RapidAPI to preserve token quota."""
+    __tablename__ = "aliexpress_products"
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(String, unique=True, index=True, nullable=False)
+    title = Column(String, nullable=False)
+    brand = Column(String, nullable=True)
+    category = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
+    price = Column(Float, nullable=True)
+    promotion_price = Column(Float, nullable=True)
+    rating = Column(Float, nullable=True)  # averageStarRate from RapidAPI
+    sales_count = Column(Integer, nullable=True)
+    free_shipping = Column(Boolean, default=False)
+    shipping_fee = Column(Float, nullable=True)
+    aliexpress_url = Column(String, nullable=True)
+    # Tag search queries so we can serve cached search results without hitting RapidAPI
+    search_index = Column(String, nullable=True, index=True)
+    cached_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    aliexpress_reviews = relationship(
+        "AliExpressReview", back_populates="aliexpress_product", cascade="all, delete-orphan")
+    native_reviews = relationship(
+        "AliExpressNativeReview", back_populates="aliexpress_product", cascade="all, delete-orphan")
+
+
+class AliExpressReview(Base):
+    """Raw reviews fetched from RapidAPI to display directly to users."""
+    __tablename__ = "aliexpress_reviews"
+    id = Column(Integer, primary_key=True, index=True)
+    aliexpress_product_item_id = Column(String, ForeignKey(
+        "aliexpress_products.item_id"), index=True, nullable=False)
+    rapidapi_id = Column(String, unique=True, index=True, nullable=False)
+    title = Column(String, nullable=True)
+    body = Column(Text, nullable=False)
+    rating = Column(Float, nullable=False)
+    reviewer_name = Column(String, nullable=True)
+    helpful_votes = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    aliexpress_product = relationship(
+        "AliExpressProduct", back_populates="aliexpress_reviews")
+
+
+class AliExpressNativeReview(Base):
+    """A review written natively on the HYVE platform, linked to an AliExpress product."""
+    __tablename__ = "aliexpress_native_reviews"
+    id = Column(Integer, primary_key=True, index=True)
+    aliexpress_product_item_id = Column(String, ForeignKey(
+        "aliexpress_products.item_id"), index=True, nullable=False)
+    device_id = Column(String, nullable=True, index=True)
+    author_name = Column(String, nullable=True)
+    star_rating = Column(Float, nullable=False)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('aliexpress_product_item_id', 'device_id',
+                         name='uq_aliexpress_native_review_device'),
+    )
+
+    aliexpress_product = relationship(
+        "AliExpressProduct", back_populates="native_reviews")
+
+
 class ExperimentResult(Base):
     __tablename__ = "experiment_results"
     id = Column(Integer, primary_key=True, index=True)

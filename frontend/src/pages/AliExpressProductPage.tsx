@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Send,
   TrendingUp,
+  Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,37 +25,39 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
-interface AmazonProduct {
+interface AliExpressProduct {
   id: number;
-  asin: string;
+  item_id: string;
   title: string;
   brand: string | null;
   category: string | null;
-  description: string | null;
   image_url: string | null;
   price: number | null;
+  promotion_price: number | null;
   rating: number | null;
-  review_count: number | null;
-  amazon_url: string | null;
+  sales_count: number | null;
+  free_shipping: boolean;
+  shipping_fee: number | null;
+  aliexpress_url: string | null;
 }
 
-interface NativeReview {
+interface AliExpressReview {
   id: number;
-  author_name: string | null;
-  star_rating: number;
-  body: string;
-  created_at: string;
-}
-
-interface AmazonReview {
-  id: number;
-  canopy_id: string;
+  rapidapi_id: string;
   title: string | null;
   body: string;
   rating: number;
   reviewer_name: string | null;
-  verified_purchase: boolean;
   helpful_votes: number;
+  created_at: string;
+}
+
+interface NativeReview {
+  id: number;
+  aliexpress_product_item_id: string;
+  author_name: string | null;
+  star_rating: number;
+  body: string;
   created_at: string;
 }
 
@@ -127,45 +130,12 @@ function StarPicker({
   );
 }
 
-function NativeReviewCard({ review }: { review: NativeReview }) {
-  return (
-    <div className="border border-border/50 bg-card/20 rounded-lg p-4 space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="font-medium text-sm">
-          {review.author_name || "Anonymous"}
-        </span>
-        <span className="text-xs text-muted-foreground">
-          {new Date(review.created_at).toLocaleDateString()}
-        </span>
-      </div>
-      <div className="flex gap-0.5">
-        {[1, 2, 3, 4, 5].map((s) => (
-          <Star
-            key={s}
-            className={`h-3 w-3 ${
-              s <= review.star_rating
-                ? "text-amber-400 fill-amber-400"
-                : "text-muted-foreground/20"
-            }`}
-          />
-        ))}
-      </div>
-      <ExpandableText text={review.body} />
-    </div>
-  );
-}
-
-function AmazonReviewCard({ review }: { review: AmazonReview }) {
+function AliExpressReviewCard({ review }: { review: AliExpressReview }) {
   return (
     <div className="border border-border/50 bg-card/20 rounded-lg p-4 space-y-2">
       <div className="flex items-center justify-between">
         <span className="font-medium text-sm flex items-center gap-2">
-          {review.reviewer_name || "Amazon Customer"}
-          {review.verified_purchase && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-              Verified
-            </Badge>
-          )}
+          {review.reviewer_name || "Anonymous"}
         </span>
         <span className="text-xs text-muted-foreground flex items-center gap-1">
           {review.helpful_votes > 0 && (
@@ -195,8 +165,36 @@ function AmazonReviewCard({ review }: { review: AmazonReview }) {
   );
 }
 
-export default function AmazonProductPage() {
-  const { asin } = useParams<{ asin: string }>();
+function NativeReviewCard({ review }: { review: NativeReview }) {
+  return (
+    <div className="border border-border/50 bg-card/20 rounded-lg p-4 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="font-medium text-sm">
+          {review.author_name || "Anonymous"}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {new Date(review.created_at).toLocaleDateString()}
+        </span>
+      </div>
+      <div className="flex gap-0.5">
+        {[1, 2, 3, 4, 5].map((s) => (
+          <Star
+            key={s}
+            className={`h-3 w-3 ${
+              s <= review.star_rating
+                ? "text-amber-400 fill-amber-400"
+                : "text-muted-foreground/20"
+            }`}
+          />
+        ))}
+      </div>
+      <ExpandableText text={review.body} />
+    </div>
+  );
+}
+
+export default function AliExpressProductPage() {
+  const { item_id } = useParams<{ item_id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -207,31 +205,48 @@ export default function AmazonProductPage() {
 
   // Pagination states
   const [nativePage, setNativePage] = useState(1);
-  const [amazonPage, setAmazonPage] = useState(1);
+  const [aliexpressPage, setAliexpressPage] = useState(1);
 
-  // Fetch Amazon product details (DB-first cached)
-  const { data: product, isLoading: productLoading } = useQuery<AmazonProduct>({
-    queryKey: ["amazon-product", asin],
-    queryFn: async () => {
-      const res = await api.get(`/amazon/products/${asin}`);
-      return res.data;
-    },
-    enabled: !!asin,
-  });
+  // Fetch AliExpress product details (DB-first cached)
+  const { data: product, isLoading: productLoading } =
+    useQuery<AliExpressProduct>({
+      queryKey: ["aliexpress-product", item_id],
+      queryFn: async () => {
+        const res = await api.get(`/aliexpress/products/${item_id}`);
+        return res.data;
+      },
+      enabled: !!item_id,
+    });
 
   // Fetch native reviews
   const { data: nativeReviewsData } = useQuery<PaginatedResponse<NativeReview>>(
     {
-      queryKey: ["native-reviews", asin, nativePage],
+      queryKey: ["aliexpress-native-reviews", item_id, nativePage],
       queryFn: async () => {
-        const res = await api.get(`/amazon/products/${asin}/native-reviews`, {
-          params: { page: nativePage },
+        const res = await api.get(
+          `/aliexpress/products/${item_id}/native-reviews`,
+          { params: { page: nativePage } },
+        );
+        return res.data;
+      },
+      enabled: !!item_id,
+    },
+  );
+
+  // Fetch AliExpress (platform) reviews
+  const { data: aliexpressReviewsData, isLoading: aliexpressReviewsLoading } =
+    useQuery<PaginatedResponse<AliExpressReview>>({
+      queryKey: ["aliexpress-reviews", item_id, aliexpressPage],
+      queryFn: async () => {
+        const res = await api.get(`/aliexpress/products/${item_id}/reviews`, {
+          params: { page: aliexpressPage },
         });
         return res.data;
       },
-      enabled: !!asin,
-    },
-  );
+      enabled: !!item_id,
+      retry: false,
+      refetchOnWindowFocus: false,
+    });
 
   // Submit native review
   const submitReviewMutation = useMutation({
@@ -240,7 +255,6 @@ export default function AmazonProductPage() {
       if (!body.trim() || body.trim().length < 10)
         throw new Error("Please write at least 10 characters in your review.");
 
-      // Ensure local device ID for duplicate checking
       let deviceId = localStorage.getItem("hyve_device_id");
       if (!deviceId) {
         deviceId = crypto.randomUUID
@@ -249,7 +263,7 @@ export default function AmazonProductPage() {
         localStorage.setItem("hyve_device_id", deviceId);
       }
 
-      return api.post(`/amazon/products/${asin}/native-reviews`, {
+      return api.post(`/aliexpress/products/${item_id}/native-reviews`, {
         device_id: deviceId,
         author_name: authorName.trim() || "Anonymous",
         star_rating: rating,
@@ -263,7 +277,9 @@ export default function AmazonProductPage() {
       setRating(0);
       setBody("");
       setAuthorName("");
-      queryClient.invalidateQueries({ queryKey: ["native-reviews", asin] });
+      queryClient.invalidateQueries({
+        queryKey: ["aliexpress-native-reviews", item_id],
+      });
     },
     onError: (err: any) => {
       toast.error(
@@ -276,50 +292,40 @@ export default function AmazonProductPage() {
     },
   });
 
-  // Fetch Amazon reviews via Canopy → analyze
-  const analyzeAmazonReviewsMutation = useMutation({
+  // Analyze AliExpress platform reviews
+  const analyzeAliExpressMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post(`/amazon/products/${asin}/analyze-amazon`);
+      const res = await api.post(
+        `/aliexpress/products/${item_id}/analyze-aliexpress`,
+      );
       return res.data;
     },
     onSuccess: (data) => {
-      toast.success(`Analysis Started`, {
+      queryClient.invalidateQueries({ queryKey: ["products-list"] });
+      toast.success("Analysis Started", {
         description:
           data.message ||
-          "Amazon reviews are being processed in the background.",
+          "AliExpress reviews are being processed in the background.",
       });
       navigate(`/products/${data.product_id}`);
     },
     onError: (err: any) => {
       toast.error(
-        err.response?.data?.detail || "Failed to analyze Amazon reviews.",
+        err.response?.data?.detail || "Failed to analyze AliExpress reviews.",
       );
     },
-  });
-
-  // Auto-fetch raw Amazon reviews on mount
-  const { data: amazonReviewsData, isLoading: amazonReviewsLoading } = useQuery<
-    PaginatedResponse<AmazonReview>
-  >({
-    queryKey: ["amazon-reviews", asin, amazonPage],
-    queryFn: async () => {
-      const res = await api.get(`/amazon/products/${asin}/reviews`, {
-        params: { page: amazonPage },
-      });
-      return res.data;
-    },
-    enabled: !!asin,
-    retry: false,
-    refetchOnWindowFocus: false, // Prevent spamming Canopy if empty
   });
 
   // Analyze native reviews
   const analyzeNativeMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post(`/amazon/products/${asin}/analyze-native`);
+      const res = await api.post(
+        `/aliexpress/products/${item_id}/analyze-native`,
+      );
       return res.data;
     },
     onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["products-list"] });
       toast.success("Analysis Started", {
         description:
           data.message ||
@@ -395,6 +401,7 @@ export default function AmazonProductPage() {
             </span>
           )}
           <h1 className="text-xl font-bold leading-snug">{product.title}</h1>
+
           <div className="flex flex-wrap items-center gap-3">
             {product.rating && (
               <div className="flex items-center gap-1">
@@ -402,9 +409,9 @@ export default function AmazonProductPage() {
                 <span className="text-sm font-medium">
                   {product.rating.toFixed(1)}
                 </span>
-                {product.review_count && (
+                {product.sales_count && (
                   <span className="text-xs text-muted-foreground">
-                    ({product.review_count.toLocaleString()} reviews on Amazon)
+                    ({product.sales_count.toLocaleString()} sales)
                   </span>
                 )}
               </div>
@@ -414,50 +421,74 @@ export default function AmazonProductPage() {
                 {product.category.split(">").pop()?.trim()}
               </Badge>
             )}
-            {product.price && (
-              <span className="font-bold text-lg">
-                ${product.price.toFixed(2)}
+            {product.promotion_price ? (
+              <div className="flex items-baseline gap-2">
+                <span className="font-bold text-lg text-primary">
+                  ${product.promotion_price.toFixed(2)}
+                </span>
+                {product.price && product.price !== product.promotion_price && (
+                  <span className="text-sm text-muted-foreground line-through">
+                    ${product.price.toFixed(2)}
+                  </span>
+                )}
+              </div>
+            ) : (
+              product.price && (
+                <span className="font-bold text-lg">
+                  ${product.price.toFixed(2)}
+                </span>
+              )
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 text-sm">
+            <Truck className="h-4 w-4 text-muted-foreground" />
+            {product.free_shipping ? (
+              <span className="font-medium text-green-600">Free Shipping</span>
+            ) : product.shipping_fee ? (
+              <span className="text-muted-foreground">
+                Shipping: ${product.shipping_fee.toFixed(2)}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">
+                Shipping info not available
               </span>
             )}
           </div>
-          {product.description && (
-            <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
-              {product.description}
-            </p>
-          )}
-          {product.amazon_url && (
+
+          {product.aliexpress_url && (
             <a
-              href={product.amazon_url}
+              href={product.aliexpress_url}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-1"
             >
               <ExternalLink className="h-3 w-3" />
-              View on Amazon
+              View on AliExpress
             </a>
           )}
         </div>
       </div>
 
-      {/* Analysis Actions */}
+      {/* Analysis Action Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="border border-border/50 bg-card/20 rounded-xl p-5 space-y-3">
           <div className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-blue-400" />
-            <h2 className="font-semibold">Analyze Amazon Reviews</h2>
+            <TrendingUp className="h-5 w-5 text-orange-400" />
+            <h2 className="font-semibold">Analyze AliExpress Reviews</h2>
           </div>
           <p className="text-sm text-muted-foreground">
             Run HYVE's full AI analysis (claims extraction, themes, decision
-            trees) on the Amazon reviews listed below.
+            trees) on the AliExpress buyer reviews.
           </p>
           <Button
             className="w-full"
-            onClick={() => analyzeAmazonReviewsMutation.mutate()}
+            onClick={() => analyzeAliExpressMutation.mutate()}
             disabled={
-              analyzeAmazonReviewsMutation.isPending || amazonReviewsLoading
+              analyzeAliExpressMutation.isPending || aliexpressReviewsLoading
             }
           >
-            {analyzeAmazonReviewsMutation.isPending ? (
+            {analyzeAliExpressMutation.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Analyzing Reviews...
@@ -465,7 +496,7 @@ export default function AmazonProductPage() {
             ) : (
               <>
                 <Sparkles className="mr-2 h-4 w-4" />
-                Analyze Amazon Reviews
+                Analyze AliExpress Reviews
               </>
             )}
           </Button>
@@ -475,7 +506,7 @@ export default function AmazonProductPage() {
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-emerald-400" />
             <h2 className="font-semibold">
-              Analyze Native Reviews{" "}
+              Analyze Community Reviews{" "}
               {nativeTotal > 0 && (
                 <Badge variant="outline" className="ml-1 text-xs">
                   {nativeTotal}
@@ -502,8 +533,8 @@ export default function AmazonProductPage() {
               <>
                 <Sparkles className="mr-2 h-4 w-4" />
                 {nativeTotal === 0
-                  ? "No native reviews yet"
-                  : "Analyze Native Reviews"}
+                  ? "No community reviews yet"
+                  : "Analyze Community Reviews"}
               </>
             )}
           </Button>
@@ -512,13 +543,13 @@ export default function AmazonProductPage() {
 
       <Separator />
 
-      {/* Native Review Section */}
+      {/* Reviews Tabs */}
       <Tabs defaultValue="traditional" className="w-full">
         <TabsList className="grid w-full grid-cols-3 h-11">
-          <TabsTrigger value="traditional">Traditional Data</TabsTrigger>
+          <TabsTrigger value="traditional">AliExpress Reviews</TabsTrigger>
           <TabsTrigger value="leave-review">Leave a Review</TabsTrigger>
           <TabsTrigger value="client-reviews">
-            Client Reviews{" "}
+            Community Reviews{" "}
             {nativeTotal > 0 && (
               <Badge variant="secondary" className="ml-1.5 text-xs">
                 {nativeTotal}
@@ -527,47 +558,50 @@ export default function AmazonProductPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Amazon Reviews Tab */}
+        {/* AliExpress Platform Reviews Tab */}
         <TabsContent value="traditional" className="mt-6 space-y-4">
-          {amazonReviewsLoading ? (
+          {aliexpressReviewsLoading ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground space-y-4">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p>Fetching latest Amazon reviews...</p>
+              <p>Fetching AliExpress reviews...</p>
             </div>
-          ) : !amazonReviewsData || amazonReviewsData.items.length === 0 ? (
+          ) : !aliexpressReviewsData ||
+            aliexpressReviewsData.items.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              <p>No compiled Amazon reviews found.</p>
+              <p>No compiled AliExpress reviews found.</p>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {amazonReviewsData.items.map((review) => (
-                  <AmazonReviewCard key={review.id} review={review} />
+                {aliexpressReviewsData.items.map((review) => (
+                  <AliExpressReviewCard key={review.id} review={review} />
                 ))}
               </div>
 
-              {amazonReviewsData.pages > 1 && (
+              {aliexpressReviewsData.pages > 1 && (
                 <div className="flex items-center justify-center gap-4 pt-4 pb-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setAmazonPage((p) => Math.max(1, p - 1))}
-                    disabled={amazonPage === 1}
+                    onClick={() =>
+                      setAliexpressPage((p) => Math.max(1, p - 1))
+                    }
+                    disabled={aliexpressPage === 1}
                   >
                     <ChevronLeft className="h-4 w-4 mr-1" /> Previous
                   </Button>
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Page {amazonPage} of {amazonReviewsData.pages}
+                    Page {aliexpressPage} of {aliexpressReviewsData.pages}
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() =>
-                      setAmazonPage((p) =>
-                        Math.min(amazonReviewsData.pages, p + 1),
+                      setAliexpressPage((p) =>
+                        Math.min(aliexpressReviewsData.pages, p + 1),
                       )
                     }
-                    disabled={amazonPage === amazonReviewsData.pages}
+                    disabled={aliexpressPage === aliexpressReviewsData.pages}
                   >
                     Next <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
@@ -585,7 +619,7 @@ export default function AmazonProductPage() {
             </h3>
             <p className="text-sm text-muted-foreground mt-1">
               Your review will be stored on the HYVE platform and can be used
-              for AI analysis independently from Amazon's reviews.
+              for AI analysis independently from AliExpress reviews.
             </p>
           </div>
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAdmin } from "@/hooks/useAdmin";
 import { toast } from "sonner";
-import { ShieldCheck, Loader2, Lock, Hexagon, Activity } from "lucide-react";
+import { ShieldCheck, Loader2, Lock, Hexagon, Activity, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -103,6 +103,14 @@ export default function AdminLogin() {
           <p className="text-[10px] text-center text-muted-foreground uppercase tracking-widest">
             Restricted Access - Authorized Personnel Only
           </p>
+
+          <button
+            onClick={() => navigate("/")}
+            className="flex items-center justify-center gap-1.5 w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Home
+          </button>
         </CardContent>
       </Card>
     </div>

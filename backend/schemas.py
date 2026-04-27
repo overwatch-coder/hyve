@@ -401,6 +401,70 @@ class NativeReviewOut(BaseModel):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
+# --- AliExpress Catalog (RapidAPI Cache) ---
+
+
+class AliExpressReviewOut(BaseModel):
+    id: int
+    aliexpress_product_item_id: str
+    rapidapi_id: str
+    title: Optional[str] = None
+    body: str
+    rating: float
+    reviewer_name: Optional[str] = None
+    helpful_votes: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AliExpressProductOut(BaseModel):
+    id: int
+    item_id: str
+    title: str
+    brand: Optional[str] = None
+    category: Optional[str] = None
+    image_url: Optional[str] = None
+    price: Optional[float] = None
+    promotion_price: Optional[float] = None
+    rating: Optional[float] = None
+    sales_count: Optional[int] = None
+    free_shipping: bool
+    shipping_fee: Optional[float] = None
+    aliexpress_url: Optional[str] = None
+    cached_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AliExpressCategoryChildOut(BaseModel):
+    id: str
+    name: str
+
+
+class AliExpressCategoryGroupOut(BaseModel):
+    id: str
+    name: str
+    children: List[AliExpressCategoryChildOut] = []
+
+
+# --- AliExpress Native Reviews ---
+
+class AliExpressNativeReviewCreate(BaseModel):
+    device_id: Optional[str] = None
+    author_name: Optional[str] = "Anonymous"
+    star_rating: float  # 1-5
+    body: str
+
+
+class AliExpressNativeReviewOut(BaseModel):
+    id: int
+    aliexpress_product_item_id: str
+    author_name: Optional[str] = None
+    star_rating: float
+    body: str
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
 # --- Canopy Fetch Reviews Request ---
 
 

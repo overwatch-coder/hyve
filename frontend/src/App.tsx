@@ -16,6 +16,8 @@ import TestAnalytics from "./pages/TestAnalytics";
 import ExperimentPage from "./pages/ExperimentPage";
 import AmazonSearch from "@/pages/AmazonSearch";
 import AmazonProductPage from "@/pages/AmazonProductPage";
+import AliExpressSearch from "@/pages/AliExpressSearch";
+import AliExpressProductPage from "@/pages/AliExpressProductPage";
 import About from "@/pages/About";
 import FAQ from "@/pages/FAQ";
 import Team from "@/pages/Team";
@@ -95,6 +97,10 @@ function App() {
               {/* Amazon Product Search & Native Reviews */}
               <Route path="amazon" element={<AmazonSearch />} />
               <Route path="amazon/:asin" element={<AmazonProductPage />} />
+
+                {/* AliExpress Product Search & Reviews */}
+                <Route path="aliexpress" element={<AliExpressSearch />} />
+                <Route path="aliexpress/:item_id" element={<AliExpressProductPage />} />
 
               {/* About, FAQ & Legal */}
               <Route path="about" element={<About />} />

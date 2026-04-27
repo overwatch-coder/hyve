@@ -96,7 +96,7 @@ export default function RootLayout() {
                 data-tour="nav-products"
                 className={cn(
                   "text-sm font-semibold transition-colors flex items-center gap-1 outline-none",
-                  location.pathname.startsWith("/amazon")
+                  location.pathname.startsWith("/amazon") || location.pathname.startsWith("/aliexpress")
                     ? "text-primary"
                     : "text-muted-foreground hover:text-foreground",
                 )}
@@ -119,21 +119,23 @@ export default function RootLayout() {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  disabled
-                  className="flex items-center gap-2 opacity-50 focus:bg-primary/10"
+                  asChild
+                  className="focus:bg-primary focus:text-white hover:bg-primary hover:text-white"
                 >
-                  <Lock className="h-4 w-4" />
-                  <span>Jumia</span>
-                  <span className="ml-auto text-[10px] font-semibold text-muted-foreground">
-                    Coming soon
-                  </span>
+                  <Link
+                    to="/aliexpress"
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <ShoppingBag className="h-4 w-4" />
+                    AliExpress
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled
                   className="flex items-center gap-2 opacity-50 focus:bg-primary/10"
                 >
                   <Lock className="h-4 w-4" />
-                  <span>Alibaba</span>
+                  <span>Jumia</span>
                   <span className="ml-auto text-[10px] font-semibold text-muted-foreground">
                     Coming soon
                   </span>
@@ -288,16 +290,22 @@ export default function RootLayout() {
                       <ShoppingBag className="h-4 w-4" />
                       Amazon
                     </Link>
+                    <Link
+                      to="/aliexpress"
+                      onClick={() => setSheetOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-bold text-sm",
+                        location.pathname.startsWith("/aliexpress")
+                          ? "bg-primary text-white"
+                          : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
+                      )}
+                    >
+                      <ShoppingBag className="h-4 w-4" />
+                      AliExpress
+                    </Link>
                     <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold text-muted-foreground/40 cursor-not-allowed">
                       <Lock className="h-4 w-4" />
                       Jumia
-                      <span className="ml-auto text-[9px] font-semibold bg-muted/50 px-2 py-0.5 rounded-full">
-                        Coming soon
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold text-muted-foreground/40 cursor-not-allowed">
-                      <Lock className="h-4 w-4" />
-                      Alibaba
                       <span className="ml-auto text-[9px] font-semibold bg-muted/50 px-2 py-0.5 rounded-full">
                         Coming soon
                       </span>

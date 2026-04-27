@@ -93,7 +93,7 @@ def get_global_stats(db: Session = Depends(get_db)):
     }
 
 # Import routers
-from routers import admin, products, reviews, themes, claims, analytics, ingestion, experiments, amazon
+from routers import admin, products, reviews, themes, claims, analytics, ingestion, experiments, amazon, aliexpress
 
 # Include routers
 app.include_router(admin.router)
@@ -105,6 +105,7 @@ app.include_router(analytics.router)
 app.include_router(ingestion.router)
 app.include_router(experiments.router)
 app.include_router(amazon.router)
+app.include_router(aliexpress.router)
 
 if __name__ == "__main__":
     import uvicorn

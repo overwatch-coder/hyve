@@ -19,7 +19,7 @@ def get_products(
 ):
     query = db.query(models.Product).options(
         subqueryload(models.Product.themes)
-    )
+    ).order_by(models.Product.created_at.desc())
     return paginate(query, page, size)
 
 @router.post("", response_model=schemas.Product)

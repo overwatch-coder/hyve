@@ -27,9 +27,10 @@ export default function Products() {
   const { data: productsData, isLoading: isProductsLoading } = useQuery({
     queryKey: ["products-list"],
     queryFn: async () => {
-      const res = await api.get("/products");
+      const res = await api.get("/products", { params: { size: 100 } });
       return res.data.items;
     },
+    staleTime: 0, // always refetch when navigating to this page
   });
 
   const filteredProducts = productsData?.filter(
