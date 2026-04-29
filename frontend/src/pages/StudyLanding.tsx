@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   ArrowLeft,
   BookOpen,
+  Timer,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -140,7 +141,7 @@ export default function StudyLanding() {
         )}
 
         {/* Loading */}
-        {isLoading && activeCode.length >= 8 && (
+        {isLoading && activeCode.length >= 8 && !wasSubmitted && (
           <div className="flex items-center justify-center gap-3 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span className="text-sm font-medium">Validating code…</span>
@@ -148,7 +149,7 @@ export default function StudyLanding() {
         )}
 
         {/* Error */}
-        {studyError && (
+        {studyError && !wasSubmitted && (
           <Card className="border-destructive/30 bg-destructive/5">
             <CardContent className="p-4 flex items-center gap-3">
               <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" />
@@ -159,8 +160,34 @@ export default function StudyLanding() {
           </Card>
         )}
 
+        {wasSubmitted && (
+          <Card className="border-emerald-500/30 bg-emerald-500/5">
+            <CardContent className="p-6 flex items-start gap-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-500/10">
+                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+              </div>
+              <div className="space-y-2">
+                <p className="text-base font-black text-emerald-600 dark:text-emerald-400">
+                  Study submitted successfully.
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Your response has been recorded. Thank you for participating in this research study.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => navigate(`/study/${activeCode}`, { replace: true })}
+                >
+                  Back to Study Landing
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Study unavailable: in draft mode */}
-        {studyIsDraft && (
+        {studyIsDraft && !wasSubmitted && (
           <Card className="border-blue-500/30 bg-blue-500/5">
             <CardContent className="p-5 flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
@@ -179,7 +206,7 @@ export default function StudyLanding() {
         )}
 
         {/* Study unavailable: closed */}
-        {studyIsClosed && (
+        {studyIsClosed && !wasSubmitted && (
           <Card className="border-destructive/30 bg-destructive/5">
             <CardContent className="p-5 flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
@@ -206,30 +233,6 @@ export default function StudyLanding() {
                 This invite code has already been used. Each code can only be
                 used once.
               </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {study?.already_used && wasSubmitted && (
-          <Card className="border-emerald-500/30 bg-emerald-500/5">
-            <CardContent className="p-5 flex items-start gap-3">
-              <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
-              <div className="space-y-1.5">
-                <p className="text-sm text-emerald-600 dark:text-emerald-400 font-semibold">
-                  Study submitted successfully.
-                </p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Your response has been recorded. Thank you for participating in this research study.
-                </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-2"
-                  onClick={() => navigate("/")}
-                >
-                  Return Home
-                </Button>
-              </div>
             </CardContent>
           </Card>
         )}
@@ -285,6 +288,14 @@ export default function StudyLanding() {
                   This study is completely anonymous. No personal information is
                   collected or stored. Your responses are used only for academic
                   research purposes.
+                </p>
+              </div>
+
+              <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+                <Timer className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Please plan to complete the study in one sitting. Estimated maximum completion time:{" "}
+                  <span className="font-bold text-foreground">10 minutes</span>.
                 </p>
               </div>
 

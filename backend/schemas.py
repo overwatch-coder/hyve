@@ -183,6 +183,7 @@ class ExperimentResult(ExperimentResultBase):
     participant_id: Optional[int] = None
     similarity_scores: Optional[Dict[str, float]] = None
     review_status: str = "pending"
+    exclude_from_public: bool = False
     participant_helpful: Optional[bool] = None
     admin_analysis: Optional[Dict[str, Any]] = None
     review_notes: Optional[str] = None
@@ -349,6 +350,24 @@ class StudyAnalyticsOut(BaseModel):
     traditional_avg_time: Optional[float] = None
     hyve_avg_confidence: Optional[float] = None
     traditional_avg_confidence: Optional[float] = None
+
+
+class PublicResultVisibilityUpdate(BaseModel):
+    exclude_from_public: bool
+
+
+class PublicExperimentResultOut(BaseModel):
+    id: int
+    study_id: Optional[int] = None
+    study_title: Optional[str] = None
+    product_id: int
+    product_name: Optional[str] = None
+    platform: str
+    participant_name: Optional[str] = None
+    time_seconds: int
+    review_status: str
+    exclude_from_public: bool = False
+    created_at: datetime
 
 # --- Ingestion ---
 

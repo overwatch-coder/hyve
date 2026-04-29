@@ -44,6 +44,7 @@ import {
   Clock,
   Download,
   Ellipsis,
+  FileText,
   FlaskConical,
   Loader2,
   Sparkles,
@@ -154,8 +155,9 @@ function extractFindingTexts(
 
 function formatTime(s?: number) {
   if (!s) return "-";
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
+  const totalSeconds = Math.max(0, Math.floor(s));
+  const m = Math.floor(totalSeconds / 60);
+  const sec = totalSeconds % 60;
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
@@ -197,7 +199,7 @@ export default function AdminExperimentAnalysis() {
   const [selectedStudyId, setSelectedStudyId] = useState<number | null>(null);
   const [platformFilter, setPlatformFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<"csv" | "pdf" | null>(null);
   const [summaryResult, setSummaryResult] = useState<Result | null>(null);
   const [manualOverrideResult, setManualOverrideResult] =
     useState<Result | null>(null);
@@ -373,24 +375,26 @@ export default function AdminExperimentAnalysis() {
     },
   });
 
-  const handleExport = async () => {
+  const downloadBlobResponse = async (
+    endpoint: string,
+    filename: string,
+    successMessage: string,
+    exportKind: "csv" | "pdf",
+  ) => {
     if (!selectedStudyId) return;
-    setExporting(true);
+    setExporting(exportKind);
     try {
-      const res = await api.get(
-        `/experiments/studies/${selectedStudyId}/export`,
-        {
-          responseType: "blob",
-          headers: getAuthHeaders(),
-        },
-      );
+      const res = await api.get(endpoint, {
+        responseType: "blob",
+        headers: getAuthHeaders(),
+      });
       const url = URL.createObjectURL(res.data as Blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `study_${selectedStudyId}_results.csv`;
+      a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("Export downloaded");
+      toast.success(successMessage);
     } catch (err) {
       const maybeBlob = (err as { response?: { data?: Blob } })?.response?.data;
       if (maybeBlob instanceof Blob) {
@@ -408,8 +412,28 @@ export default function AdminExperimentAnalysis() {
         toast.error(detail);
       }
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
+  };
+
+  const handleExportCsv = async () => {
+    if (!selectedStudyId) return;
+    await downloadBlobResponse(
+      `/experiments/studies/${selectedStudyId}/export`,
+      `study_${selectedStudyId}_results.csv`,
+      "CSV export downloaded",
+      "csv",
+    );
+  };
+
+  const handleExportPdf = async () => {
+    if (!selectedStudyId) return;
+    await downloadBlobResponse(
+      `/experiments/studies/${selectedStudyId}/report.pdf`,
+      `study_${selectedStudyId}_report.pdf`,
+      "PDF report downloaded",
+      "pdf",
+    );
   };
 
   const handleReject = (resultId: number) => {
@@ -437,8 +461,8 @@ export default function AdminExperimentAnalysis() {
   const timeSavedLabel =
     timeSavedPct !== null
       ? parseFloat(timeSavedPct) < 0
-        ? `${Math.abs(parseFloat(timeSavedPct))}% faster`
-        : `${timeSavedPct}% slower`
+        ? `${Math.abs(parseFloat(timeSavedPct))}% faster than Traditional`
+        : `${timeSavedPct}% slower than Traditional`
       : "-";
 
   return (
@@ -459,20 +483,39 @@ export default function AdminExperimentAnalysis() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {selectedStudyId && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={handleExport}
-              disabled={exporting}
-            >
-              {exporting ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Download className="h-3.5 w-3.5" />
-              )}
-              Export CSV
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  disabled={exporting !== null}
+                >
+                  {exporting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  {exporting === "pdf" ? "Generating Report" : "Export"}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem
+                  onClick={handleExportCsv}
+                  disabled={exporting !== null}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleExportPdf}
+                  disabled={exporting !== null}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Generate PDF Report
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           <Button variant="outline" size="sm" asChild>
             <Link to="/admin/experiments/studies">

@@ -110,3 +110,70 @@ def test_study_export_includes_admin_analysis_and_ground_truth_columns():
     assert "95.0" in row
     assert "93.0" in row
     assert "Looks good" in row
+
+
+def test_study_report_pdf_downloads():
+    _reset_db()
+    db = SessionLocal()
+
+    product = models.Product(name="Report Product", category="Electronics")
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+
+    study = models.ExperimentStudy(
+        product_id=product.id,
+        title="Report Study",
+        status="active",
+        ground_truth_strengths=["Battery life", "Comfort"],
+        ground_truth_weaknesses=["Price", "Weight"],
+    )
+    db.add(study)
+    db.commit()
+    db.refresh(study)
+    study_id = study.id
+
+    result = models.ExperimentResult(
+        product_id=product.id,
+        study_id=study_id,
+        platform="hyve",
+        participant_name="Amina",
+        time_seconds=180,
+        confidence_rating=4,
+        participant_helpful=True,
+        review_status="approved",
+        evidence={
+            "platform": "hyve",
+            "strengths": [{"text": "Battery life"}, {"text": "Comfort"}],
+            "weaknesses": [{"text": "Price"}, {"text": "Weight"}],
+        },
+        admin_analysis={
+            "summary": "Strong agreement with ground truth.",
+            "strength_match_pct": 90.0,
+            "weakness_match_pct": 88.0,
+            "overall_accuracy_pct": 89.0,
+            "generated_at": "2026-04-29T12:00:00",
+        },
+    )
+    db.add(result)
+    db.commit()
+    db.close()
+
+    from routers import experiments as experiment_router
+
+    original_report_builder = experiment_router._generate_study_report_text
+    experiment_router._generate_study_report_text = lambda *args, **kwargs: (
+        "Study Report\n\nSummary:\nThis is a generated report."
+    )
+
+    try:
+        response = client.get(
+            f"/experiments/studies/{study_id}/report.pdf",
+            headers=_admin_headers(),
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        assert "attachment; filename=" in response.headers["content-disposition"]
+        assert response.content.startswith(b"%PDF-")
+    finally:
+        experiment_router._generate_study_report_text = original_report_builder

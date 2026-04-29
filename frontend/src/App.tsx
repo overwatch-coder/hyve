@@ -28,6 +28,7 @@ import StudyJoinPublic from "@/pages/StudyJoinPublic";
 import AdminStudies from "@/pages/AdminStudies";
 import AdminStudyDetail from "@/pages/AdminStudyDetail";
 import AdminExperimentAnalysis from "@/pages/AdminExperimentAnalysis";
+import AdminPublicExperimentResults from "@/pages/AdminPublicExperimentResults";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -64,6 +65,7 @@ function App() {
               <Route path="experiments/studies" element={<AdminStudies />} />
               <Route path="experiments/studies/:studyId" element={<AdminStudyDetail />} />
               <Route path="experiments/analysis" element={<AdminExperimentAnalysis />} />
+              <Route path="experiments/public-results" element={<AdminPublicExperimentResults />} />
             </Route>
 
             <Route path="/" element={<RootLayout />}>

@@ -41,8 +41,9 @@ export default function TestAnalytics() {
   });
 
   const formatTime = (s: number) => {
-    const mins = Math.floor(s / 60);
-    const secs = s % 60;
+    const totalSeconds = Math.max(0, Math.floor(s || 0));
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 

@@ -89,10 +89,21 @@ def test_admin_analysis_requires_admin_auth():
 
 def test_admin_analysis_persists_summary_and_scores():
     _, result_id = _seed_pending_result_with_ground_truth()
-    original_score_similarity = experiment_router.score_similarity
-    experiment_router.score_similarity = lambda a, b: 0.8 if a and b else 0.0
+    original_llm_builder = experiment_router._build_admin_analysis_with_llm
 
     try:
+        experiment_router._build_admin_analysis_with_llm = lambda result, study, custom_prompt=None: {
+            "summary": "AI summary from evaluator.",
+            "strength_match_pct": 84.0,
+            "weakness_match_pct": 79.0,
+            "overall_accuracy_pct": 81.5,
+            "custom_prompt": custom_prompt,
+            "participant_strengths": ["Fast charging"],
+            "participant_weaknesses": ["High price"],
+            "ground_truth_strengths": study.ground_truth_strengths,
+            "ground_truth_weaknesses": study.ground_truth_weaknesses,
+            "generated_at": "2026-04-29T12:00:00",
+        }
         response = client.post(
             f"/experiments/results/{result_id}/analyze",
             headers=_admin_headers(),
@@ -105,20 +116,31 @@ def test_admin_analysis_persists_summary_and_scores():
 
         assert row is not None
         assert isinstance(row.admin_analysis, dict)
-        assert row.admin_analysis["summary"]
-        assert row.admin_analysis["strength_match_pct"] >= 0
-        assert row.admin_analysis["weakness_match_pct"] >= 0
-        assert row.admin_analysis["overall_accuracy_pct"] >= 0
+        assert row.admin_analysis["summary"] == "AI summary from evaluator."
+        assert row.admin_analysis["strength_match_pct"] == 84.0
+        assert row.admin_analysis["weakness_match_pct"] == 79.0
+        assert row.admin_analysis["overall_accuracy_pct"] == 81.5
     finally:
-        experiment_router.score_similarity = original_score_similarity
+        experiment_router._build_admin_analysis_with_llm = original_llm_builder
 
 
 def test_admin_analysis_accepts_custom_prompt():
     _, result_id = _seed_pending_result_with_ground_truth()
-    original_score_similarity = experiment_router.score_similarity
-    experiment_router.score_similarity = lambda a, b: 0.7 if a and b else 0.0
+    original_llm_builder = experiment_router._build_admin_analysis_with_llm
 
     try:
+        experiment_router._build_admin_analysis_with_llm = lambda result, study, custom_prompt=None: {
+            "summary": f"Prompt-aware summary: {custom_prompt}",
+            "strength_match_pct": 76.0,
+            "weakness_match_pct": 70.0,
+            "overall_accuracy_pct": 73.0,
+            "custom_prompt": custom_prompt,
+            "participant_strengths": ["Fast charging"],
+            "participant_weaknesses": ["High price"],
+            "ground_truth_strengths": study.ground_truth_strengths,
+            "ground_truth_weaknesses": study.ground_truth_weaknesses,
+            "generated_at": "2026-04-29T12:00:00",
+        }
         response = client.post(
             f"/experiments/results/{result_id}/analyze",
             headers=_admin_headers(),
@@ -133,17 +155,60 @@ def test_admin_analysis_accepts_custom_prompt():
         assert row is not None
         assert isinstance(row.admin_analysis, dict)
         assert row.admin_analysis["custom_prompt"] == "Focus on whether confidence matches the submission quality."
-        assert "Prompt focus:" in row.admin_analysis["summary"]
+        assert "confidence matches the submission quality" in row.admin_analysis["summary"]
     finally:
+        experiment_router._build_admin_analysis_with_llm = original_llm_builder
+
+
+def test_admin_analysis_falls_back_when_llm_analysis_fails():
+    _, result_id = _seed_pending_result_with_ground_truth()
+    original_llm_builder = experiment_router._build_admin_analysis_with_llm
+    original_score_similarity = experiment_router.score_similarity
+
+    try:
+        def _raise(*args, **kwargs):
+            raise RuntimeError("LLM unavailable")
+
+        experiment_router._build_admin_analysis_with_llm = _raise
+        experiment_router.score_similarity = lambda a, b: 0.65 if a and b else 0.0
+
+        response = client.post(
+            f"/experiments/results/{result_id}/analyze",
+            headers=_admin_headers(),
+        )
+        assert response.status_code == 200
+
+        db = SessionLocal()
+        row = db.query(models.ExperimentResult).filter(models.ExperimentResult.id == result_id).first()
+        db.close()
+
+        assert row is not None
+        assert isinstance(row.admin_analysis, dict)
+        assert row.admin_analysis["summary"]
+        assert row.admin_analysis["strength_match_pct"] == 65.0
+        assert row.admin_analysis["weakness_match_pct"] == 65.0
+    finally:
+        experiment_router._build_admin_analysis_with_llm = original_llm_builder
         experiment_router.score_similarity = original_score_similarity
 
 
 def test_manual_accuracy_override_preserves_ai_scores():
     _, result_id = _seed_pending_result_with_ground_truth()
-    original_score_similarity = experiment_router.score_similarity
-    experiment_router.score_similarity = lambda a, b: 0.75 if a and b else 0.0
+    original_llm_builder = experiment_router._build_admin_analysis_with_llm
 
     try:
+        experiment_router._build_admin_analysis_with_llm = lambda result, study, custom_prompt=None: {
+            "summary": "AI summary from evaluator.",
+            "strength_match_pct": 75.0,
+            "weakness_match_pct": 74.0,
+            "overall_accuracy_pct": 74.5,
+            "custom_prompt": custom_prompt,
+            "participant_strengths": ["Fast charging"],
+            "participant_weaknesses": ["High price"],
+            "ground_truth_strengths": study.ground_truth_strengths,
+            "ground_truth_weaknesses": study.ground_truth_weaknesses,
+            "generated_at": "2026-04-29T12:00:00",
+        }
         analyze_response = client.post(
             f"/experiments/results/{result_id}/analyze",
             headers=_admin_headers(),
@@ -170,4 +235,4 @@ def test_manual_accuracy_override_preserves_ai_scores():
         assert body["admin_analysis"]["manual_overall_accuracy_pct"] == 89.0
         assert body["admin_analysis"]["manual_override_updated_at"]
     finally:
-        experiment_router.score_similarity = original_score_similarity
+        experiment_router._build_admin_analysis_with_llm = original_llm_builder

@@ -29,6 +29,7 @@ import {
   Activity,
   Package,
   ChevronRight,
+  Rows3,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -48,6 +49,7 @@ const NAV_GROUPS = [
     items: [
       { label: "Studies", icon: FlaskConical, href: "/admin/experiments/studies", exact: false },
       { label: "Analysis", icon: BarChart2, href: "/admin/experiments/analysis", exact: false },
+      { label: "Public Results", icon: Rows3, href: "/admin/experiments/public-results", exact: false },
     ],
   },
 ];
@@ -58,6 +60,7 @@ function usePageTitle(pathname: string) {
   if (pathname === "/admin") return "Dashboard";
   if (pathname.startsWith("/admin/experiments/studies")) return "Studies";
   if (pathname.startsWith("/admin/experiments/analysis")) return "Analysis";
+  if (pathname.startsWith("/admin/experiments/public-results")) return "Public Results";
   if (pathname.startsWith("/admin/experiments/review")) return "Analysis";
   return "Admin";
 }

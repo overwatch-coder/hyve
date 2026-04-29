@@ -91,6 +91,7 @@ def test_public_endpoints_only_return_approved_results():
     results = results_response.json()
     assert len(results) == 1
     assert results[0]["review_status"] == "approved"
+    assert results[0]["exclude_from_public"] is False
 
 
 def test_admin_study_results_endpoint_returns_all_statuses():
@@ -104,3 +105,43 @@ def test_admin_study_results_endpoint_returns_all_statuses():
 
     statuses = sorted(item["review_status"] for item in response.json())
     assert statuses == ["approved", "pending", "rejected"]
+
+
+def test_hidden_public_results_are_excluded_from_public_endpoints():
+    _seed_results_with_mixed_statuses()
+
+    hide_response = client.patch(
+        "/experiments/results/1/public-visibility",
+        json={"exclude_from_public": True},
+        headers=_admin_headers(),
+    )
+    assert hide_response.status_code == 200
+    assert hide_response.json()["exclude_from_public"] is True
+
+    analytics_response = client.get("/experiments/analytics")
+    assert analytics_response.status_code == 200
+    assert analytics_response.json()["total_participants"] == 0
+
+    results_response = client.get("/experiments/results")
+    assert results_response.status_code == 200
+    assert results_response.json() == []
+
+
+def test_admin_public_results_endpoint_includes_hidden_rows():
+    _seed_results_with_mixed_statuses()
+
+    client.patch(
+        "/experiments/results/1/public-visibility",
+        json={"exclude_from_public": True},
+        headers=_admin_headers(),
+    )
+
+    response = client.get(
+        "/experiments/public-results",
+        headers=_admin_headers(),
+    )
+    assert response.status_code == 200
+    rows = response.json()
+    assert len(rows) == 1
+    assert rows[0]["participant_name"] == "Approved"
+    assert rows[0]["exclude_from_public"] is True

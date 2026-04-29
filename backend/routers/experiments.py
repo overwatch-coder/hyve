@@ -6,6 +6,7 @@ from typing import List, Optional, Any
 import uuid as uuid_lib
 import csv
 import io as io_lib
+import json
 import os
 import schemas
 import models
@@ -140,6 +141,266 @@ def _csv_cell_for_string_list(items: Any) -> str:
     return " | ".join(texts)
 
 
+def _escape_pdf_text(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _sanitize_pdf_text(text: str) -> str:
+    normalized = (
+        text.replace("\u2014", "-")
+        .replace("\u2013", "-")
+        .replace("\u2018", "'")
+        .replace("\u2019", "'")
+        .replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\u2026", "...")
+        .replace("\u00a0", " ")
+    )
+    return normalized.encode("latin-1", "replace").decode("latin-1")
+
+
+def _wrap_report_line(text: str, width: int = 92) -> list[str]:
+    words = text.split()
+    if not words:
+        return [""]
+    lines: list[str] = []
+    current = words[0]
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        if len(candidate) <= width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
+def _render_simple_pdf(title: str, body: str) -> bytes:
+    page_width = 612
+    page_height = 792
+    margin = 54
+    title_font_size = 18
+    body_font_size = 11
+    line_height = 15
+    max_lines_per_page = 44
+
+    lines: list[tuple[str, int]] = []
+    lines.append((title, title_font_size))
+    lines.append(("", body_font_size))
+    for paragraph in body.splitlines():
+        if not paragraph.strip():
+            lines.append(("", body_font_size))
+            continue
+        for wrapped in _wrap_report_line(paragraph.strip()):
+            lines.append((wrapped, body_font_size))
+
+    pages: list[list[tuple[str, int]]] = []
+    current_page: list[tuple[str, int]] = []
+    for line in lines:
+        current_page.append(line)
+        if len(current_page) >= max_lines_per_page:
+            pages.append(current_page)
+            current_page = []
+    if current_page:
+        pages.append(current_page)
+
+    objects: list[bytes] = []
+
+    def add_object(content: str | bytes) -> int:
+        blob = content.encode("latin-1") if isinstance(content, str) else content
+        objects.append(blob)
+        return len(objects)
+
+    font_id = add_object("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+
+    page_ids = []
+    content_ids = []
+    pages_id_placeholder = len(objects) + 1
+
+    for page_lines in pages:
+        y = page_height - margin
+        stream_lines = ["BT"]
+        for text, font_size in page_lines:
+            escaped = _escape_pdf_text(_sanitize_pdf_text(text))
+            stream_lines.append(f"/F1 {font_size} Tf")
+            stream_lines.append(f"1 0 0 1 {margin} {y} Tm")
+            stream_lines.append(f"({escaped}) Tj")
+            y -= line_height if font_size == body_font_size else line_height + 6
+        stream_lines.append("ET")
+        stream = "\n".join(stream_lines).encode("latin-1", "replace")
+        content_id = add_object(
+            b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream"
+        )
+        content_ids.append(content_id)
+        page_id = add_object(
+            f"<< /Type /Page /Parent {pages_id_placeholder} 0 R /MediaBox [0 0 {page_width} {page_height}] "
+            f"/Resources << /Font << /F1 {font_id} 0 R >> >> /Contents {content_id} 0 R >>"
+        )
+        page_ids.append(page_id)
+
+    kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+    pages_id = add_object(f"<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>")
+    catalog_id = add_object(f"<< /Type /Catalog /Pages {pages_id} 0 R >>")
+
+    output = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    xref_positions = [0]
+    for index, obj in enumerate(objects, start=1):
+        xref_positions.append(len(output))
+        output.extend(f"{index} 0 obj\n".encode("ascii"))
+        output.extend(obj)
+        output.extend(b"\nendobj\n")
+
+    xref_start = len(output)
+    output.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    output.extend(b"0000000000 65535 f \n")
+    for position in xref_positions[1:]:
+        output.extend(f"{position:010d} 00000 n \n".encode("ascii"))
+    output.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root {catalog_id} 0 R >>\nstartxref\n{xref_start}\n%%EOF".encode(
+            "ascii"
+        )
+    )
+    return bytes(output)
+
+
+def _study_report_result_payload(result: models.ExperimentResult) -> dict[str, Any]:
+    evidence = result.evidence or {}
+    analysis = result.admin_analysis or {}
+    return {
+        "result_id": result.id,
+        "participant_name": result.participant_name or "Anonymous participant",
+        "platform": result.platform,
+        "time_seconds": result.time_seconds,
+        "confidence_rating": result.confidence_rating,
+        "participant_helpful": result.participant_helpful,
+        "review_status": result.review_status,
+        "top_strengths": _ranked_finding_texts(evidence, "strengths"),
+        "top_weaknesses": _ranked_finding_texts(evidence, "weaknesses"),
+        "admin_summary": analysis.get("summary"),
+        "strength_match_pct": analysis.get("strength_match_pct"),
+        "weakness_match_pct": analysis.get("weakness_match_pct"),
+        "overall_accuracy_pct": analysis.get("overall_accuracy_pct"),
+        "manual_strength_match_pct": analysis.get("manual_strength_match_pct"),
+        "manual_weakness_match_pct": analysis.get("manual_weakness_match_pct"),
+        "manual_overall_accuracy_pct": analysis.get("manual_overall_accuracy_pct"),
+        "analysis_generated_at": analysis.get("generated_at"),
+        "review_notes": result.review_notes,
+        "created_at": result.created_at.isoformat() if result.created_at else None,
+    }
+
+
+def _generate_study_report_text(
+    study: models.ExperimentStudy,
+    results: list[models.ExperimentResult],
+) -> str:
+    approved = sum(1 for result in results if result.review_status == "approved")
+    pending = sum(1 for result in results if result.review_status == "pending")
+    rejected = sum(1 for result in results if result.review_status == "rejected")
+    hyve_results = [result for result in results if result.platform == "hyve"]
+    traditional_results = [result for result in results if result.platform == "traditional"]
+
+    def _avg(values: list[Optional[float]]) -> Optional[float]:
+        actual = [value for value in values if value is not None]
+        return round(sum(actual) / len(actual), 1) if actual else None
+
+    payload = {
+        "study": {
+            "id": study.id,
+            "title": study.title,
+            "status": study.status,
+            "description": study.description,
+            "ground_truth_strengths": study.ground_truth_strengths or [],
+            "ground_truth_weaknesses": study.ground_truth_weaknesses or [],
+        },
+        "overview": {
+            "total_results": len(results),
+            "approved_results": approved,
+            "pending_results": pending,
+            "rejected_results": rejected,
+            "hyve_results": len(hyve_results),
+            "traditional_results": len(traditional_results),
+            "avg_confidence": _avg([result.confidence_rating for result in results]),
+            "avg_time_seconds": _avg([result.time_seconds for result in results]),
+            "hyve_avg_confidence": _avg([result.confidence_rating for result in hyve_results]),
+            "traditional_avg_confidence": _avg([result.confidence_rating for result in traditional_results]),
+            "hyve_avg_time_seconds": _avg([result.time_seconds for result in hyve_results]),
+            "traditional_avg_time_seconds": _avg([result.time_seconds for result in traditional_results]),
+        },
+        "results": [_study_report_result_payload(result) for result in results],
+    }
+
+    prompt = f"""
+You are preparing a research-style PDF report for an admin reviewing an experiment study.
+
+Use the structured study data below. Write a polished report in plain text with short headings and concise paragraphs.
+
+Required sections:
+1. Executive Summary
+2. Participation Overview
+3. Accuracy Patterns
+4. Confidence and Helpfulness
+5. Ground Truth Alignment
+6. Recommendations
+
+Guidelines:
+- Base the report on the actual data provided.
+- Mention differences between HYVE and Traditional when the data supports it.
+- Reference manual override scores when present.
+- Be clear about how many results are approved, pending, or rejected.
+- Keep the tone professional and practical for an admin or research lead.
+- Return only the report text, with no markdown fences.
+
+Structured data:
+{json.dumps(payload, ensure_ascii=False)}
+""".strip()
+
+    try:
+        provider = os.getenv("LLM_PROVIDER", "openai").lower()
+        if provider == "gemini":
+            from google import genai as _ggenai
+
+            client = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+            response = client.models.generate_content(
+                model=os.getenv("STUDY_REPORT_MODEL", "gemini-2.0-flash"),
+                contents=prompt,
+            )
+            text = (response.text or "").strip()
+        else:
+            import openai
+
+            client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model=os.getenv("STUDY_REPORT_MODEL", "gpt-4o-mini"),
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You write concise study reports for experiment admins using only the supplied data.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                timeout=60.0,
+            )
+            text = (response.choices[0].message.content or "").strip()
+
+        if text:
+            return text
+    except Exception:
+        pass
+
+    lines = [
+        f"Study Report: {study.title}",
+        "",
+        "Executive Summary",
+        f"This study currently has {len(results)} result(s), with {approved} approved, {pending} pending, and {rejected} rejected.",
+        "",
+        "Ground Truth Alignment",
+        f"Strengths reference: {', '.join(study.ground_truth_strengths or []) or 'None provided.'}",
+        f"Weaknesses reference: {', '.join(study.ground_truth_weaknesses or []) or 'None provided.'}",
+    ]
+    return "\n".join(lines)
+
+
 def _ranked_finding_texts(evidence: Any, key: str) -> list[str]:
     if not isinstance(evidence, dict):
         return []
@@ -170,18 +431,141 @@ def _average_best_similarity(participant_items: list[str], ground_truth_items: l
     return sum(scores) / len(scores)
 
 
-def _build_admin_analysis(
+def _clean_model_json_text(text: str) -> str:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1]
+    if cleaned.endswith("```"):
+        cleaned = cleaned.rsplit("\n", 1)[0]
+    return cleaned.strip()
+
+
+def _clamp_pct(value: Any) -> Optional[float]:
+    if isinstance(value, str):
+        value = value.strip().replace("%", "")
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return round(max(0.0, min(100.0, parsed)), 1)
+
+
+def _build_admin_analysis_with_llm(
     result: models.ExperimentResult,
     study: models.ExperimentStudy,
     custom_prompt: Optional[str] = None,
-    existing_analysis: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     evidence = result.evidence or {}
     participant_strengths = _ranked_finding_texts(evidence, "strengths")
     participant_weaknesses = _ranked_finding_texts(evidence, "weaknesses")
     ground_truth_strengths = study.ground_truth_strengths or []
     ground_truth_weaknesses = study.ground_truth_weaknesses or []
-    prior_analysis = existing_analysis or {}
+    normalized_prompt = (custom_prompt or "").strip()
+
+    prompt = f"""
+You are evaluating a participant's product-analysis submission against ground truth.
+
+Score the submission based on meaning, not exact wording.
+
+Return:
+- strength_match_pct: 0 to 100
+- weakness_match_pct: 0 to 100
+- overall_accuracy_pct: 0 to 100
+- summary: a concise 2 to 4 sentence admin summary covering accuracy, confidence, and whether the response seems useful
+
+Ground-truth strengths:
+{json.dumps(ground_truth_strengths, ensure_ascii=False)}
+
+Ground-truth weaknesses:
+{json.dumps(ground_truth_weaknesses, ensure_ascii=False)}
+
+Participant strengths:
+{json.dumps(participant_strengths, ensure_ascii=False)}
+
+Participant weaknesses:
+{json.dumps(participant_weaknesses, ensure_ascii=False)}
+
+Confidence rating:
+{result.confidence_rating if result.confidence_rating is not None else "Not provided"}
+
+Helpfulness response:
+{result.participant_helpful if result.participant_helpful is not None else "Not answered"}
+
+Optional admin focus:
+{normalized_prompt or "None"}
+
+Return only valid JSON:
+{{
+  "strength_match_pct": 0,
+  "weakness_match_pct": 0,
+  "overall_accuracy_pct": 0,
+  "summary": "..."
+}}
+""".strip()
+
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    if provider == "gemini":
+        from google import genai as _ggenai
+
+        client = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        response = client.models.generate_content(
+            model=os.getenv("STUDY_ANALYSIS_MODEL", "gemini-2.0-flash"),
+            contents=prompt,
+        )
+        payload = json.loads(_clean_model_json_text(response.text or ""))
+    else:
+        import openai
+
+        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
+            model=os.getenv("STUDY_ANALYSIS_MODEL", "gpt-4o-mini"),
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You evaluate participant findings against study ground truth and return JSON only.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            timeout=30.0,
+        )
+        payload = json.loads(response.choices[0].message.content or "{}")
+
+    strength_pct = _clamp_pct(payload.get("strength_match_pct"))
+    weakness_pct = _clamp_pct(payload.get("weakness_match_pct"))
+    overall_pct = _clamp_pct(payload.get("overall_accuracy_pct"))
+    if strength_pct is None or weakness_pct is None:
+        raise ValueError("LLM analysis did not return usable scores")
+    if overall_pct is None:
+        overall_pct = round((strength_pct + weakness_pct) / 2, 1)
+
+    summary = str(payload.get("summary", "")).strip()
+    if not summary:
+        raise ValueError("LLM analysis did not return a summary")
+
+    return {
+        "summary": summary,
+        "strength_match_pct": strength_pct,
+        "weakness_match_pct": weakness_pct,
+        "overall_accuracy_pct": overall_pct,
+        "custom_prompt": normalized_prompt or None,
+        "participant_strengths": participant_strengths,
+        "participant_weaknesses": participant_weaknesses,
+        "ground_truth_strengths": ground_truth_strengths,
+        "ground_truth_weaknesses": ground_truth_weaknesses,
+    }
+
+
+def _build_admin_analysis_fallback(
+    result: models.ExperimentResult,
+    study: models.ExperimentStudy,
+    custom_prompt: Optional[str] = None,
+) -> dict[str, Any]:
+    evidence = result.evidence or {}
+    participant_strengths = _ranked_finding_texts(evidence, "strengths")
+    participant_weaknesses = _ranked_finding_texts(evidence, "weaknesses")
+    ground_truth_strengths = study.ground_truth_strengths or []
+    ground_truth_weaknesses = study.ground_truth_weaknesses or []
 
     strength_avg = _average_best_similarity(participant_strengths, ground_truth_strengths)
     weakness_avg = _average_best_similarity(participant_weaknesses, ground_truth_weaknesses)
@@ -227,12 +611,36 @@ def _build_admin_analysis(
         "participant_weaknesses": participant_weaknesses,
         "ground_truth_strengths": ground_truth_strengths,
         "ground_truth_weaknesses": ground_truth_weaknesses,
-        "manual_strength_match_pct": prior_analysis.get("manual_strength_match_pct"),
-        "manual_weakness_match_pct": prior_analysis.get("manual_weakness_match_pct"),
-        "manual_overall_accuracy_pct": prior_analysis.get("manual_overall_accuracy_pct"),
-        "manual_override_updated_at": prior_analysis.get("manual_override_updated_at"),
-        "generated_at": datetime.utcnow().isoformat(),
     }
+
+
+def _build_admin_analysis(
+    result: models.ExperimentResult,
+    study: models.ExperimentStudy,
+    custom_prompt: Optional[str] = None,
+    existing_analysis: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    prior_analysis = existing_analysis or {}
+
+    try:
+        analysis = _build_admin_analysis_with_llm(
+            result,
+            study,
+            custom_prompt=custom_prompt,
+        )
+    except Exception:
+        analysis = _build_admin_analysis_fallback(
+            result,
+            study,
+            custom_prompt=custom_prompt,
+        )
+
+    analysis["manual_strength_match_pct"] = prior_analysis.get("manual_strength_match_pct")
+    analysis["manual_weakness_match_pct"] = prior_analysis.get("manual_weakness_match_pct")
+    analysis["manual_overall_accuracy_pct"] = prior_analysis.get("manual_overall_accuracy_pct")
+    analysis["manual_override_updated_at"] = prior_analysis.get("manual_override_updated_at")
+    analysis["generated_at"] = datetime.utcnow().isoformat()
+    return analysis
 
 
 def _generate_study_copy(payload: schemas.StudyCopyAssistRequest, product: models.Product) -> str:
@@ -340,6 +748,13 @@ class ManualAnalysisOverridePayload(schemas.BaseModel):
     manual_overall_accuracy_pct: Optional[float] = None
 
 
+def _public_result_query(db: Session):
+    return db.query(models.ExperimentResult).filter(
+        models.ExperimentResult.review_status == "approved",
+        models.ExperimentResult.exclude_from_public.is_(False),
+    )
+
+
 @router.get("/review-queue")
 def get_review_queue(
     platform: Optional[str] = None,
@@ -420,6 +835,81 @@ def analyze_experiment_result(
     return result
 
 
+@router.patch("/results/{result_id}/public-visibility", response_model=schemas.ExperimentResult)
+def update_public_visibility(
+    result_id: int,
+    payload: schemas.PublicResultVisibilityUpdate,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    result = (
+        db.query(models.ExperimentResult)
+        .filter(models.ExperimentResult.id == result_id)
+        .first()
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+
+    result.exclude_from_public = payload.exclude_from_public
+    db.commit()
+    db.refresh(result)
+    return result
+
+
+@router.delete("/results/{result_id}", status_code=204)
+def delete_experiment_result(
+    result_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    result = (
+        db.query(models.ExperimentResult)
+        .filter(models.ExperimentResult.id == result_id)
+        .first()
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+
+    db.delete(result)
+    db.commit()
+
+
+@router.get("/public-results", response_model=List[schemas.PublicExperimentResultOut])
+def list_public_results_for_admin(
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    rows = (
+        db.query(
+            models.ExperimentResult,
+            models.ExperimentStudy.title.label("study_title"),
+            models.Product.name.label("product_name"),
+        )
+        .join(models.Product, models.Product.id == models.ExperimentResult.product_id)
+        .outerjoin(models.ExperimentStudy, models.ExperimentStudy.id == models.ExperimentResult.study_id)
+        .filter(models.ExperimentResult.review_status == "approved")
+        .order_by(models.ExperimentResult.created_at.desc())
+        .all()
+    )
+
+    return [
+        schemas.PublicExperimentResultOut(
+            id=result.id,
+            study_id=result.study_id,
+            study_title=study_title,
+            product_id=result.product_id,
+            product_name=product_name,
+            platform=result.platform,
+            participant_name=result.participant_name,
+            time_seconds=result.time_seconds,
+            review_status=result.review_status,
+            exclude_from_public=result.exclude_from_public,
+            created_at=result.created_at,
+        )
+        for result, study_title, product_name in rows
+    ]
+
+
 @router.patch("/results/{result_id}/analysis", response_model=schemas.ExperimentResult)
 def update_manual_analysis_override(
     result_id: int,
@@ -475,7 +965,8 @@ def get_experiment_analytics(db: Session = Depends(get_db)):
         func.avg(models.ExperimentResult.time_seconds).label("avg_time"),
         func.count(models.ExperimentResult.id).label("count")
     ).filter(
-        models.ExperimentResult.review_status == "approved"
+        models.ExperimentResult.review_status == "approved",
+        models.ExperimentResult.exclude_from_public.is_(False),
     ).group_by(models.ExperimentResult.platform).all()
 
     platform_stats = [
@@ -487,14 +978,16 @@ def get_experiment_analytics(db: Session = Depends(get_db)):
     # Total participants
     total = (
         db.query(func.count(models.ExperimentResult.id))
-        .filter(models.ExperimentResult.review_status == "approved")
+        .filter(
+            models.ExperimentResult.review_status == "approved",
+            models.ExperimentResult.exclude_from_public.is_(False),
+        )
         .scalar()
     )
 
     # Recent activity
     recent = (
-        db.query(models.ExperimentResult)
-        .filter(models.ExperimentResult.review_status == "approved")
+        _public_result_query(db)
         .order_by(models.ExperimentResult.created_at.desc())
         .limit(10)
         .all()
@@ -511,8 +1004,7 @@ def get_experiment_analytics(db: Session = Depends(get_db)):
 def list_experiment_results(db: Session = Depends(get_db)):
     """List all experiment results for the detailed table."""
     return (
-        db.query(models.ExperimentResult)
-        .filter(models.ExperimentResult.review_status == "approved")
+        _public_result_query(db)
         .order_by(models.ExperimentResult.created_at.desc())
         .all()
     )
@@ -969,6 +1461,33 @@ def export_study_results(
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/studies/{study_id}/report.pdf")
+def export_study_report_pdf(
+    study_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    study = db.query(models.ExperimentStudy).filter(models.ExperimentStudy.id == study_id).first()
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+
+    results = (
+        db.query(models.ExperimentResult)
+        .filter(models.ExperimentResult.study_id == study_id)
+        .order_by(models.ExperimentResult.created_at.asc())
+        .all()
+    )
+
+    report_text = _generate_study_report_text(study, results)
+    pdf_bytes = _render_simple_pdf(f"Study Report: {study.title}", report_text)
+    filename = f"study_{study_id}_report.pdf"
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

@@ -266,6 +266,7 @@ class ExperimentResult(Base):
     evidence = Column(JSON, nullable=True)
     similarity_scores = Column(JSON, nullable=True)
     review_status = Column(String, default="pending")
+    exclude_from_public = Column(Boolean, default=False, nullable=False)
     participant_helpful = Column(Boolean, nullable=True)
     admin_analysis = Column(JSON, nullable=True)
     review_notes = Column(Text, nullable=True)

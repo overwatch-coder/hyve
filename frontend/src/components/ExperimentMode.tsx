@@ -986,9 +986,7 @@ function CompletionModal({
           </div>
           <div className="space-y-2">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-              {platform === "hyve"
-                ? "Did HYVE help you find the recommendations you need to decide whether to purchase?"
-                : "Did the traditional review experience help you find the recommendations you need to decide whether to purchase?"}
+              Did the experience help you find the recommendations you need to decide whether to purchase?
             </p>
             <div className="grid grid-cols-2 gap-2">
               <button
