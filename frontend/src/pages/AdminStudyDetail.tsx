@@ -123,6 +123,10 @@ function parseBulkEmails(value: string) {
     });
 }
 
+function shouldDistributeBulkEmails(value: string) {
+  return /[\n,;\t]+/.test(value) && parseBulkEmails(value).length > 1;
+}
+
 type StudyCopyField =
   | "description"
   | "consent_text"
@@ -570,6 +574,14 @@ export default function AdminStudyDetail() {
     });
 
     return true;
+  };
+
+  const handleEmailRowChange = (rowId: number, value: string) => {
+    if (shouldDistributeBulkEmails(value)) {
+      handleBulkEmailPaste(rowId, value);
+      return;
+    }
+    updateEmailRow(rowId, value);
   };
 
   if (studyLoading) {
@@ -1049,10 +1061,15 @@ export default function AdminStudyDetail() {
                         <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-0 items-center bg-background">
                           <div className="px-3 py-2.5">
                             <Input
-                              type="email"
+                              type="text"
+                              inputMode="email"
+                              autoCapitalize="none"
+                              autoCorrect="off"
+                              autoComplete="email"
+                              spellCheck={false}
                               placeholder="participant@example.com"
                               value={row.email}
-                              onChange={(e) => updateEmailRow(row.id, e.target.value)}
+                              onChange={(e) => handleEmailRowChange(row.id, e.target.value)}
                               onPaste={(e) => {
                                 const pasted = e.clipboardData.getData("text");
                                 if (handleBulkEmailPaste(row.id, pasted)) {
