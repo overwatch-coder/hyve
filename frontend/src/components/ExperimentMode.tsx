@@ -986,7 +986,7 @@ function CompletionModal({
           </div>
           <div className="space-y-2">
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-              Did the experience help you find the recommendations you need to decide whether to purchase?
+              Did this experience help you make an informed decision about purchasing the product?
             </p>
             <div className="grid grid-cols-2 gap-2">
               <button
