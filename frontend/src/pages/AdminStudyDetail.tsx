@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -109,6 +109,20 @@ type EmailRow = {
   email: string;
 };
 
+function parseBulkEmails(value: string) {
+  const seen = new Set<string>();
+  return value
+    .split(/[\n,;\t]+/g)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .filter((entry) => {
+      const normalized = entry.toLowerCase();
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
+}
+
 type StudyCopyField =
   | "description"
   | "consent_text"
@@ -156,6 +170,7 @@ export default function AdminStudyDetail() {
   const { studyId } = useParams<{ studyId: string }>();
   const { getAuthHeaders } = useAdmin();
   const queryClient = useQueryClient();
+  const nextEmailRowId = useRef(2);
 
   const [inviteCount, setInviteCount] = useState(20);
   const [emailRows, setEmailRows] = useState<EmailRow[]>([{ id: 1, email: "" }]);
@@ -258,7 +273,7 @@ export default function AdminStudyDetail() {
             row.id === sendingDraftRowId ? { ...row, email: "" } : row
           )));
         } else {
-          setEmailRows([{ id: Date.now(), email: "" }]);
+          setEmailRows([createEmailRow()]);
         }
       }
       setSendingDraftRowId(null);
@@ -503,8 +518,13 @@ export default function AdminStudyDetail() {
 
   const filledEmailRows = emailRows.filter((row) => row.email.trim().length > 0);
 
+  const createEmailRow = (email = ""): EmailRow => ({
+    id: nextEmailRowId.current++,
+    email,
+  });
+
   const addEmailRow = () => {
-    setEmailRows((prev) => [...prev, { id: Date.now(), email: "" }]);
+    setEmailRows((prev) => [...prev, createEmailRow()]);
   };
 
   const updateEmailRow = (id: number, email: string) => {
@@ -518,6 +538,38 @@ export default function AdminStudyDetail() {
       }
       return prev.filter((row) => row.id !== id);
     });
+  };
+
+  const handleBulkEmailPaste = (rowId: number, pastedText: string) => {
+    const pastedEmails = parseBulkEmails(pastedText);
+    if (pastedEmails.length === 0) {
+      return false;
+    }
+
+    setEmailRows((prev) => {
+      const startIndex = prev.findIndex((row) => row.id === rowId);
+      if (startIndex === -1) {
+        return prev;
+      }
+
+      const nextRows = [...prev];
+      pastedEmails.forEach((email, offset) => {
+        const targetIndex = startIndex + offset;
+        if (targetIndex < nextRows.length) {
+          nextRows[targetIndex] = { ...nextRows[targetIndex], email };
+        } else {
+          nextRows.push(createEmailRow(email));
+        }
+      });
+
+      if (nextRows[nextRows.length - 1]?.email.trim().length > 0) {
+        nextRows.push(createEmailRow());
+      }
+
+      return nextRows;
+    });
+
+    return true;
   };
 
   if (studyLoading) {
@@ -992,7 +1044,7 @@ export default function AdminStudyDetail() {
                       <div className="px-3 py-2.5">Email</div>
                       <div className="px-3 py-2.5 text-center">Action</div>
                     </div>
-                    <div className="divide-y divide-border/20">
+                    <div className="max-h-80 overflow-y-auto divide-y divide-border/20">
                       {emailRows.map((row) => (
                         <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-0 items-center bg-background">
                           <div className="px-3 py-2.5">
@@ -1001,6 +1053,12 @@ export default function AdminStudyDetail() {
                               placeholder="participant@example.com"
                               value={row.email}
                               onChange={(e) => updateEmailRow(row.id, e.target.value)}
+                              onPaste={(e) => {
+                                const pasted = e.clipboardData.getData("text");
+                                if (handleBulkEmailPaste(row.id, pasted)) {
+                                  e.preventDefault();
+                                }
+                              }}
                               className="font-mono text-xs"
                             />
                           </div>
@@ -1038,7 +1096,7 @@ export default function AdminStudyDetail() {
 
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <p className="text-[10px] text-muted-foreground/70">
-                      Fill any number of rows, then send them one by one or send all filled rows at once.
+                      Paste one or many emails into any field. New lines, commas, and semicolons are supported.
                     </p>
                     <Button
                       size="sm"
