@@ -45,9 +45,13 @@ import {
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import api from "@/lib/api";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import ExploreCore from "./ExploreCore";
 import { toast } from "sonner";
+import {
+  TRADITIONAL_REVIEW_SORT_OPTIONS,
+  type TraditionalReviewSort,
+} from "@/lib/traditionalReviewSort";
 
 interface ExperimentModeProps {
   open: boolean;
@@ -165,24 +169,102 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   const [thankYouOpen, setThankYouOpen] = useState(false);
   const [isSubmittingResults, setIsSubmittingResults] = useState(false);
   const [traditionalPage, setTraditionalPage] = useState(1);
+  const [traditionalSortMode, setTraditionalSortMode] =
+    useState<TraditionalReviewSort>("most-helpful");
+  const [displayedTraditionalPage, setDisplayedTraditionalPage] = useState(1);
+  const [displayedTraditionalTotalPages, setDisplayedTraditionalTotalPages] =
+    useState(1);
+  const [displayedTraditionalReviewCount, setDisplayedTraditionalReviewCount] =
+    useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const traditionalReviewsTopRef = useRef<HTMLDivElement | null>(null);
+  const previousTraditionalProductIdRef = useRef<string | number | null>(null);
   const REVIEWS_PER_PAGE = 20;
 
   const TASKS = getTasks();
+  const isTraditionalProductChanging =
+    platform === "traditional" &&
+    open &&
+    !!product?.id &&
+    previousTraditionalProductIdRef.current !== product.id;
+  const effectiveTraditionalPage = isTraditionalProductChanging
+    ? 1
+    : traditionalPage;
 
-  const { data: reviews, isLoading: reviewsLoading, isError: reviewsError } = useQuery({
-    queryKey: ["product-reviews-traditional", product?.id],
+  const {
+    data: traditionalReviewsData,
+    isLoading: reviewsLoading,
+    isError: reviewsError,
+    isPlaceholderData,
+  } = useQuery({
+    queryKey: [
+      "product-reviews-traditional",
+      product?.id,
+      effectiveTraditionalPage,
+      traditionalSortMode,
+    ],
     queryFn: async () => {
-      const res = await api.get(`/reviews?product_id=${product.id}&size=500`);
-      return res.data.items;
+      const res = await api.get(
+        `/reviews?product_id=${product.id}&page=${effectiveTraditionalPage}&size=${REVIEWS_PER_PAGE}&sort=${traditionalSortMode}`,
+      );
+      return res.data;
     },
-    enabled: platform === "traditional" && !!product?.id,
+    enabled: platform === "traditional" && open && !!product?.id,
+    placeholderData: (previousData, previousQuery) => {
+      const previousProductId =
+        typeof previousQuery?.queryKey?.[1] === "string" ||
+        typeof previousQuery?.queryKey?.[1] === "number"
+          ? previousQuery.queryKey[1]
+          : null;
+      const previousSortMode =
+        typeof previousQuery?.queryKey?.[3] === "string"
+          ? previousQuery.queryKey[3]
+          : null;
+      return previousProductId === product?.id
+        && previousSortMode === traditionalSortMode
+        ? keepPreviousData(previousData)
+        : undefined;
+    },
   });
 
   useEffect(() => {
-    setTraditionalPage(1);
+    if (platform !== "traditional" || !open) {
+      previousTraditionalProductIdRef.current = null;
+      setTraditionalPage(1);
+      setDisplayedTraditionalPage(1);
+      setDisplayedTraditionalTotalPages(1);
+      setDisplayedTraditionalReviewCount(0);
+      return;
+    }
+    if (!product?.id) {
+      return;
+    }
+    if (previousTraditionalProductIdRef.current !== product.id) {
+      previousTraditionalProductIdRef.current = product.id;
+      setTraditionalPage(1);
+      setDisplayedTraditionalPage(1);
+    }
   }, [platform, product?.id, open]);
+
+  useEffect(() => {
+    if (
+      platform !== "traditional" ||
+      !open ||
+      !traditionalReviewsData ||
+      isPlaceholderData
+    ) {
+      return;
+    }
+    setDisplayedTraditionalPage(effectiveTraditionalPage);
+    setDisplayedTraditionalTotalPages(traditionalReviewsData.pages || 1);
+    setDisplayedTraditionalReviewCount(traditionalReviewsData.total ?? 0);
+  }, [
+    platform,
+    open,
+    traditionalReviewsData,
+    isPlaceholderData,
+    effectiveTraditionalPage,
+  ]);
 
   useEffect(() => {
     if (platform !== "traditional" || !open) {
@@ -192,7 +274,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
       behavior: "smooth",
       block: "start",
     });
-  }, [traditionalPage, platform, open]);
+  }, [displayedTraditionalPage, platform, open]);
 
   useEffect(() => {
     if (isActive) {
@@ -226,6 +308,9 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
     setHudExpanded(true);
     setChecklistExpanded(true);
     setHelpfulnessResponse(null);
+    setTraditionalPage(1);
+    setTraditionalSortMode("most-helpful");
+    setDisplayedTraditionalPage(1);
   };
 
   const isTaskValid = (task: TaskDef) => {
@@ -314,14 +399,12 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   };
 
   const completedCount = TASKS.filter((t) => tasksState[t.id]).length;
-  const totalTraditionalPages = Math.max(
-    1,
-    Math.ceil((reviews?.length || 0) / REVIEWS_PER_PAGE),
-  );
-  const paginatedReviews = reviews?.slice(
-    (traditionalPage - 1) * REVIEWS_PER_PAGE,
-    traditionalPage * REVIEWS_PER_PAGE,
-  );
+  const reviews = traditionalReviewsData?.items || [];
+  const totalTraditionalPages =
+    traditionalReviewsData?.pages ?? displayedTraditionalTotalPages;
+  const totalTraditionalReviewCount =
+    traditionalReviewsData?.total ?? displayedTraditionalReviewCount;
+  const showTraditionalLoadingState = reviewsLoading && !traditionalReviewsData;
 
   const getVisibleTraditionalPages = () => {
     const pages: Array<number | "ellipsis"> = [];
@@ -333,8 +416,8 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
     }
 
     pages.push(1);
-    const start = Math.max(2, traditionalPage - 1);
-    const end = Math.min(totalTraditionalPages - 1, traditionalPage + 1);
+    const start = Math.max(2, displayedTraditionalPage - 1);
+    const end = Math.min(totalTraditionalPages - 1, displayedTraditionalPage + 1);
 
     if (start > 2) {
       pages.push("ellipsis");
@@ -799,13 +882,42 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
               </div>
               <span className="text-base font-bold">4.2 out of 5</span>
               <span className="text-sm text-muted-foreground font-medium">
-                · {reviews?.length || 0} reviews
+                · {totalTraditionalReviewCount} reviews
               </span>
             </div>
           </div>
 
           <div className="space-y-4">
-            {paginatedReviews?.map((review: any) => (
+            <div className="flex flex-col gap-2 rounded-xl border border-border/30 bg-card/40 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  Sort Reviews
+                </p>
+                <p className="text-[11px] font-medium text-muted-foreground/80">
+                  {totalTraditionalReviewCount} review
+                  {totalTraditionalReviewCount === 1 ? "" : "s"}
+                </p>
+              </div>
+              <select
+                aria-label="Sort traditional reviews"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-[210px]"
+                value={traditionalSortMode}
+                onChange={(event) => {
+                  const nextSortMode =
+                    event.target.value as TraditionalReviewSort;
+                  setTraditionalPage(1);
+                  setTraditionalSortMode(nextSortMode);
+                }}
+              >
+                {TRADITIONAL_REVIEW_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {reviews.map((review: any) => (
               <div
                 key={review.id ?? `${traditionalPage}-${review.created_at}`}
                 className="p-4 md:p-6 bg-card border border-border/30 rounded-2xl space-y-3 hover:border-border/60 transition-colors"
@@ -858,7 +970,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
               </div>
             ))}
 
-            {(!reviews || reviews.length === 0) && (
+            {reviews.length === 0 && (
               <div className="text-center py-16 bg-muted/20 rounded-2xl border border-dashed border-border/40">
                 {reviewsLoading ? (
                   <div className="flex flex-col items-center gap-3">
@@ -873,12 +985,16 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
               </div>
             )}
 
-            {!!reviews && reviews.length > REVIEWS_PER_PAGE && (
+            {totalTraditionalReviewCount > REVIEWS_PER_PAGE && (
               <div className="rounded-2xl border border-border/20 bg-muted/10 px-4 py-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-xs font-medium text-muted-foreground">
-                    Showing {(traditionalPage - 1) * REVIEWS_PER_PAGE + 1}-
-                    {Math.min(traditionalPage * REVIEWS_PER_PAGE, reviews.length)} of {reviews.length} reviews
+                    Showing {(displayedTraditionalPage - 1) * REVIEWS_PER_PAGE + 1}-
+                    {Math.min(
+                      displayedTraditionalPage * REVIEWS_PER_PAGE,
+                      totalTraditionalReviewCount,
+                    )}{" "}
+                    of {totalTraditionalReviewCount} reviews
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -886,7 +1002,11 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                       size="sm"
                       variant="outline"
                       className="h-8 px-3 text-[10px] font-black uppercase tracking-wide"
-                      disabled={traditionalPage === 1}
+                      disabled={
+                        showTraditionalLoadingState ||
+                        isPlaceholderData ||
+                        displayedTraditionalPage === 1
+                      }
                       onClick={() =>
                         setTraditionalPage((current) => Math.max(1, current - 1))
                       }
@@ -906,8 +1026,13 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                           key={page}
                           type="button"
                           size="sm"
-                          variant={page === traditionalPage ? "default" : "outline"}
+                          variant={
+                            page === displayedTraditionalPage
+                              ? "default"
+                              : "outline"
+                          }
                           className="h-8 min-w-8 px-2 text-[10px] font-black"
+                          disabled={showTraditionalLoadingState || isPlaceholderData}
                           onClick={() => setTraditionalPage(page)}
                         >
                           {page}
@@ -919,7 +1044,11 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                       size="sm"
                       variant="outline"
                       className="h-8 px-3 text-[10px] font-black uppercase tracking-wide"
-                      disabled={traditionalPage === totalTraditionalPages}
+                      disabled={
+                        showTraditionalLoadingState ||
+                        isPlaceholderData ||
+                        displayedTraditionalPage === totalTraditionalPages
+                      }
                       onClick={() =>
                         setTraditionalPage((current) =>
                           Math.min(totalTraditionalPages, current + 1),
