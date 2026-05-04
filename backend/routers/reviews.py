@@ -1,4 +1,8 @@
+from datetime import datetime
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 import schemas
 import models
@@ -14,14 +18,55 @@ from pipeline import batch_process_reviews
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
-@router.get("", response_model=schemas.PaginatedResponse[schemas.Review])
+TraditionalReviewSort = Literal[
+    "most-helpful",
+    "most-favorable",
+    "most-critical",
+    "most-recent",
+]
+
+
+def _apply_hyve_review_sort(query, sort: TraditionalReviewSort):
+    helpful_votes_sort = func.coalesce(models.Review.helpful_votes, 0)
+    created_at_sort = func.coalesce(
+        models.Review.created_at,
+        datetime(1970, 1, 1),
+    )
+
+    if sort == "most-helpful":
+        return query.order_by(
+            helpful_votes_sort.desc(),
+            created_at_sort.desc(),
+        )
+
+    if sort == "most-favorable":
+        return query.order_by(
+            func.coalesce(models.Review.star_rating, -1).desc(),
+            helpful_votes_sort.desc(),
+            created_at_sort.desc(),
+        )
+
+    if sort == "most-critical":
+        return query.order_by(
+            func.coalesce(models.Review.star_rating, 999999).asc(),
+            helpful_votes_sort.desc(),
+            created_at_sort.desc(),
+        )
+
+    return query.order_by(
+        created_at_sort.desc(),
+    )
+
+@router.get("", response_model=schemas.PaginatedResponse[schemas.ReviewListItem])
 def get_reviews(
     product_id: int, 
     page: int = Query(1, ge=1), 
-    size: int = Query(10, ge=1, le=500), 
+    size: int = Query(10, ge=1, le=500),
+    sort: TraditionalReviewSort = Query("most-helpful"),
     db: Session = Depends(get_db)
 ):
     query = db.query(models.Review).filter(models.Review.product_id == product_id)
+    query = _apply_hyve_review_sort(query, sort)
     return paginate(query, page, size)
 
 @router.post("", response_model=schemas.Review)

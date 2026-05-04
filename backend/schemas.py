@@ -87,10 +87,16 @@ class ReviewCreate(ReviewBase):
     product_id: int
 
 
-class Review(ReviewBase):
+class ReviewListItem(ReviewBase):
     id: int
     product_id: int
-    created_at: datetime
+    source: Optional[str] = None
+    helpful_votes: int = 0
+    created_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Review(ReviewListItem):
     claims: List[Claim] = []
     model_config = ConfigDict(from_attributes=True)
 

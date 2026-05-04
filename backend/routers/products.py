@@ -1,5 +1,9 @@
+from datetime import datetime
+from typing import Literal, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, subqueryload
 import schemas
 import models
@@ -7,9 +11,47 @@ from database import get_db
 from core.security import admin_required
 from core.pagination import paginate
 from core.images import save_product_image, normalize_image_url
-from typing import Optional
 
 router = APIRouter(prefix="/products", tags=["Products"])
+
+TraditionalReviewSort = Literal[
+    "most-helpful",
+    "most-favorable",
+    "most-critical",
+    "most-recent",
+]
+
+
+def _apply_hyve_review_sort(query, sort: TraditionalReviewSort):
+    helpful_votes_sort = func.coalesce(models.Review.helpful_votes, 0)
+    created_at_sort = func.coalesce(
+        models.Review.created_at,
+        datetime(1970, 1, 1),
+    )
+
+    if sort == "most-helpful":
+        return query.order_by(
+            helpful_votes_sort.desc(),
+            created_at_sort.desc(),
+        )
+
+    if sort == "most-favorable":
+        return query.order_by(
+            func.coalesce(models.Review.star_rating, -1).desc(),
+            helpful_votes_sort.desc(),
+            created_at_sort.desc(),
+        )
+
+    if sort == "most-critical":
+        return query.order_by(
+            func.coalesce(models.Review.star_rating, 999999).asc(),
+            helpful_votes_sort.desc(),
+            created_at_sort.desc(),
+        )
+
+    return query.order_by(
+        created_at_sort.desc(),
+    )
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.Product])
 def get_products(
@@ -106,13 +148,14 @@ def delete_product(product_id: int, db: Session = Depends(get_db), admin=Depends
 
 @router.get(
     "/{product_id}/reviews",
-    response_model=schemas.PaginatedResponse[schemas.Review],
+    response_model=schemas.PaginatedResponse[schemas.ReviewListItem],
     summary="List all raw reviews ingested for a HYVE product",
 )
 def get_product_reviews(
     product_id: int,
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    sort: TraditionalReviewSort = Query("most-helpful"),
     db: Session = Depends(get_db)
 ):
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
@@ -121,7 +164,8 @@ def get_product_reviews(
         
     query = db.query(models.Review).filter(
         models.Review.product_id == product_id
-    ).order_by(models.Review.created_at.desc())
+    )
+    query = _apply_hyve_review_sort(query, sort)
     return paginate(query, page, size)
 
 

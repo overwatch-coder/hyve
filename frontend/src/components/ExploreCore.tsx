@@ -50,6 +50,10 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getSentimentVerdict, getSentimentColor } from "@/lib/sentiment";
 import {
+  TRADITIONAL_REVIEW_SORT_OPTIONS,
+  type TraditionalReviewSort,
+} from "@/lib/traditionalReviewSort";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -472,16 +476,27 @@ function ExpandableText({
 
 function TraditionalReviewsView({ productId }: { productId: string }) {
   const [page, setPage] = useState(1);
+  const [sortMode, setSortMode] =
+    useState<TraditionalReviewSort>("most-helpful");
+  const pageSize = 20;
   const { data, isLoading } = useQuery({
-    queryKey: ["product-traditional-reviews", productId, page],
+    queryKey: ["product-traditional-reviews", productId, page, sortMode],
     queryFn: async () => {
       const res = await api.get(
-        `/products/${productId}/reviews?page=${page}&size=20`,
+        `/products/${productId}/reviews?page=${page}&size=${pageSize}&sort=${sortMode}`,
       );
       return res.data;
     },
     enabled: !!productId,
   });
+
+  useEffect(() => {
+    setPage(1);
+  }, [productId]);
+
+  const reviews = data?.items || [];
+  const totalPages = data?.pages || 1;
+  const totalReviewCount = data?.total ?? reviews.length;
 
   if (isLoading) {
     return (
@@ -490,9 +505,6 @@ function TraditionalReviewsView({ productId }: { productId: string }) {
       </div>
     );
   }
-
-  const reviews = data?.items || [];
-  const totalPages = data?.pages || 1;
 
   if (reviews.length === 0) {
     return (
@@ -504,6 +516,33 @@ function TraditionalReviewsView({ productId }: { productId: string }) {
 
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6 space-y-4">
+      <div className="flex flex-col gap-2 rounded-xl border border-border/30 bg-card/40 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+            Sort Reviews
+          </p>
+          <p className="text-[11px] font-medium text-muted-foreground/80">
+            {totalReviewCount} review{totalReviewCount === 1 ? "" : "s"}
+          </p>
+        </div>
+        <select
+          aria-label="Sort traditional reviews"
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-[210px]"
+          value={sortMode}
+          onChange={(event) => {
+            const nextSortMode = event.target.value as TraditionalReviewSort;
+            setPage(1);
+            setSortMode(nextSortMode);
+          }}
+        >
+          {TRADITIONAL_REVIEW_SORT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {reviews.map((r: any) => (
         <Card
           key={r.id}
@@ -512,14 +551,16 @@ function TraditionalReviewsView({ productId }: { productId: string }) {
           <CardContent className="p-4 flex flex-col gap-2">
             <div className="flex items-center justify-between pb-1 border-b border-border/10">
               <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-1">
-                {r.source.includes("amazon")
+                {(r.source || "").includes("amazon")
                   ? "Amazon Review"
-                  : r.source.includes("synthetic_manual")
+                  : (r.source || "").includes("synthetic_manual")
                   ? `User Review ${r.id}`
                   : "Consumer Review"}
               </span>
               <span className="text-[10px] text-muted-foreground font-medium">
-                {new Date(r.created_at).toLocaleDateString()}
+                {r.created_at
+                  ? new Date(r.created_at).toLocaleDateString()
+                  : "Date unavailable"}
               </span>
             </div>
             {r.star_rating != null && (
