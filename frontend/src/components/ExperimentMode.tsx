@@ -166,6 +166,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   const [isSubmittingResults, setIsSubmittingResults] = useState(false);
   const [traditionalPage, setTraditionalPage] = useState(1);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const traditionalReviewsTopRef = useRef<HTMLDivElement | null>(null);
   const REVIEWS_PER_PAGE = 20;
 
   const TASKS = getTasks();
@@ -182,6 +183,16 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   useEffect(() => {
     setTraditionalPage(1);
   }, [platform, product?.id, open]);
+
+  useEffect(() => {
+    if (platform !== "traditional" || !open) {
+      return;
+    }
+    traditionalReviewsTopRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, [traditionalPage, platform, open]);
 
   useEffect(() => {
     if (isActive) {
@@ -769,6 +780,7 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
 
       <div className="flex-1 overflow-y-auto pb-44 md:pb-28">
         <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6 md:space-y-8">
+          <div ref={traditionalReviewsTopRef} />
           <div className="flex flex-col gap-2 border-b border-border/20 pb-6 md:pb-8">
             <h2 className="text-2xl md:text-3xl font-black tracking-tight">
               {product?.name}
@@ -841,9 +853,8 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                 </p>
                 <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50 font-bold uppercase tracking-widest border-t border-border/10 pt-3">
                   <ShieldCheck className="h-3 w-3 text-emerald-500" />
-                  {review.source || "Amazon"} Verified Purchase
+                  User Verified Purchase
                 </div>
-
               </div>
             ))}
 
