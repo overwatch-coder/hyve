@@ -164,7 +164,9 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [thankYouOpen, setThankYouOpen] = useState(false);
   const [isSubmittingResults, setIsSubmittingResults] = useState(false);
+  const [traditionalPage, setTraditionalPage] = useState(1);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const REVIEWS_PER_PAGE = 20;
 
   const TASKS = getTasks();
 
@@ -176,6 +178,10 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
     },
     enabled: platform === "traditional" && !!product?.id,
   });
+
+  useEffect(() => {
+    setTraditionalPage(1);
+  }, [platform, product?.id, open]);
 
   useEffect(() => {
     if (isActive) {
@@ -297,6 +303,40 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
   };
 
   const completedCount = TASKS.filter((t) => tasksState[t.id]).length;
+  const totalTraditionalPages = Math.max(
+    1,
+    Math.ceil((reviews?.length || 0) / REVIEWS_PER_PAGE),
+  );
+  const paginatedReviews = reviews?.slice(
+    (traditionalPage - 1) * REVIEWS_PER_PAGE,
+    traditionalPage * REVIEWS_PER_PAGE,
+  );
+
+  const getVisibleTraditionalPages = () => {
+    const pages: Array<number | "ellipsis"> = [];
+    if (totalTraditionalPages <= 7) {
+      for (let page = 1; page <= totalTraditionalPages; page += 1) {
+        pages.push(page);
+      }
+      return pages;
+    }
+
+    pages.push(1);
+    const start = Math.max(2, traditionalPage - 1);
+    const end = Math.min(totalTraditionalPages - 1, traditionalPage + 1);
+
+    if (start > 2) {
+      pages.push("ellipsis");
+    }
+    for (let page = start; page <= end; page += 1) {
+      pages.push(page);
+    }
+    if (end < totalTraditionalPages - 1) {
+      pages.push("ellipsis");
+    }
+    pages.push(totalTraditionalPages);
+    return pages;
+  };
 
   if (!open) return null;
 
@@ -753,9 +793,9 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
           </div>
 
           <div className="space-y-4">
-            {reviews?.map((review: any) => (
+            {paginatedReviews?.map((review: any) => (
               <div
-                key={review.id}
+                key={review.id ?? `${traditionalPage}-${review.created_at}`}
                 className="p-4 md:p-6 bg-card border border-border/30 rounded-2xl space-y-3 hover:border-border/60 transition-colors"
               >
                 <div className="flex items-center justify-between">
@@ -819,6 +859,66 @@ const ExperimentMode: React.FC<ExperimentModeProps> = ({
                 ) : (
                   <p className="text-muted-foreground text-sm font-medium">No reviews found for this product.</p>
                 )}
+              </div>
+            )}
+
+            {!!reviews && reviews.length > REVIEWS_PER_PAGE && (
+              <div className="rounded-2xl border border-border/20 bg-muted/10 px-4 py-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Showing {(traditionalPage - 1) * REVIEWS_PER_PAGE + 1}-
+                    {Math.min(traditionalPage * REVIEWS_PER_PAGE, reviews.length)} of {reviews.length} reviews
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-3 text-[10px] font-black uppercase tracking-wide"
+                      disabled={traditionalPage === 1}
+                      onClick={() =>
+                        setTraditionalPage((current) => Math.max(1, current - 1))
+                      }
+                    >
+                      Previous
+                    </Button>
+                    {getVisibleTraditionalPages().map((page, index) =>
+                      page === "ellipsis" ? (
+                        <span
+                          key={`ellipsis-${index}`}
+                          className="px-1 text-sm font-black text-muted-foreground"
+                        >
+                          …
+                        </span>
+                      ) : (
+                        <Button
+                          key={page}
+                          type="button"
+                          size="sm"
+                          variant={page === traditionalPage ? "default" : "outline"}
+                          className="h-8 min-w-8 px-2 text-[10px] font-black"
+                          onClick={() => setTraditionalPage(page)}
+                        >
+                          {page}
+                        </Button>
+                      ),
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-3 text-[10px] font-black uppercase tracking-wide"
+                      disabled={traditionalPage === totalTraditionalPages}
+                      onClick={() =>
+                        setTraditionalPage((current) =>
+                          Math.min(totalTraditionalPages, current + 1),
+                        )
+                      }
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

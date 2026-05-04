@@ -755,6 +755,24 @@ def _public_result_query(db: Session):
     )
 
 
+def _delete_invite_with_dependents(db: Session, invite: models.ExperimentInvite) -> None:
+    participant = (
+        db.query(models.ExperimentParticipant)
+        .filter(models.ExperimentParticipant.invite_id == invite.id)
+        .first()
+    )
+    if participant:
+        result = (
+            db.query(models.ExperimentResult)
+            .filter(models.ExperimentResult.participant_id == participant.id)
+            .first()
+        )
+        if result:
+            db.delete(result)
+        db.delete(participant)
+    db.delete(invite)
+
+
 @router.get("/review-queue")
 def get_review_queue(
     platform: Optional[str] = None,
@@ -1303,7 +1321,7 @@ def delete_invite(
     )
     if not invite:
         raise HTTPException(status_code=404, detail="Invite not found")
-    db.delete(invite)
+    _delete_invite_with_dependents(db, invite)
     db.commit()
 
 
@@ -1319,14 +1337,16 @@ def bulk_delete_invites(
     admin: dict = Depends(admin_required),
 ):
     """Bulk-delete invite codes by ID. Deletes both used and unused codes."""
-    (
+    invites = (
         db.query(models.ExperimentInvite)
         .filter(
             models.ExperimentInvite.study_id == study_id,
             models.ExperimentInvite.id.in_(payload.ids),
         )
-        .delete(synchronize_session=False)
+        .all()
     )
+    for invite in invites:
+        _delete_invite_with_dependents(db, invite)
     db.commit()
 
 
