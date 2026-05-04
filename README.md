@@ -1,4 +1,4 @@
-# 🐝 HYVE — Shop with Intelligence
+# 🐝 HYVE - Shop with Intelligence
 
 HYVE is an AI-powered platform that transforms unstructured consumer reviews into structured, visual decision maps. Instead of reading hundreds of reviews, users see an interactive graph showing key themes, sentiment breakdowns, and weighted impact — turning narrative noise into actionable intelligence.
 
@@ -195,6 +195,67 @@ npm run dev
 
 ---
 
+## Importing Synthetic Products and Reviews
+
+HYVE includes a helper script for importing a synthetic (non-Amazon) product
+and its reviews directly into the main `Product` and `Review` tables.
+
+- Script: `backend/scripts/import_synthetic_product.py`
+- Supports either a local JSON file or a remote JSON URL
+- Can optionally run the AI analysis pipeline immediately with `--run-analysis`
+
+Expected review JSON format:
+
+```json
+[
+  {
+    "customer_name": "Jane D.",
+    "rating": 4.5,
+    "review_text": "Great sound quality, comfortable fit."
+  }
+]
+```
+
+The script also accepts payloads where the review array is nested under a top-level
+`reviews`, `data`, or `results` key.
+
+### Local Development Usage
+
+Run the script from the `backend/` directory with your local environment active.
+
+From a local file:
+
+```bash
+cd backend
+python scripts/import_synthetic_product.py \
+  --name "Wireless Bluetooth Headphones" \
+  --reviews-file /tmp/reviews.json \
+  --run-analysis
+```
+
+From a remote URL:
+
+```bash
+cd backend
+python scripts/import_synthetic_product.py \
+  --name "Wireless Bluetooth Headphones" \
+  --reviews-url "https://example.com/reviews.json" \
+  --run-analysis
+```
+
+Override the inferred category if needed:
+
+```bash
+cd backend
+python scripts/import_synthetic_product.py \
+  --name "Wireless Bluetooth Headphones" \
+  --category "Electronics" \
+  --reviews-url "https://example.com/reviews.json" \
+  --run-analysis
+```
+
+---
+
 ## Running with Docker Compose (Full Stack)
 
 The `docker-compose.yml` in the project root runs the **entire stack** — frontend, backend, PostgreSQL, and Redis — in one command. No separate installs required.
@@ -274,6 +335,49 @@ Highlights:
 - One-command deploys via `deploy.sh` (push → SSH → pull → rebuild)
 - Optional HTTPS via free [DuckDNS](https://www.duckdns.org) subdomain + Let's Encrypt
 - PostgreSQL and Redis are included in the Docker Compose stack — no external DB service needed
+
+#### Running the synthetic product import script in AWS production
+
+If you SSH into the EC2 host and `python` is not found, that is expected in this
+deployment model. Python is available inside the running `backend` container.
+
+Check that the backend container is up:
+
+```bash
+docker compose ps
+docker compose exec backend python --version
+```
+
+Run the synthetic import script inside the backend container:
+
+From a remote URL:
+
+```bash
+docker compose exec backend python scripts/import_synthetic_product.py \
+  --name "Wireless Bluetooth Headphones" \
+  --reviews-url "https://example.com/reviews.json" \
+  --run-analysis
+```
+
+If your JSON file is already inside the backend container:
+
+```bash
+docker compose exec backend python scripts/import_synthetic_product.py \
+  --name "Wireless Bluetooth Headphones" \
+  --reviews-file /tmp/reviews.json \
+  --run-analysis
+```
+
+If the JSON file exists only on the EC2 host, copy it into the container first:
+
+```bash
+docker cp /path/on/ec2/reviews.json $(docker compose ps -q backend):/tmp/reviews.json
+
+docker compose exec backend python scripts/import_synthetic_product.py \
+  --name "Wireless Bluetooth Headphones" \
+  --reviews-file /tmp/reviews.json \
+  --run-analysis
+```
 
 ---
 
