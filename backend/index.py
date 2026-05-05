@@ -16,9 +16,35 @@ if sys.platform == "win32":
 load_dotenv()
 
 import models
+_MIGRATIONS_RAN = False
 
-# Schema changes are managed by Alembic via backend/migrate.py.
-# Keep API startup side-effect free: no DDL/migration logic in this file.
+
+def _auto_run_migrations() -> None:
+    global _MIGRATIONS_RAN
+    if _MIGRATIONS_RAN:
+        return
+
+    if os.getenv("AUTO_MIGRATE_ON_STARTUP", "true").lower() in {"0", "false", "no"}:
+        logging.getLogger(__name__).info("Skipping automatic database migrations on startup")
+        _MIGRATIONS_RAN = True
+        return
+
+    from migrate import run as run_migrations
+
+    started_at = time.perf_counter()
+    logging.getLogger(__name__).info("Running automatic database migrations on startup")
+    run_migrations()
+    logging.getLogger(__name__).info(
+        "Automatic database migrations completed in %.2fs",
+        time.perf_counter() - started_at,
+    )
+    _MIGRATIONS_RAN = True
+
+
+_auto_run_migrations()
+
+# Schema changes are managed by Alembic via backend/migrate.py and now
+# automatically applied at process startup unless AUTO_MIGRATE_ON_STARTUP=false.
 
 app = FastAPI(
     title="HYVE API",
