@@ -5,6 +5,7 @@ from pathlib import Path
 TEST_DB_PATH = Path("backend/tests/test_experiments_workflow.sqlite3")
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH.as_posix()}"
 os.environ["ADMIN_PASSWORD"] = "admin"
+os.environ["AUTO_MIGRATE_ON_STARTUP"] = "false"
 
 from fastapi.testclient import TestClient
 
@@ -234,5 +235,138 @@ def test_manual_accuracy_override_preserves_ai_scores():
         assert body["admin_analysis"]["manual_weakness_match_pct"] == 86.0
         assert body["admin_analysis"]["manual_overall_accuracy_pct"] == 89.0
         assert body["admin_analysis"]["manual_override_updated_at"]
+    finally:
+        experiment_router._build_admin_analysis_with_llm = original_llm_builder
+
+
+def test_reanalyze_clears_manual_accuracy_override_fields():
+    _, result_id = _seed_pending_result_with_ground_truth()
+    original_llm_builder = experiment_router._build_admin_analysis_with_llm
+
+    try:
+        experiment_router._build_admin_analysis_with_llm = lambda result, study, custom_prompt=None: {
+            "summary": "Fresh AI analysis.",
+            "strength_match_pct": 88.0,
+            "weakness_match_pct": 82.0,
+            "overall_accuracy_pct": 85.0,
+            "custom_prompt": custom_prompt,
+            "participant_strengths": ["Fast charging"],
+            "participant_weaknesses": ["High price"],
+            "ground_truth_strengths": study.ground_truth_strengths,
+            "ground_truth_weaknesses": study.ground_truth_weaknesses,
+            "generated_at": "2026-05-05T12:00:00",
+        }
+
+        analyze_response = client.post(
+            f"/experiments/results/{result_id}/analyze",
+            headers=_admin_headers(),
+        )
+        assert analyze_response.status_code == 200
+
+        override_response = client.patch(
+            f"/experiments/results/{result_id}/analysis",
+            headers=_admin_headers(),
+            json={
+                "manual_strength_match_pct": 91.0,
+                "manual_weakness_match_pct": 87.0,
+                "manual_overall_accuracy_pct": 89.0,
+            },
+        )
+        assert override_response.status_code == 200
+        assert override_response.json()["admin_analysis"]["manual_strength_match_pct"] == 91.0
+
+        reanalyze_response = client.post(
+            f"/experiments/results/{result_id}/analyze",
+            headers=_admin_headers(),
+        )
+        assert reanalyze_response.status_code == 200
+
+        body = reanalyze_response.json()
+        assert body["admin_analysis"]["strength_match_pct"] == 88.0
+        assert body["admin_analysis"]["weakness_match_pct"] == 82.0
+        assert body["admin_analysis"]["overall_accuracy_pct"] == 85.0
+        assert body["admin_analysis"]["manual_strength_match_pct"] is None
+        assert body["admin_analysis"]["manual_weakness_match_pct"] is None
+        assert body["admin_analysis"]["manual_overall_accuracy_pct"] is None
+        assert body["admin_analysis"]["manual_override_updated_at"] is None
+    finally:
+        experiment_router._build_admin_analysis_with_llm = original_llm_builder
+
+
+def test_bulk_admin_analysis_only_processes_unanalyzed_rows():
+    study_id, result_id = _seed_pending_result_with_ground_truth()
+    db = SessionLocal()
+    product = db.query(models.Product).first()
+    existing_result = models.ExperimentResult(
+        product_id=product.id,
+        study_id=study_id,
+        platform="traditional",
+        time_seconds=140,
+        participant_name="Already analyzed",
+        review_status="pending",
+        confidence_rating=4,
+        participant_helpful=True,
+        evidence={
+            "platform": "traditional",
+            "strengths": [{"text": "Great sound"}],
+            "weaknesses": [{"text": "High price"}],
+        },
+        admin_analysis={
+            "summary": "Existing analysis",
+            "strength_match_pct": 80.0,
+            "weakness_match_pct": 70.0,
+            "overall_accuracy_pct": 75.0,
+        },
+    )
+    db.add(existing_result)
+    db.commit()
+    existing_result_id = existing_result.id
+    db.close()
+
+    original_llm_builder = experiment_router._build_admin_analysis_with_llm
+
+    try:
+        experiment_router._build_admin_analysis_with_llm = lambda result, study, custom_prompt=None: {
+            "summary": f"Analyzed {result.id}",
+            "strength_match_pct": 81.0,
+            "weakness_match_pct": 79.0,
+            "overall_accuracy_pct": 80.0,
+            "custom_prompt": custom_prompt,
+            "participant_strengths": ["Fast charging"],
+            "participant_weaknesses": ["High price"],
+            "ground_truth_strengths": study.ground_truth_strengths,
+            "ground_truth_weaknesses": study.ground_truth_weaknesses,
+            "generated_at": "2026-05-05T12:00:00",
+        }
+
+        response = client.post(
+            f"/experiments/studies/{study_id}/analyze-pending",
+            headers=_admin_headers(),
+        )
+        assert response.status_code == 200
+        assert response.json() == {
+            "study_id": study_id,
+            "processed": 1,
+            "skipped_already_analyzed": 1,
+            "failed": 0,
+        }
+
+        db = SessionLocal()
+        newly_analyzed = (
+            db.query(models.ExperimentResult)
+            .filter(models.ExperimentResult.id == result_id)
+            .first()
+        )
+        skipped_row = (
+            db.query(models.ExperimentResult)
+            .filter(models.ExperimentResult.id == existing_result_id)
+            .first()
+        )
+        db.close()
+
+        assert newly_analyzed is not None
+        assert newly_analyzed.admin_analysis["summary"] == f"Analyzed {result_id}"
+        assert skipped_row is not None
+        assert skipped_row.admin_analysis["summary"] == "Existing analysis"
     finally:
         experiment_router._build_admin_analysis_with_llm = original_llm_builder

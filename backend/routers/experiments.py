@@ -18,7 +18,6 @@ from datetime import datetime
 
 router = APIRouter(prefix="/experiments", tags=["Experiments"])
 
-
 def _parse_helpfulness_response(value: Optional[str]) -> Optional[bool]:
     if value is None:
         return None
@@ -371,7 +370,7 @@ Structured data:
 
             client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             response = client.chat.completions.create(
-                model=os.getenv("STUDY_REPORT_MODEL", "gpt-4o-mini"),
+                model=os.getenv("STUDY_REPORT_MODEL", "gpt-4o"),
                 messages=[
                     {
                         "role": "system",
@@ -463,73 +462,135 @@ def _build_admin_analysis_with_llm(
     normalized_prompt = (custom_prompt or "").strip()
 
     prompt = f"""
-You are evaluating a participant's product-analysis submission against ground truth.
+    You are evaluating a participant's product analysis against a defined ground truth.
 
-Score the submission based on meaning, not exact wording.
+    Your task is to compare the ground truths with the participants answers. Do NOT rely on exact wording. Match based on meaning, intent, equivalence, and real-world interpretation but it should still relate to the ground truths.
 
-Return:
-- strength_match_pct: 0 to 100
-- weakness_match_pct: 0 to 100
-- overall_accuracy_pct: 0 to 100
-- summary: a concise 2 to 4 sentence admin summary covering accuracy, confidence, and whether the response seems useful
+    Semantic matching rules:
+    - Treat paraphrases as correct matches (e.g. "easy to assemble" = "straightforward assembly")
+    - Treat responses such as "strength one", "weakness 3" and the likes of them as not a much at all.
+    - Treat synonyms and equivalent consumer language as correct matches (e.g. "audio quality" = "sound quality")
+    - Match the underlying idea even when the participant uses different wording, phrasing, grammar, or level of detail
+    - Minor wording differences should NOT reduce score except if they change the entire truth when comparing to ground truths
+    - A more general or more specific version of the same idea can still be a partial or full semantic match depending on how much meaning overlaps
+    - If the participant captures the same practical consumer meaning, count it as a match even if none of the important words are identical
+    - Broader, incomplete, or vague statements = partial match
+    - Unrelated items = no match
+    - Contradictions (opposite meaning) = penalize
+    - Never score by keyword overlap alone; prioritize meaning over wording
 
-Ground-truth strengths:
-{json.dumps(ground_truth_strengths, ensure_ascii=False)}
+    Scoring method:
+    1. Compare each participant item against ALL ground-truth items.
+    2. Assign:
+    - 1.0 = clear semantic match
+    - 0.5 = partial or indirect match
+    - 0.0 = no match
+    - -0.5 = contradiction
+    3. Compute:
+    - strength_match_pct = (sum of strength scores / number of ground-truth strengths) * 100
+    - weakness_match_pct = (sum of weakness scores / number of ground-truth weaknesses) * 100
+    4. Clamp scores between 0 and 100.
+    5. overall_accuracy_pct = average of strength_match_pct and weakness_match_pct
 
-Ground-truth weaknesses:
-{json.dumps(ground_truth_weaknesses, ensure_ascii=False)}
+    Important rules:
+    - Do NOT reward extra participant items that do not map to ground truth
+    - If multiple participant items match the same ground-truth item, count ONLY the best match
+    - Missing ground-truth items should reduce the score
+    - Do not require the participant to repeat the exact ground-truth wording
+    - Think like a human reviewer judging whether two statements mean the same thing
+    - Be consistent and deterministic in scoring
 
-Participant strengths:
-{json.dumps(participant_strengths, ensure_ascii=False)}
+    Ground-truth strengths:
+    {json.dumps(ground_truth_strengths, ensure_ascii=False)}
 
-Participant weaknesses:
-{json.dumps(participant_weaknesses, ensure_ascii=False)}
+    Ground-truth weaknesses:
+    {json.dumps(ground_truth_weaknesses, ensure_ascii=False)}
 
-Confidence rating:
-{result.confidence_rating if result.confidence_rating is not None else "Not provided"}
+    Participant strengths:
+    {json.dumps(participant_strengths, ensure_ascii=False)}
 
-Helpfulness response:
-{result.participant_helpful if result.participant_helpful is not None else "Not answered"}
+    Participant weaknesses:
+    {json.dumps(participant_weaknesses, ensure_ascii=False)}
 
-Optional admin focus:
-{normalized_prompt or "None"}
+    Confidence rating:
+    {result.confidence_rating if result.confidence_rating is not None else "Not provided"}
 
-Return only valid JSON:
-{{
-  "strength_match_pct": 0,
-  "weakness_match_pct": 0,
-  "overall_accuracy_pct": 0,
-  "summary": "..."
-}}
-""".strip()
+    Helpfulness response:
+    {result.participant_helpful if result.participant_helpful is not None else "Not answered"}
+
+    Optional admin focus:
+    {normalized_prompt or "None"}
+
+    Return:
+    - strength_match_pct (0–100)
+    - weakness_match_pct (0–100)
+    - overall_accuracy_pct (0–100)
+    - summary (a concise 2 to 4 sentence admin summary covering accuracy, confidence, and whether the response seems useful)
+
+    Return only valid JSON:
+    {{
+    "strength_match_pct": 0,
+    "weakness_match_pct": 0,
+    "overall_accuracy_pct": 0,
+    "summary": "..."
+    }}
+    """.strip()
 
     provider = os.getenv("LLM_PROVIDER", "openai").lower()
-    if provider == "gemini":
-        from google import genai as _ggenai
 
-        client = _ggenai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    def validate_payload(payload):
+        return {
+            "strength_match_pct": max(0, min(100, int(payload.get("strength_match_pct", 0)))),
+            "weakness_match_pct": max(0, min(100, int(payload.get("weakness_match_pct", 0)))),
+            "overall_accuracy_pct": max(0, min(100, int(payload.get("overall_accuracy_pct", 0)))),
+            "summary": str(payload.get("summary", "")).strip(),
+        }
+
+    if provider == "gemini":
+        from google import genai
+
+        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
         response = client.models.generate_content(
             model=os.getenv("STUDY_ANALYSIS_MODEL", "gemini-2.0-flash"),
             contents=prompt,
         )
-        payload = json.loads(_clean_model_json_text(response.text or ""))
+
+        raw = response.text or ""
+
+        try:
+            payload = json.loads(raw)
+        except:
+            # fallback clean
+            cleaned = raw.replace("```json", "").replace("```", "").strip()
+            try:
+                payload = json.loads(cleaned)
+            except:
+                payload = {}
+
     else:
         import openai
 
         client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
         response = client.chat.completions.create(
-            model=os.getenv("STUDY_ANALYSIS_MODEL", "gpt-4o-mini"),
+            model=os.getenv("STUDY_ANALYSIS_MODEL", "gpt-5.4"),
             messages=[
                 {
                     "role": "system",
-                    "content": "You evaluate participant findings against study ground truth and return JSON only.",
+                    "content": "You are a strict evaluation engine. Compare participant responses to ground truth using semantic matching. Return ONLY valid JSON.",
                 },
                 {"role": "user", "content": prompt},
             ],
             response_format={"type": "json_object"},
-            timeout=30.0,
+            temperature=0,
+            top_p=1,
+            timeout=30,
         )
+
         payload = json.loads(response.choices[0].message.content or "{}")
+
+        payload = validate_payload(payload)
 
     strength_pct = _clamp_pct(payload.get("strength_match_pct"))
     weakness_pct = _clamp_pct(payload.get("weakness_match_pct"))
@@ -620,8 +681,6 @@ def _build_admin_analysis(
     custom_prompt: Optional[str] = None,
     existing_analysis: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
-    prior_analysis = existing_analysis or {}
-
     try:
         analysis = _build_admin_analysis_with_llm(
             result,
@@ -635,10 +694,10 @@ def _build_admin_analysis(
             custom_prompt=custom_prompt,
         )
 
-    analysis["manual_strength_match_pct"] = prior_analysis.get("manual_strength_match_pct")
-    analysis["manual_weakness_match_pct"] = prior_analysis.get("manual_weakness_match_pct")
-    analysis["manual_overall_accuracy_pct"] = prior_analysis.get("manual_overall_accuracy_pct")
-    analysis["manual_override_updated_at"] = prior_analysis.get("manual_override_updated_at")
+    analysis["manual_strength_match_pct"] = None
+    analysis["manual_weakness_match_pct"] = None
+    analysis["manual_overall_accuracy_pct"] = None
+    analysis["manual_override_updated_at"] = None
     analysis["generated_at"] = datetime.utcnow().isoformat()
     return analysis
 
@@ -687,7 +746,7 @@ Return only the final text for the field. Do not use markdown fences, bullet lab
 
     client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     response = client.chat.completions.create(
-        model=os.getenv("STUDY_COPY_MODEL", "gpt-4o-mini"),
+        model=os.getenv("STUDY_COPY_MODEL", "gpt-4o"),
         messages=[
             {"role": "system", "content": "You write concise, clear academic study copy."},
             {"role": "user", "content": base_prompt},
@@ -740,6 +799,13 @@ class ReviewUpdatePayload(schemas.BaseModel):
 
 class AnalyzeRequest(schemas.BaseModel):
     custom_prompt: Optional[str] = None
+
+
+class BulkAnalyzeResponse(schemas.BaseModel):
+    study_id: int
+    processed: int
+    skipped_already_analyzed: int
+    failed: int
 
 
 class ManualAnalysisOverridePayload(schemas.BaseModel):
@@ -851,6 +917,60 @@ def analyze_experiment_result(
     db.commit()
     db.refresh(result)
     return result
+
+
+@router.post(
+    "/studies/{study_id}/analyze-pending",
+    response_model=BulkAnalyzeResponse,
+)
+def analyze_unanalyzed_study_results(
+    study_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(admin_required),
+):
+    study = (
+        db.query(models.ExperimentStudy)
+        .filter(models.ExperimentStudy.id == study_id)
+        .first()
+    )
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    if not (study.ground_truth_strengths and study.ground_truth_weaknesses):
+        raise HTTPException(status_code=400, detail="Study ground truth is incomplete")
+
+    results = (
+        db.query(models.ExperimentResult)
+        .filter(models.ExperimentResult.study_id == study_id)
+        .order_by(models.ExperimentResult.created_at.asc())
+        .all()
+    )
+
+    processed = 0
+    skipped_already_analyzed = 0
+    failed = 0
+
+    for result in results:
+        if result.admin_analysis:
+            skipped_already_analyzed += 1
+            continue
+
+        try:
+            result.admin_analysis = _build_admin_analysis(
+                result,
+                study,
+                existing_analysis=result.admin_analysis or {},
+            )
+            db.commit()
+            processed += 1
+        except Exception:
+            db.rollback()
+            failed += 1
+    return BulkAnalyzeResponse(
+        study_id=study_id,
+        processed=processed,
+        skipped_already_analyzed=skipped_already_analyzed,
+        failed=failed,
+    )
 
 
 @router.patch("/results/{result_id}/public-visibility", response_model=schemas.ExperimentResult)

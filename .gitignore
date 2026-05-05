@@ -32,6 +32,8 @@ hyvedb.sqlite3
 nul
 
 /tasks
+/outputs
+/backend/tests/tmp
 /backend/hyvedb.sqlite3
 /fixes
 /docs

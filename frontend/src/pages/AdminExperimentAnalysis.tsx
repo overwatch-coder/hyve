@@ -127,6 +127,13 @@ type PendingReviewAction = {
   reviewStatus: "approved" | "rejected";
 } | null;
 
+type BulkAnalyzeResponse = {
+  study_id: number;
+  processed: number;
+  skipped_already_analyzed: number;
+  failed: number;
+};
+
 type ManualOverrideValues = {
   manualStrengthMatchPct?: number | null;
   manualWeaknessMatchPct?: number | null;
@@ -205,6 +212,7 @@ export default function AdminExperimentAnalysis() {
     useState<Result | null>(null);
   const [pendingReviewAction, setPendingReviewAction] =
     useState<PendingReviewAction>(null);
+  const [bulkAnalyzeDialogOpen, setBulkAnalyzeDialogOpen] = useState(false);
 
   const { data: studies = [], isLoading: studiesLoading } = useQuery<Study[]>({
     queryKey: ["admin-studies-list"],
@@ -267,6 +275,18 @@ export default function AdminExperimentAnalysis() {
     enabled: !!selectedStudyId,
   });
 
+  const { data: allStudyResults = [] } = useQuery<Result[]>({
+    queryKey: ["admin-study-results-all", selectedStudyId],
+    queryFn: async () => {
+      const res = await api.get(
+        `/experiments/studies/${selectedStudyId}/results`,
+        { headers: getAuthHeaders() },
+      );
+      return res.data;
+    },
+    enabled: !!selectedStudyId,
+  });
+
   const analyzeMutation = useMutation({
     mutationFn: async ({
       resultId,
@@ -295,6 +315,43 @@ export default function AdminExperimentAnalysis() {
       const detail =
         (error as { response?: { data?: { detail?: string } } })?.response?.data
           ?.detail || "Failed to analyze result";
+      toast.error(detail);
+    },
+  });
+
+  const bulkAnalyzeMutation = useMutation({
+    mutationFn: async (studyId: number) => {
+      const res = await api.post(
+        `/experiments/studies/${studyId}/analyze-pending`,
+        {},
+        { headers: getAuthHeaders() },
+      );
+      return res.data as BulkAnalyzeResponse;
+    },
+    onSuccess: (payload) => {
+      const parts = [`${payload.processed} analyzed`];
+      if (payload.skipped_already_analyzed > 0) {
+        parts.push(`${payload.skipped_already_analyzed} skipped`);
+      }
+      if (payload.failed > 0) {
+        parts.push(`${payload.failed} failed`);
+      }
+      toast.success(`Bulk analysis complete: ${parts.join(", ")}`);
+      setBulkAnalyzeDialogOpen(false);
+      queryClient.invalidateQueries({
+        queryKey: ["admin-study-results", selectedStudyId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["admin-study-results-all", selectedStudyId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["admin-study-analytics-detail", selectedStudyId],
+      });
+    },
+    onError: (error: unknown) => {
+      const detail =
+        (error as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || "Failed to analyze unanalyzed results";
       toast.error(detail);
     },
   });
@@ -464,6 +521,9 @@ export default function AdminExperimentAnalysis() {
         ? `${Math.abs(parseFloat(timeSavedPct))}% faster than Traditional`
         : `${timeSavedPct}% slower than Traditional`
       : "-";
+  const unanalyzedCount = allStudyResults.filter(
+    (result) => !result.admin_analysis,
+  ).length;
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in pb-12">
@@ -482,6 +542,22 @@ export default function AdminExperimentAnalysis() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {selectedStudyId && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={unanalyzedCount === 0 || bulkAnalyzeMutation.isPending}
+              onClick={() => setBulkAnalyzeDialogOpen(true)}
+            >
+              {bulkAnalyzeMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              Analyze Unanalyzed Results
+            </Button>
+          )}
           {selectedStudyId && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1066,6 +1142,46 @@ export default function AdminExperimentAnalysis() {
               )}
             >
               {reviewMutation.isPending ? "Updating..." : "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={bulkAnalyzeDialogOpen}
+        onOpenChange={setBulkAnalyzeDialogOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-black tracking-tight">
+              Analyze All Unanalyzed Results?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedStudy
+                ? `This will run admin analysis for every result in "${selectedStudy.title}" that does not already have saved analysis.`
+                : "This will run admin analysis for every result in the selected study that does not already have saved analysis."}{" "}
+              Already analyzed rows will be skipped automatically.
+              {unanalyzedCount > 0
+                ? ` ${unanalyzedCount} result${unanalyzedCount === 1 ? "" : "s"} will be processed.`
+                : " There are no unanalyzed results to process right now."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkAnalyzeMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={
+                bulkAnalyzeMutation.isPending ||
+                !selectedStudyId ||
+                unanalyzedCount === 0
+              }
+              onClick={() =>
+                selectedStudyId &&
+                bulkAnalyzeMutation.mutate(selectedStudyId)
+              }
+            >
+              {bulkAnalyzeMutation.isPending ? "Analyzing..." : "Confirm"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
