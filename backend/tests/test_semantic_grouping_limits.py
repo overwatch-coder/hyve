@@ -1,6 +1,11 @@
+import os
 from types import SimpleNamespace
+from pathlib import Path
 
 import pytest
+
+TEST_DB_PATH = Path("backend/tests/test_semantic_grouping.sqlite3")
+os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH.as_posix()}"
 
 import ai_engine
 import pipeline

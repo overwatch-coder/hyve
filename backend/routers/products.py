@@ -128,6 +128,23 @@ def regenerate_product_summary(product_id: int, req: schemas.RegenerateSummaryRe
         raise HTTPException(status_code=404, detail="Product not found")
     return product
 
+
+@router.post(
+    "/{product_id}/reprocess",
+    response_model=schemas.ProductReprocessResponse,
+)
+def reprocess_product_analysis(
+    product_id: int,
+    db: Session = Depends(get_db),
+    admin=Depends(admin_required),
+):
+    from pipeline import reprocess_existing_product
+
+    try:
+        return reprocess_existing_product(product_id, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
 @router.post("/{product_id}/chat")
 def chat_with_product_ai(product_id: int, req: schemas.ChatRequest, db: Session = Depends(get_db)):
     """API endpoint for the product assistant chatbot. Returns a stream of text fragments."""

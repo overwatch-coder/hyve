@@ -1191,6 +1191,92 @@ def cluster_product_claims(product_id: int, db: Session) -> dict:
 
     return {"status": "success", "themes_created": len(unique_clusters)}
 
+
+def _clear_product_analysis_artifacts(product_id: int, review_ids: list[int], db: Session) -> None:
+    if review_ids:
+        db.query(models.Claim).filter(
+            models.Claim.review_id.in_(review_ids)
+        ).delete(synchronize_session=False)
+
+    db.query(models.Theme).filter(
+        models.Theme.product_id == product_id
+    ).delete(synchronize_session=False)
+
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if product:
+        product.overall_sentiment_score = 0.0
+        product.summary = None
+        product.advices = None
+        product.summary_seller = None
+        product.advices_seller = None
+    db.flush()
+
+
+def reprocess_existing_product(product_id: int, db: Session) -> dict:
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise ValueError("Product not found")
+
+    reviews = (
+        db.query(models.Review)
+        .filter(models.Review.product_id == product_id)
+        .order_by(models.Review.id.asc())
+        .all()
+    )
+    review_ids = [int(review.id) for review in reviews]
+
+    product.status = "processing"
+    product.processing_step = "Reprocessing Review Intelligence"
+    db.commit()
+
+    _clear_product_analysis_artifacts(product_id, review_ids, db)
+    db.commit()
+
+    if not review_ids:
+        product.status = "ready"
+        product.processing_step = "Analysis Complete (no reviews found)"
+        db.commit()
+        return {
+            "product_id": product_id,
+            "reviews_preserved": 0,
+            "claims_rebuilt": 0,
+            "themes_created": 0,
+            "status": "success",
+        }
+
+    try:
+        product.processing_step = "Distilling Insights"
+        db.commit()
+        batch_process_reviews(review_ids, db)
+
+        product.processing_step = "Harmonizing Patterns"
+        db.commit()
+        cluster_result = cluster_product_claims(product_id, db)
+
+        claims_rebuilt = (
+            db.query(models.Claim)
+            .join(models.Review, models.Claim.review_id == models.Review.id)
+            .filter(models.Review.product_id == product_id)
+            .count()
+        )
+
+        product.status = "ready"
+        product.processing_step = "Analysis Complete"
+        db.commit()
+
+        return {
+            "product_id": product_id,
+            "reviews_preserved": len(review_ids),
+            "claims_rebuilt": claims_rebuilt,
+            "themes_created": int(cluster_result.get("themes_created", 0) or 0),
+            "status": "success",
+        }
+    except Exception as exc:
+        product.status = "error"
+        product.processing_step = f"Reprocessing failed: {str(exc)[:120]}"
+        db.commit()
+        raise
+
 def extract_and_update_summary(product_id: int, db: Session, focus: str = None):
     """Regenerates the summary and advice for a product, optionally with a custom focus."""
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
