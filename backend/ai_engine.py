@@ -440,6 +440,226 @@ def embed_texts(texts: list[str], task_type: str = "SEMANTIC_SIMILARITY"):
     return np.vstack([np.asarray(v, dtype=np.float32) for v in cached_vectors])
 
 
+def _theme_descriptor(theme: dict) -> str:
+    name = str(theme.get("name") or "").strip()
+    grouped_claims = theme.get("grouped_claims") or []
+    samples = []
+    for claim in grouped_claims[:4]:
+        claim_text = str(
+            claim.get("representative_text")
+            or claim.get("claim_text")
+            or ""
+        ).strip()
+        if claim_text:
+            samples.append(claim_text)
+    sample_text = "; ".join(samples)
+    return f"Theme: {name}\nGrouped claims: {sample_text}".strip()
+
+
+def _theme_claim_count(theme: dict) -> int:
+    grouped_claims = theme.get("grouped_claims") or []
+    if grouped_claims:
+        return int(
+            sum(int(claim.get("mention_count") or 1) for claim in grouped_claims)
+        )
+    return int(theme.get("claim_count") or 0)
+
+
+def _fallback_theme_name(themes: list[dict]) -> str:
+    ranked = sorted(
+        themes,
+        key=lambda theme: (
+            -_theme_claim_count(theme),
+            len(str(theme.get("name") or "")),
+            str(theme.get("name") or "").lower(),
+        ),
+    )
+    return str(ranked[0].get("name") or "Other")
+
+
+def _embedding_theme_merge_decision(theme_a: dict, theme_b: dict) -> dict:
+    import numpy as np
+
+    vectors = embed_texts(
+        [_theme_descriptor(theme_a), _theme_descriptor(theme_b)],
+        task_type="SEMANTIC_SIMILARITY",
+    )
+    if vectors.shape[0] != 2:
+        return {"merge": False, "canonical_name": None}
+
+    left = vectors[0]
+    right = vectors[1]
+    denom = float(np.linalg.norm(left) * np.linalg.norm(right))
+    if denom == 0:
+        return {"merge": False, "canonical_name": None}
+
+    similarity = float(np.dot(left, right) / denom)
+    threshold = float(os.getenv("THEME_MERGE_EMBED_THRESHOLD", "0.86"))
+    return {
+        "merge": similarity >= threshold,
+        "canonical_name": _fallback_theme_name([theme_a, theme_b])
+        if similarity >= threshold
+        else None,
+    }
+
+
+def compare_theme_semantics(
+    theme_a: dict,
+    theme_b: dict,
+    provider: str | None = None,
+) -> dict:
+    provider_name = (provider or os.getenv("LLM_PROVIDER", "openai")).lower()
+    prompt = f"""You are deciding whether two consumer-review themes describe the same underlying product aspect.
+
+Theme A:
+{_theme_descriptor(theme_a)}
+
+Theme B:
+{_theme_descriptor(theme_b)}
+
+Rules:
+- Merge only if these themes clearly refer to the same underlying product aspect.
+- Similar wording with the same meaning should merge, like "Sound Quality" and "Audio Quality".
+- Different aspects should stay separate even if both are positive or both are negative.
+- If merging, choose a concise canonical theme name in Title Case.
+
+Return ONLY valid JSON:
+{{
+  "merge": true,
+  "canonical_name": "Sound Quality"
+}}
+"""
+
+    try:
+        if provider_name == "openai":
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise RuntimeError("OPENAI_API_KEY is not configured")
+            import openai
+
+            client = openai.OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
+                model=os.getenv("THEME_MERGE_MODEL", "gpt-4o-mini"),
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You compare product-review themes and output JSON only.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                timeout=float(os.getenv("THEME_MERGE_TIMEOUT", "20")),
+            )
+            content = response.choices[0].message.content or ""
+            decision = json.loads(content)
+        elif provider_name == "gemini":
+            api_key = os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                raise RuntimeError("GEMINI_API_KEY is not configured")
+            from google import genai as _ggenai
+
+            client = _ggenai.Client(api_key=api_key)
+            response = client.models.generate_content(
+                model=os.getenv("THEME_MERGE_MODEL", "gemini-2.0-flash"),
+                contents=(
+                    "System: You compare product-review themes and output JSON only.\n\n"
+                    f"User: {prompt}\n\nOutput raw JSON."
+                ),
+            )
+            decision = json.loads(_clean_json_text(response.text or ""))
+        else:
+            raise ValueError(f"Unsupported provider: {provider_name}")
+
+        return {
+            "merge": bool(decision.get("merge")),
+            "canonical_name": (
+                str(decision.get("canonical_name")).strip()
+                if decision.get("canonical_name")
+                else None
+            ),
+        }
+    except Exception:
+        return _embedding_theme_merge_decision(theme_a, theme_b)
+
+
+def merge_semantically_equivalent_themes(
+    themes: list[dict],
+    provider: str | None = None,
+    comparator=None,
+) -> list[dict]:
+    if len(themes) <= 1:
+        return [
+            {
+                **theme,
+                "member_theme_ids": list(theme.get("member_theme_ids") or [theme.get("id")]),
+                "canonical_name": str(theme.get("name") or "Other"),
+            }
+            for theme in themes
+        ]
+
+    resolved_comparator = comparator or compare_theme_semantics
+    parent = list(range(len(themes)))
+    canonical_name_overrides: dict[int, str] = {}
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def union(left: int, right: int) -> int:
+        root_left = find(left)
+        root_right = find(right)
+        if root_left == root_right:
+            return root_left
+        parent[root_right] = root_left
+        return root_left
+
+    for left in range(len(themes)):
+        for right in range(left + 1, len(themes)):
+            decision = resolved_comparator(themes[left], themes[right], provider)
+            if isinstance(decision, bool):
+                decision = {"merge": decision, "canonical_name": None}
+            if not decision.get("merge"):
+                continue
+            merged_root = union(left, right)
+            canonical_name = decision.get("canonical_name")
+            if canonical_name:
+                canonical_name_overrides[merged_root] = str(canonical_name).strip()
+
+    grouped_indices: dict[int, list[int]] = {}
+    for index in range(len(themes)):
+        grouped_indices.setdefault(find(index), []).append(index)
+
+    merged_themes = []
+    for root, indices in grouped_indices.items():
+        grouped_themes = [themes[index] for index in indices]
+        canonical_name = canonical_name_overrides.get(root) or _fallback_theme_name(
+            grouped_themes
+        )
+        base_theme = max(grouped_themes, key=_theme_claim_count)
+        grouped_claims = []
+        for theme in grouped_themes:
+            grouped_claims.extend(theme.get("grouped_claims") or [])
+
+        member_theme_ids = []
+        for theme in grouped_themes:
+            ids = theme.get("member_theme_ids") or [theme.get("id")]
+            member_theme_ids.extend(ids)
+
+        merged_themes.append(
+            {
+                **base_theme,
+                "name": canonical_name,
+                "canonical_name": canonical_name,
+                "member_theme_ids": member_theme_ids,
+                "grouped_claims": grouped_claims,
+            }
+        )
+
+    return merged_themes
+
+
 def cluster_claims(claims_texts: list[str]) -> list[int]:
     """
     Groups claims into thematic clusters using embeddings (OpenAI or Gemini,

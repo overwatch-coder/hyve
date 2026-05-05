@@ -87,10 +87,16 @@ class ReviewCreate(ReviewBase):
     product_id: int
 
 
-class Review(ReviewBase):
+class ReviewListItem(ReviewBase):
     id: int
     product_id: int
-    created_at: datetime
+    source: Optional[str] = None
+    helpful_votes: int = 0
+    created_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Review(ReviewListItem):
     claims: List[Claim] = []
     model_config = ConfigDict(from_attributes=True)
 
@@ -108,6 +114,61 @@ class ProductBase(BaseModel):
     ingest_type: Optional[str] = None
     processing_step: Optional[str] = None
     image_url: Optional[str] = None
+
+
+class ProductReprocessResponse(BaseModel):
+    product_id: int
+    reviews_preserved: int
+    claims_rebuilt: int
+    themes_created: int
+    status: str
+
+
+class GroupedClaimOut(BaseModel):
+    representative_text: str
+    sentiment: str
+    severity: float
+    mention_count: int = 1
+
+
+class SentimentCountsOut(BaseModel):
+    positive: int = 0
+    negative: int = 0
+    neutral: int = 0
+
+
+class ThemeAnalyticsOut(BaseModel):
+    id: int
+    name: str
+    claim_count: int
+    grouped_claim_count: int = 0
+    positive_ratio: float
+    avg_severity: float
+    sentiment_counts: SentimentCountsOut
+    grouped_claims: List[GroupedClaimOut] = []
+
+
+class RiskStrengthItemOut(BaseModel):
+    theme: str
+    ratio: float
+    severity_avg: float
+
+
+class ProductAnalyticsResponse(BaseModel):
+    product_id: int
+    product_name: str
+    category: str
+    review_count: int
+    claim_count: int
+    overall_sentiment: float
+    image_url: Optional[str] = None
+    summary: Optional[str] = None
+    advices: Optional[List[str]] = None
+    summary_seller: Optional[str] = None
+    advices_seller: Optional[List[str]] = None
+    critical_risk_factor: Optional[RiskStrengthItemOut] = None
+    strongest_selling_point: Optional[RiskStrengthItemOut] = None
+    theme_breakdown: List[ThemeAnalyticsOut]
 
 
 class RawIngestRequest(BaseModel):

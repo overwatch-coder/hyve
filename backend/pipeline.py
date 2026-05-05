@@ -11,11 +11,270 @@ from ai_engine import (
     reconcile_claim_sentiment,
     cluster_claims,
     cluster_claims_llm,
+    merge_semantically_equivalent_themes,
 )
 import asyncio
 import time
 
 
+MAX_GROUPED_THEME_ITEMS = 8
+
+
+def _claim_sentiment(claim) -> str:
+    return str(getattr(claim, "sentiment_polarity", None) or "neutral")
+
+
+def _claim_severity(claim) -> float:
+    return float(getattr(claim, "severity", 0.0) or 0.0)
+
+
+def _build_grouped_claim(claims_list: list, representative_text: str | None = None) -> dict:
+    first_claim = claims_list[0]
+    resolved_text = str(representative_text or getattr(first_claim, "claim_text", "") or "").strip()
+    return {
+        "representative_text": resolved_text or str(getattr(first_claim, "claim_text", "") or ""),
+        "sentiment": _claim_sentiment(first_claim),
+        "severity": sum(_claim_severity(claim) for claim in claims_list) / len(claims_list),
+        "mention_count": len(claims_list),
+        "original_ids": [int(claim.id) for claim in claims_list],
+    }
+
+
+def _fallback_grouped_claims(claims_list: list) -> list[dict]:
+    return [_build_grouped_claim([claim]) for claim in claims_list]
+
+
+def _sort_and_limit_grouped_claims(grouped_claims: list[dict], limit: int = MAX_GROUPED_THEME_ITEMS) -> list[dict]:
+    return sorted(
+        grouped_claims,
+        key=lambda item: (
+            -int(item.get("mention_count") or 0),
+            -float(item.get("severity") or 0.0),
+            str(item.get("representative_text", "")).lower(),
+        ),
+    )[:limit]
+
+
+def _normalize_grouped_claims(raw_groups: list[dict], claims_list: list) -> list[dict]:
+    claims_by_id = {int(claim.id): claim for claim in claims_list}
+    grouped_claims: list[dict] = []
+    assigned_ids: set[int] = set()
+
+    for raw_group in raw_groups:
+        raw_ids = raw_group.get("original_ids", [])
+        if not isinstance(raw_ids, list):
+            continue
+
+        member_claims = []
+        for raw_id in raw_ids:
+            try:
+                claim_id = int(raw_id)
+            except Exception:
+                continue
+            if claim_id in assigned_ids:
+                continue
+            claim = claims_by_id.get(claim_id)
+            if claim is None:
+                continue
+            member_claims.append(claim)
+            assigned_ids.add(claim_id)
+
+        if not member_claims:
+            continue
+
+        claims_by_sentiment: dict[str, list] = {}
+        for claim in member_claims:
+            claims_by_sentiment.setdefault(_claim_sentiment(claim), []).append(claim)
+
+        if len(claims_by_sentiment) == 1:
+            grouped_claims.append(
+                _build_grouped_claim(
+                    member_claims,
+                    representative_text=raw_group.get("representative_text"),
+                )
+            )
+            continue
+
+        for sentiment_claims in claims_by_sentiment.values():
+            grouped_claims.append(_build_grouped_claim(sentiment_claims))
+
+    for claim in claims_list:
+        claim_id = int(claim.id)
+        if claim_id not in assigned_ids:
+            grouped_claims.append(_build_grouped_claim([claim]))
+
+    if not grouped_claims:
+        raise ValueError("No valid grouped claims were produced")
+
+    return grouped_claims
+
+
+def consolidate_theme_claims(
+    theme_name: str,
+    claims_list: list,
+    grouping_func=None,
+    grouped_output: list[dict] | None = None,
+    max_items: int = MAX_GROUPED_THEME_ITEMS,
+) -> list[dict]:
+    """
+    Consolidate semantically similar claims within a theme into surfaced groups.
+
+    Returns grouped items with:
+    - representative_text
+    - sentiment
+    - severity
+    - mention_count
+    - original_ids
+    """
+    if not claims_list:
+        return []
+
+    if len(claims_list) == 1 and grouped_output is None and grouping_func is None:
+        return _sort_and_limit_grouped_claims(_fallback_grouped_claims(claims_list), max_items)
+
+    try:
+        raw_groups = grouped_output
+        if raw_groups is None:
+            raw_groups = (grouping_func or deduplicate_claims_ai)(claims_list, theme_name)
+        if not isinstance(raw_groups, list):
+            raise ValueError("Grouping helper did not return a list")
+        normalized_groups = _normalize_grouped_claims(raw_groups, claims_list)
+    except Exception as exc:
+        print(f"WARNING: Claim consolidation failed for theme '{theme_name}': {exc}")
+        normalized_groups = _fallback_grouped_claims(claims_list)
+
+    return _sort_and_limit_grouped_claims(normalized_groups, max_items)
+
+
+def _apply_grouped_claims_to_theme(theme, theme_claims: list, grouped_claims: list[dict], db: Session) -> None:
+    if not theme_claims:
+        theme.claim_count = 0
+        return
+
+    for group in grouped_claims:
+        if not group["original_ids"]:
+            continue
+        representative_id = group["original_ids"][0]
+        rep_claim = (
+            db.query(models.Claim)
+            .filter(models.Claim.id == representative_id)
+            .first()
+        )
+        if rep_claim:
+            rep_claim.claim_text = group["representative_text"]
+            rep_claim.sentiment_polarity = group["sentiment"]
+            rep_claim.severity = group["severity"]
+            rep_claim.mention_count = group["mention_count"]
+            rep_claim.theme_id = theme.id
+
+        for duplicate_id in group["original_ids"][1:]:
+            dup_claim = (
+                db.query(models.Claim)
+                .filter(models.Claim.id == duplicate_id)
+                .first()
+            )
+            if dup_claim:
+                db.delete(dup_claim)
+
+    theme.claim_count = len(grouped_claims)
+
+
+def _build_theme_merge_payload(theme_mapping: dict, db: Session) -> list[dict]:
+    payload = []
+    for cid, theme in theme_mapping.items():
+        theme_claims = (
+            db.query(models.Claim)
+            .filter(models.Claim.theme_id == theme.id)
+            .order_by(models.Claim.id.asc())
+            .all()
+        )
+        payload.append(
+            {
+                "id": theme.id,
+                "cluster_id": cid,
+                "name": theme.name,
+                "claim_count": theme.claim_count,
+                "recommendation": theme.recommendation,
+                "grouped_claims": [
+                    {
+                        "representative_text": claim.claim_text,
+                        "sentiment": claim.sentiment_polarity,
+                        "severity": float(claim.severity or 0.0),
+                        "mention_count": int(claim.mention_count or 1),
+                        "original_ids": [int(claim.id)],
+                    }
+                    for claim in theme_claims
+                ],
+                "member_theme_ids": [theme.id],
+            }
+        )
+    return payload
+
+
+def _merge_duplicate_themes(theme_mapping: dict, db: Session) -> dict:
+    theme_payload = _build_theme_merge_payload(theme_mapping, db)
+    merged_payload = merge_semantically_equivalent_themes(theme_payload)
+    if len(merged_payload) == len(theme_payload):
+        return theme_mapping
+
+    merged_theme_mapping = {}
+    for index, merged_theme in enumerate(merged_payload):
+        member_theme_ids = [
+            int(theme_id)
+            for theme_id in merged_theme.get("member_theme_ids", [])
+            if theme_id is not None
+        ]
+        if not member_theme_ids:
+            continue
+
+        canonical_theme_id = member_theme_ids[0]
+        canonical_theme = (
+            db.query(models.Theme)
+            .filter(models.Theme.id == canonical_theme_id)
+            .first()
+        )
+        if canonical_theme is None:
+            continue
+
+        canonical_theme.name = merged_theme.get("canonical_name") or canonical_theme.name
+        canonical_theme.recommendation = (
+            merged_theme.get("recommendation") or canonical_theme.recommendation
+        )
+
+        for duplicate_theme_id in member_theme_ids[1:]:
+            db.query(models.Claim).filter(
+                models.Claim.theme_id == duplicate_theme_id
+            ).update({models.Claim.theme_id: canonical_theme.id}, synchronize_session=False)
+            duplicate_theme = (
+                db.query(models.Theme)
+                .filter(models.Theme.id == duplicate_theme_id)
+                .first()
+            )
+            if duplicate_theme:
+                db.delete(duplicate_theme)
+
+        db.flush()
+
+        merged_claims = (
+            db.query(models.Claim)
+            .filter(models.Claim.theme_id == canonical_theme.id)
+            .order_by(models.Claim.id.asc())
+            .all()
+        )
+        merged_groups = consolidate_theme_claims(
+            canonical_theme.name,
+            merged_claims,
+        )
+        _apply_grouped_claims_to_theme(
+            canonical_theme,
+            merged_claims,
+            merged_groups,
+            db,
+        )
+        merged_theme_mapping[index] = canonical_theme
+
+    db.flush()
+    return merged_theme_mapping
 
 
 def _clean_json_text(text: str) -> str:
@@ -504,15 +763,34 @@ Return JSON with this exact structure:
 def deduplicate_themes_parallel(theme_mapping: dict, claims: list):
     async def run_all():
         tasks = []
-        theme_keys = []
+        theme_payloads = []
         for cid, theme in theme_mapping.items():
             theme_claims = [c for c in claims if c.theme_id == theme.id]
             if theme_claims:
                 tasks.append(deduplicate_claims_ai_async(theme_claims, theme.name))
-                theme_keys.append((cid, theme))
+                theme_payloads.append((cid, theme, theme_claims))
         
-        results = await asyncio.gather(*tasks)
-        return list(zip(theme_keys, results))
+        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+        consolidated_results = []
+        for (cid, theme, theme_claims), raw_result in zip(theme_payloads, raw_results):
+            if isinstance(raw_result, Exception):
+                print(f"WARNING: async claim dedup failed for theme '{theme.name}': {raw_result}")
+                raw_groups = []
+            else:
+                raw_groups = raw_result
+
+            consolidated_results.append(
+                (
+                    (cid, theme),
+                    consolidate_theme_claims(
+                        theme.name,
+                        theme_claims,
+                        grouped_output=raw_groups,
+                    ),
+                )
+            )
+
+        return consolidated_results
         
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -668,7 +946,16 @@ Return ONLY valid JSON with this exact structure:
                 }
             )
 
-        results.append(((cid, theme_mapping[cid]), deduped_groups))
+        results.append(
+            (
+                (cid, theme_mapping[cid]),
+                consolidate_theme_claims(
+                    theme_mapping[cid].name,
+                    theme_claims,
+                    grouped_output=deduped_groups,
+                ),
+            )
+        )
 
     if not results:
         raise ValueError("single-call dedup: produced no results")
@@ -850,36 +1137,10 @@ def cluster_product_claims(product_id: int, db: Session) -> dict:
         if not theme_claims:
             continue
 
-        # Delete old individual claims, replace with deduplicated representatives
-        old_claim_ids = [c.id for c in theme_claims]
-
-        # For each group, keep one claim as representative and delete the rest
-        kept_claim_ids = set()
-        for group in deduped_groups:
-            if not group["original_ids"]:
-                continue
-            # Keep the first original claim as the representative
-            representative_id = group["original_ids"][0]
-            kept_claim_ids.add(representative_id)
-
-            # Update the representative claim with deduped data
-            rep_claim = db.query(models.Claim).filter(models.Claim.id == representative_id).first()
-            if rep_claim:
-                rep_claim.claim_text = group["representative_text"]
-                rep_claim.sentiment_polarity = group["sentiment"]
-                rep_claim.severity = group["severity"]
-                rep_claim.mention_count = group["mention_count"]
-
-            # Delete the other claims in this group
-            for oid in group["original_ids"][1:]:
-                dup_claim = db.query(models.Claim).filter(models.Claim.id == oid).first()
-                if dup_claim:
-                    db.delete(dup_claim)
-
-        # Update theme claim count to reflect deduped count
-        theme.claim_count = len(deduped_groups)
+        _apply_grouped_claims_to_theme(theme, theme_claims, deduped_groups, db)
 
     db.flush()
+    theme_mapping = _merge_duplicate_themes(theme_mapping, db)
 
     # ── Recalculate per-theme positive_ratio AFTER deduplication ──
     # Uses severity-weighted formula: weight positive claims more if they have higher severity/mention_count
@@ -929,6 +1190,92 @@ def cluster_product_claims(product_id: int, db: Session) -> dict:
     print(f"DEBUG: Created {len(unique_clusters)} themes for product {product_id} (with AI dedup)")
 
     return {"status": "success", "themes_created": len(unique_clusters)}
+
+
+def _clear_product_analysis_artifacts(product_id: int, review_ids: list[int], db: Session) -> None:
+    if review_ids:
+        db.query(models.Claim).filter(
+            models.Claim.review_id.in_(review_ids)
+        ).delete(synchronize_session=False)
+
+    db.query(models.Theme).filter(
+        models.Theme.product_id == product_id
+    ).delete(synchronize_session=False)
+
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if product:
+        product.overall_sentiment_score = 0.0
+        product.summary = None
+        product.advices = None
+        product.summary_seller = None
+        product.advices_seller = None
+    db.flush()
+
+
+def reprocess_existing_product(product_id: int, db: Session) -> dict:
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise ValueError("Product not found")
+
+    reviews = (
+        db.query(models.Review)
+        .filter(models.Review.product_id == product_id)
+        .order_by(models.Review.id.asc())
+        .all()
+    )
+    review_ids = [int(review.id) for review in reviews]
+
+    product.status = "processing"
+    product.processing_step = "Reprocessing Review Intelligence"
+    db.commit()
+
+    _clear_product_analysis_artifacts(product_id, review_ids, db)
+    db.commit()
+
+    if not review_ids:
+        product.status = "ready"
+        product.processing_step = "Analysis Complete (no reviews found)"
+        db.commit()
+        return {
+            "product_id": product_id,
+            "reviews_preserved": 0,
+            "claims_rebuilt": 0,
+            "themes_created": 0,
+            "status": "success",
+        }
+
+    try:
+        product.processing_step = "Distilling Insights"
+        db.commit()
+        batch_process_reviews(review_ids, db)
+
+        product.processing_step = "Harmonizing Patterns"
+        db.commit()
+        cluster_result = cluster_product_claims(product_id, db)
+
+        claims_rebuilt = (
+            db.query(models.Claim)
+            .join(models.Review, models.Claim.review_id == models.Review.id)
+            .filter(models.Review.product_id == product_id)
+            .count()
+        )
+
+        product.status = "ready"
+        product.processing_step = "Analysis Complete"
+        db.commit()
+
+        return {
+            "product_id": product_id,
+            "reviews_preserved": len(review_ids),
+            "claims_rebuilt": claims_rebuilt,
+            "themes_created": int(cluster_result.get("themes_created", 0) or 0),
+            "status": "success",
+        }
+    except Exception as exc:
+        product.status = "error"
+        product.processing_step = f"Reprocessing failed: {str(exc)[:120]}"
+        db.commit()
+        raise
 
 def extract_and_update_summary(product_id: int, db: Session, focus: str = None):
     """Regenerates the summary and advice for a product, optionally with a custom focus."""

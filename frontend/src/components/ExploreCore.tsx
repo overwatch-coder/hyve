@@ -50,6 +50,10 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getSentimentVerdict, getSentimentColor } from "@/lib/sentiment";
 import {
+  TRADITIONAL_REVIEW_SORT_OPTIONS,
+  type TraditionalReviewSort,
+} from "@/lib/traditionalReviewSort";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -78,6 +82,109 @@ const nodeTypes = {
   claim: ClaimNode,
   quote: QuoteNode,
 };
+
+type GroupedThemeClaim = {
+  representative_text?: string;
+  sentiment?: string;
+  severity?: number;
+  mention_count?: number;
+  original_ids?: Array<number | string>;
+};
+
+function normalizeGroupedThemeClaim(
+  claim: GroupedThemeClaim,
+  themeId: number | string,
+  index: number,
+) {
+  const representativeText = String(claim.representative_text || "").trim();
+  const originalId = claim.original_ids?.[0];
+
+  return {
+    id: originalId ?? `grouped-${themeId}-${index}`,
+    claim_text: representativeText,
+    evidence_text: representativeText,
+    context_text: representativeText,
+    sentiment_polarity: claim.sentiment || "neutral",
+    severity: claim.severity || 0,
+    mention_count: Math.max(1, Number(claim.mention_count || 1)),
+  };
+}
+
+function getGroupedClaimsFromTheme(theme: any) {
+  return Array.isArray(theme?.grouped_claims)
+    ? theme.grouped_claims.filter(
+        (claim: GroupedThemeClaim) =>
+          String(claim?.representative_text || "").trim().length > 0,
+      )
+    : [];
+}
+
+function getAnalyticsTheme(themeId: number | string, analyticsData?: any) {
+  return analyticsData?.theme_breakdown?.find(
+    (theme: any) => String(theme.id) === String(themeId),
+  );
+}
+
+function getThemeDisplayClaims(theme: any, analyticsData?: any) {
+  const groupedClaims = getGroupedClaimsFromTheme(theme);
+  const analyticsTheme = getAnalyticsTheme(theme?.id, analyticsData);
+  const analyticsGroupedClaims = getGroupedClaimsFromTheme(analyticsTheme);
+
+  if (groupedClaims.length > 0) {
+    return groupedClaims.map((claim: GroupedThemeClaim, index: number) =>
+      normalizeGroupedThemeClaim(claim, theme?.id ?? "theme", index),
+    );
+  }
+
+  if (analyticsGroupedClaims.length > 0) {
+    return analyticsGroupedClaims.map(
+      (claim: GroupedThemeClaim, index: number) =>
+        normalizeGroupedThemeClaim(claim, theme?.id ?? "theme", index),
+    );
+  }
+
+  return Array.isArray(theme?.claims) ? theme.claims : [];
+}
+
+function formatMentionLabel(count?: number) {
+  const safeCount = Math.max(1, Number(count || 1));
+  return safeCount === 1 ? "1 mention" : `${safeCount} mentions`;
+}
+
+function getThemeDisplayVolume(theme: any, analyticsData?: any) {
+  return getThemeDisplayClaims(theme, analyticsData).reduce(
+    (total: number, claim: any) =>
+      total + Math.max(1, Number(claim?.mention_count || 1)),
+    0,
+  );
+}
+
+function getThemeInsightCount(theme: any, analyticsData?: any) {
+  return getThemeDisplayClaims(theme, analyticsData).length;
+}
+
+function normalizeThemeForDisplay(theme: any, analyticsData?: any) {
+  const analyticsTheme = getAnalyticsTheme(theme?.id, analyticsData);
+  const claims = getThemeDisplayClaims(theme, analyticsData);
+
+  return {
+    ...theme,
+    name: analyticsTheme?.canonical_name || analyticsTheme?.name || theme?.name,
+    claim_count:
+      analyticsTheme?.claim_count ??
+      getThemeDisplayVolume(theme, analyticsData) ??
+      theme?.claim_count ??
+      0,
+    grouped_claim_count:
+      analyticsTheme?.grouped_claim_count ?? getThemeInsightCount(theme, analyticsData),
+    grouped_claims: analyticsTheme?.grouped_claims ?? theme?.grouped_claims ?? [],
+    claims,
+  };
+}
+
+function normalizeThemesForDisplay(themes: any[], analyticsData?: any) {
+  return themes.map((theme) => normalizeThemeForDisplay(theme, analyticsData));
+}
 
 /* ──────────────────────────────────────────────
    Dagre Auto-Layout (Tight spacing)
@@ -151,19 +258,23 @@ function buildGraphFromProduct(product: any, analyticsData: any) {
   const reviewCount = analyticsData?.review_count ?? 0;
   const category = analyticsData?.category ?? product?.category ?? "";
 
-  product.themes?.forEach((theme: any) => {
+  const displayThemes = normalizeThemesForDisplay(
+    product.themes || [],
+    analyticsData,
+  );
+
+  displayThemes.forEach((theme: any) => {
     const themeId = `theme-${theme.id}`;
     themeChildIds.push(themeId);
 
     const posSentimentId = `sentiment-pos-${theme.id}`;
     const negSentimentId = `sentiment-neg-${theme.id}`;
+    const themeClaims = getThemeDisplayClaims(theme, analyticsData);
 
     const posClaims =
-      theme.claims?.filter((c: any) => c.sentiment_polarity === "positive") ||
-      [];
+      themeClaims.filter((c: any) => c.sentiment_polarity === "positive") || [];
     const negClaims =
-      theme.claims?.filter((c: any) => c.sentiment_polarity !== "positive") ||
-      [];
+      themeClaims.filter((c: any) => c.sentiment_polarity !== "positive") || [];
 
     const sentimentNodes: string[] = [];
 
@@ -472,16 +583,27 @@ function ExpandableText({
 
 function TraditionalReviewsView({ productId }: { productId: string }) {
   const [page, setPage] = useState(1);
+  const [sortMode, setSortMode] =
+    useState<TraditionalReviewSort>("most-helpful");
+  const pageSize = 20;
   const { data, isLoading } = useQuery({
-    queryKey: ["product-traditional-reviews", productId, page],
+    queryKey: ["product-traditional-reviews", productId, page, sortMode],
     queryFn: async () => {
       const res = await api.get(
-        `/products/${productId}/reviews?page=${page}&size=20`,
+        `/products/${productId}/reviews?page=${page}&size=${pageSize}&sort=${sortMode}`,
       );
       return res.data;
     },
     enabled: !!productId,
   });
+
+  useEffect(() => {
+    setPage(1);
+  }, [productId]);
+
+  const reviews = data?.items || [];
+  const totalPages = data?.pages || 1;
+  const totalReviewCount = data?.total ?? reviews.length;
 
   if (isLoading) {
     return (
@@ -490,9 +612,6 @@ function TraditionalReviewsView({ productId }: { productId: string }) {
       </div>
     );
   }
-
-  const reviews = data?.items || [];
-  const totalPages = data?.pages || 1;
 
   if (reviews.length === 0) {
     return (
@@ -504,6 +623,33 @@ function TraditionalReviewsView({ productId }: { productId: string }) {
 
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6 space-y-4">
+      <div className="flex flex-col gap-2 rounded-xl border border-border/30 bg-card/40 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+            Sort Reviews
+          </p>
+          <p className="text-[11px] font-medium text-muted-foreground/80">
+            {totalReviewCount} review{totalReviewCount === 1 ? "" : "s"}
+          </p>
+        </div>
+        <select
+          aria-label="Sort traditional reviews"
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-medium ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-[210px]"
+          value={sortMode}
+          onChange={(event) => {
+            const nextSortMode = event.target.value as TraditionalReviewSort;
+            setPage(1);
+            setSortMode(nextSortMode);
+          }}
+        >
+          {TRADITIONAL_REVIEW_SORT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {reviews.map((r: any) => (
         <Card
           key={r.id}
@@ -512,14 +658,16 @@ function TraditionalReviewsView({ productId }: { productId: string }) {
           <CardContent className="p-4 flex flex-col gap-2">
             <div className="flex items-center justify-between pb-1 border-b border-border/10">
               <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-1">
-                {r.source.includes("amazon")
+                {(r.source || "").includes("amazon")
                   ? "Amazon Review"
-                  : r.source.includes("synthetic_manual")
+                  : (r.source || "").includes("synthetic_manual")
                   ? `User Review ${r.id}`
                   : "Consumer Review"}
               </span>
               <span className="text-[10px] text-muted-foreground font-medium">
-                {new Date(r.created_at).toLocaleDateString()}
+                {r.created_at
+                  ? new Date(r.created_at).toLocaleDateString()
+                  : "Date unavailable"}
               </span>
             </div>
             {r.star_rating != null && (
@@ -1105,7 +1253,10 @@ export function ExploreContentImpl({
             ) : viewMode === "accordion" ? (
               <div className="h-full overflow-y-auto p-6">
                 <HYVEAccordion
-                  themes={productData?.themes || []}
+                  themes={normalizeThemesForDisplay(
+                    productData?.themes || [],
+                    analyticsData,
+                  )}
                   searchQuery={searchQuery}
                 />
               </div>
@@ -1240,13 +1391,28 @@ export function ExploreContentImpl({
                     onClick={scrollToMatrix}
                   >
                     <CardContent className="p-5">
+                      {(() => {
+                        const groupedClaims = getThemeDisplayClaims(
+                          theme,
+                          analyticsData,
+                        );
+                        const topGroupedClaim = groupedClaims[0];
+
+                        return (
+                          <>
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1 min-w-0">
                           <h4 className="text-sm font-black truncate group-hover:text-primary transition-colors">
                             {theme.name}
                           </h4>
                           <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">
-                            {theme.claim_count} mentions
+                            {formatMentionLabel(
+                              getThemeDisplayVolume(theme, analyticsData),
+                            )}
+                            {Array.isArray(theme.grouped_claims) &&
+                            theme.grouped_claims.length > 0
+                              ? ` across ${getThemeInsightCount(theme, analyticsData)} grouped insights`
+                              : ""}
                           </p>
                         </div>
                         <div
@@ -1294,6 +1460,19 @@ export function ExploreContentImpl({
                                 ? "Mixed"
                                 : "Critical"}
                       </p>
+                      {topGroupedClaim && (
+                        <div className="mt-3 rounded-xl border border-border/40 bg-background/70 px-3 py-2">
+                          <p className="line-clamp-2 text-[11px] font-medium leading-snug text-muted-foreground">
+                            "{topGroupedClaim.claim_text}"
+                          </p>
+                          <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-primary/80">
+                            {formatMentionLabel(topGroupedClaim.mention_count)}
+                          </p>
+                        </div>
+                      )}
+                          </>
+                        );
+                      })()}
                     </CardContent>
                   </Card>
                 ))}
@@ -1464,7 +1643,10 @@ export function ExploreContentImpl({
               {/* RIGHT: Market Findings (2/5 width) */}
               <div className="lg:col-span-2 flex flex-col gap-6">
                 {(() => {
-                  const themes: any[] = productData.themes || [];
+                  const themes: any[] = normalizeThemesForDisplay(
+                    productData.themes || [],
+                    analyticsData,
+                  );
 
                   // Strict mutual exclusion: sort all themes by positive_ratio
                   // Strengths: positive_ratio >= 0.6 (majority positive), sorted desc
@@ -1489,10 +1671,14 @@ export function ExploreContentImpl({
                     theme: any,
                     polarity: "positive" | "negative",
                   ) => {
-                    const filtered = (theme.claims || []).filter(
+                    const displayClaims = getThemeDisplayClaims(
+                      theme,
+                      analyticsData,
+                    );
+                    const filtered = displayClaims.filter(
                       (c: any) => c.sentiment_polarity === polarity,
                     );
-                    if (!filtered.length) return (theme.claims || [])[0];
+                    if (!filtered.length) return displayClaims[0];
                     return filtered.sort(
                       (a: any, b: any) =>
                         (b.mention_count || 1) * (b.severity || 0.1) -
@@ -1553,9 +1739,18 @@ export function ExploreContentImpl({
                                     />
                                   </div>
                                   {claim && (
-                                    <p className="text-[11px] text-muted-foreground/70 font-medium leading-snug line-clamp-2">
-                                      "{claim.claim_text}"
-                                    </p>
+                                    <div className="space-y-1">
+                                      <p className="text-[11px] text-muted-foreground/70 font-medium leading-snug line-clamp-2">
+                                        "{claim.claim_text}"
+                                      </p>
+                                      {claim.mention_count > 1 && (
+                                        <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600/70">
+                                          {formatMentionLabel(
+                                            claim.mention_count,
+                                          )}
+                                        </p>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               </div>
@@ -1618,9 +1813,18 @@ export function ExploreContentImpl({
                                     />
                                   </div>
                                   {claim && (
-                                    <p className="text-[11px] text-muted-foreground/70 font-medium leading-snug line-clamp-2">
-                                      "{claim.claim_text}"
-                                    </p>
+                                    <div className="space-y-1">
+                                      <p className="text-[11px] text-muted-foreground/70 font-medium leading-snug line-clamp-2">
+                                        "{claim.claim_text}"
+                                      </p>
+                                      {claim.mention_count > 1 && (
+                                        <p className="text-[10px] font-bold uppercase tracking-wider text-rose-600/70">
+                                          {formatMentionLabel(
+                                            claim.mention_count,
+                                          )}
+                                        </p>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               </div>

@@ -25,13 +25,22 @@ interface SentimentCounts {
   neutral: number;
 }
 
+interface GroupedThemeClaim {
+  representative_text?: string;
+  sentiment?: string;
+  severity?: number;
+  mention_count?: number;
+}
+
 interface ThemeAnalytics {
   id: number;
   name: string;
+  canonical_name?: string;
   claim_count: number;
   positive_ratio: number;
   avg_severity: number;
   sentiment_counts: SentimentCounts;
+  grouped_claims?: GroupedThemeClaim[];
 }
 
 interface RiskStrengthItem {
@@ -51,6 +60,49 @@ interface AnalyticsData {
   critical_risk_factor: RiskStrengthItem | null;
   strongest_selling_point: RiskStrengthItem | null;
   theme_breakdown: ThemeAnalytics[];
+}
+
+function formatMentionLabel(count?: number) {
+  const safeCount = Math.max(1, Number(count || 1));
+  return safeCount === 1 ? "1 mention" : `${safeCount} mentions`;
+}
+
+function getThemeDisplayName(theme: ThemeAnalytics) {
+  return theme.canonical_name || theme.name;
+}
+
+function getThemeDisplayVolume(theme: ThemeAnalytics) {
+  if (Array.isArray(theme.grouped_claims) && theme.grouped_claims.length > 0) {
+    return theme.grouped_claims.reduce(
+      (total, claim) => total + Math.max(1, Number(claim.mention_count || 1)),
+      0,
+    );
+  }
+
+  return theme.claim_count;
+}
+
+function getTopGroupedClaim(
+  theme: ThemeAnalytics,
+  sentiment: "positive" | "negative",
+) {
+  const groupedClaims = Array.isArray(theme.grouped_claims)
+    ? theme.grouped_claims.filter(
+        (claim) =>
+          claim.sentiment === sentiment &&
+          String(claim.representative_text || "").trim().length > 0,
+      )
+    : [];
+
+  if (groupedClaims.length === 0) {
+    return null;
+  }
+
+  return [...groupedClaims].sort(
+    (a, b) =>
+      Math.max(1, Number(b.mention_count || 1)) -
+      Math.max(1, Number(a.mention_count || 1)),
+  )[0];
 }
 
 export default function ProductDetails() {
@@ -356,15 +408,35 @@ export default function ProductDetails() {
                     >
                       <td className="p-4">
                         <div className="font-bold text-foreground">
-                          {theme.name}
+                          {getThemeDisplayName(theme)}
                         </div>
                         <div className="text-[10px] text-muted-foreground font-medium">
                           ID: #{theme.id}
                         </div>
+                        {(() => {
+                          const dominantClaim =
+                            getTopGroupedClaim(theme, "positive") ||
+                            getTopGroupedClaim(theme, "negative");
+
+                          if (!dominantClaim) {
+                            return null;
+                          }
+
+                          return (
+                            <div className="mt-1.5 max-w-xs space-y-0.5">
+                              <p className="line-clamp-2 text-[11px] font-medium text-muted-foreground/80">
+                                "{dominantClaim.representative_text}"
+                              </p>
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+                                {formatMentionLabel(dominantClaim.mention_count)}
+                              </p>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="p-4 text-center">
                         <span className="px-2 py-1 rounded bg-secondary text-[11px] font-black">
-                          {theme.claim_count}
+                          {getThemeDisplayVolume(theme)}
                         </span>
                       </td>
                       <td className="p-4 text-center">

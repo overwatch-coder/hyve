@@ -45,6 +45,7 @@ class Review(Base):
     source = Column(String, default="manual")  # e.g. "amazon.com"
     source_url = Column(String, nullable=True)  # full url
     star_rating = Column(Float, nullable=True)
+    helpful_votes = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
